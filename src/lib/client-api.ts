@@ -146,8 +146,9 @@ export const api = {
     return request<VideoDetail>(`/api/detail?${sp.toString()}`, { signal });
   },
 
-  douban: (type: 'movie' | 'tv', tag: string, pageStart: number, pageSize: number, signal?: AbortSignal) => {
+  douban: (type: 'movie' | 'tv', tag: string, pageStart: number, pageSize: number, signal?: AbortSignal, sort?: 'recommend' | 'time' | 'rank') => {
     const sp = new URLSearchParams({ type, tag, pageStart: String(pageStart), pageSize: String(pageSize) });
+    if (sort) sp.set('sort', sort);
     return request<DoubanResponse>(`/api/douban?${sp.toString()}`, { signal });
   },
 

@@ -30,13 +30,14 @@ export async function fetchDoubanRecommend(
   type: 'movie' | 'tv',
   tag: string,
   pageStart: number,
-  pageSize: number
+  pageSize: number,
+  sort: 'recommend' | 'time' | 'rank' = 'recommend'
 ): Promise<DoubanItem[]> {
-  const cacheKey = `douban:${type}:${tag}:${pageStart}:${pageSize}`;
+  const cacheKey = `douban:${type}:${tag}:${pageStart}:${pageSize}:${sort}`;
   const cached = getCache<DoubanItem[]>(cacheKey);
   if (cached) return cached;
 
-  const target = `${DOUBAN_API}?type=${type}&tag=${encodeURIComponent(tag)}&sort=recommend&page_limit=${pageSize}&page_start=${pageStart}`;
+  const target = `${DOUBAN_API}?type=${type}&tag=${encodeURIComponent(tag)}&sort=${sort}&page_limit=${pageSize}&page_start=${pageStart}`;
 
   let raw: DoubanRawSubject[] | undefined;
 

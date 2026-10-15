@@ -20,9 +20,9 @@ export async function GET(req: Request) {
     const items = await fetchDoubanRecommend(type, tag, pageStart, pageSize, sort);
     return NextResponse.json({ items });
   } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : '豆瓣推荐获取失败' },
-      { status: 502 }
-    );
+    return NextResponse.json({
+      items: [],
+      warning: err instanceof Error ? err.message : '豆瓣推荐获取失败'
+    });
   }
 }

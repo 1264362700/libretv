@@ -20,9 +20,16 @@ interface DoubanRawSubject {
   url?: string;
 }
 
+import { fetchHotList } from './douban-weekly';
+
 function fallbackProxies(): string[] {
   const proxies: string[] = [];
-  if (process.env.FALLBACK_CORS_PROXY) proxies.push(process.env.FALLBACK_CORS_PROXY);
+  if (process.env.FALLBACK_CORS_PROXY) {
+    proxies.push(process.env.FALLBACK_CORS_PROXY);
+  }
+  // 公共高可用代理通道：当公有云/境外机房直连被豆瓣反爬策略拦截时自动接管
+  proxies.push('https://corsproxy.io/?');
+  proxies.push('https://api.allorigins.win/raw?url=');
   return proxies;
 }
 
@@ -55,26 +62,43 @@ export async function fetchDoubanRecommend(
     // 忽略，走降级
   }
 
-  // 2) 降级：经 FALLBACK_CORS_PROXY
-  if (!raw) {
+  // 2) 降级：经 FALLBACK_CORS_PROXY 与内置高可用代理中继
+  if (!raw || raw.length === 0) {
     for (const proxy of fallbackProxies()) {
       try {
-        const res = await fetchUpstream(proxy + encodeURIComponent(target), {
+        const proxyUrl = `${proxy}${encodeURIComponent(target)}`;
+        const res = await fetchUpstream(proxyUrl, {
           timeoutMs: 8000,
           headers: { Accept: 'application/json' },
         });
         if (res.ok) {
           const data = (await res.json()) as { subjects?: DoubanRawSubject[] };
-          raw = data.subjects;
-          if (raw) break;
+          if (data.subjects && data.subjects.length > 0) {
+            raw = data.subjects;
+            break;
+          }
         }
       } catch {
-        // 继续尝试下一个
+        // 继续尝试下一个代理
       }
     }
   }
 
-  if (!raw) throw new Error('豆瓣推荐获取失败');
+  // 3) 双重兜底：若代理均暂时无法连接，无缝降级到内置热榜，确保不发生 502 阻断
+  if (!raw || raw.length === 0) {
+    try {
+      const hotId = type === 'movie' ? 'douban_movie_weekly' : 'douban_tv_chinese';
+      const fallbackList = await fetchHotList(hotId);
+      if (fallbackList && fallbackList.length > 0) {
+        setCache(cacheKey, fallbackList, CACHE_TTL);
+        return fallbackList;
+      }
+    } catch {
+      // 忽略兜底失败
+    }
+  }
+
+  if (!raw) return [];
 
   const items: DoubanItem[] = raw.map((s) => ({
     id: s.id,

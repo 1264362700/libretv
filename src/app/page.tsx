@@ -12,7 +12,7 @@ import { useAppStore, resolveSource, isInDisabledSubscription, isSourceDisabled 
 import { api } from '@/lib/client-api';
 import type { SearchResultItem, SourceSearchOutcome } from '@/lib/types';
 import { SearchHistoryDropdown, useSearchHistory } from '@/components/search-history';
-import { cn, formatDisableTtl, validateSourceUrl } from '@/lib/utils';
+import { cn, formatDisableTtl, validateSourceUrl, buildWatchUrl } from '@/lib/utils';
 import { useToast } from '@/components/toast';
 import { EmptyState } from '@/components/states';
 import { Icon } from '@/components/icon';
@@ -352,7 +352,18 @@ function HomeContent() {
                     <AggregatedCard
                       key={group.key}
                       group={group}
-                      onOpen={(item) => setDetailItem(item)}
+                      onOpen={(item) => {
+                        // 搜索页点击直接起播：默认第一条线路、第一集
+                        router.push(
+                          buildWatchUrl({
+                            sourceKey: item.sourceKey,
+                            vodId: item.vodId,
+                            index: 0,
+                            title: group.name,
+                            sourceUrl: item.sourceUrl,
+                          })
+                        );
+                      }}
                     />
                   ))}
                 </div>

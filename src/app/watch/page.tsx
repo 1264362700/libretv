@@ -354,21 +354,22 @@ function WatchContent() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-background">
+      {/* 顶部自适应导航：杜绝移动端换行挤压、按键溢出 */}
       <header className="sticky top-0 z-40 bg-surface/90 backdrop-blur border-b border-line">
-        <div className="max-w-7xl mx-auto px-4 h-14 flex items-center gap-3">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 h-14 flex items-center gap-2 sm:gap-3">
           <BackButton />
           <HomeButton />
-          <div className="min-w-0">
-            <h1 className="text-sm font-medium text-content truncate">{videoTitle}</h1>
-            <p className="text-xs text-faint">
-              {source.name}
+          <div className="min-w-0 flex-1 px-1 sm:px-2">
+            <h1 className="text-sm font-semibold text-content truncate leading-tight">{videoTitle}</h1>
+            <p className="text-[11px] text-faint truncate mt-0.5">
+              <span className="text-accent font-medium">{source.name}</span>
               {episodes.length > 0 && ` · 第 ${currentIndex + 1}/${episodes.length} 集`}
             </p>
           </div>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="flex items-center gap-1.5 shrink-0">
             <button
-              className="btn-ghost btn-sm"
+              className="btn-ghost btn-sm hidden sm:inline-flex"
               onClick={() => {
                 if (!currentUrl) return;
                 enqueueDownload({
@@ -378,19 +379,26 @@ function WatchContent() {
                 });
               }}
             >
+              <Icon name="download" className="w-3.5 h-3.5 mr-1" />
               下载本集
             </button>
-            <button className="btn-ghost btn-sm" onClick={() => setSwitchOpen(true)}>
-              切换资源
+            <button
+              className="btn-ghost btn-sm flex items-center gap-1 shrink-0"
+              onClick={() => setSwitchOpen(true)}
+              title="完整测速与换源面板"
+            >
+              <Icon name="bolt" className="w-3.5 h-3.5 text-accent" />
+              <span className="hidden sm:inline">测速换源</span>
             </button>
           </div>
         </div>
       </header>
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-4">
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-4">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-2 sm:px-4 py-3 sm:py-5">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4 sm:gap-5 items-start">
+          {/* 左侧主视区：播放器 + 视频信息 + 就地选源面板 */}
           <div>
-            <div className="aspect-video bg-black rounded-lg overflow-hidden">
+            <div className="relative aspect-video w-full bg-black rounded-xl overflow-hidden shadow-2xl border border-line/40">
               {currentUrl ? (
                 <PlayerShell
                   url={currentUrl}
@@ -430,35 +438,48 @@ function WatchContent() {
               )}
             </div>
 
-            {/* 操作栏 */}
-            <div className="flex flex-wrap items-center gap-2 mt-3">
-              <button
-                className="btn-ghost btn-sm"
-                disabled={currentIndex <= 0}
-                onClick={() => goEpisode(currentIndex - 1)}
-              >
-                上一集
-              </button>
-              <button
-                className="btn-ghost btn-sm"
-                disabled={episodes.length === 0 || currentIndex >= episodes.length - 1}
-                onClick={() => goEpisode(currentIndex + 1)}
-              >
-                下一集
-              </button>
-              <label className="flex items-center gap-1.5 text-xs text-muted ml-auto cursor-pointer">
-                <input
-                  type="checkbox"
-                  className="h-3.5 w-3.5 accent-[#2563eb]"
-                  checked={store.autoplayNext}
-                  onChange={(e) => store.updateSettings({ autoplayNext: e.target.checked })}
-                />
-                自动连播
-              </label>
+            {/* 视频信息与快捷控制栏 */}
+            <div className="mt-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-1">
+              <div className="min-w-0">
+                <h2 className="text-base sm:text-lg font-bold text-content truncate leading-snug">{videoTitle}</h2>
+                <div className="flex items-center gap-2 mt-1 text-xs text-muted">
+                  <span className="tag bg-accent/15 text-accent font-medium">{source.name}</span>
+                  {episodes.length > 0 && (
+                    <span>正在播放 第 {currentIndex + 1} 集（共 {episodes.length} 集）</span>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  className="btn btn-sm btn-ghost px-2.5"
+                  disabled={currentIndex <= 0}
+                  onClick={() => goEpisode(currentIndex - 1)}
+                  title="上一集 (Alt+←)"
+                >
+                  上一集
+                </button>
+                <button
+                  className="btn btn-sm btn-ghost px-2.5"
+                  disabled={episodes.length === 0 || currentIndex >= episodes.length - 1}
+                  onClick={() => goEpisode(currentIndex + 1)}
+                  title="下一集 (Alt+→)"
+                >
+                  下一集
+                </button>
+                <label className="flex items-center gap-1.5 text-xs text-muted cursor-pointer select-none px-2 py-1 rounded-md bg-chip/40 hover:bg-chip transition-colors">
+                  <input
+                    type="checkbox"
+                    className="h-3.5 w-3.5 accent-[#2563eb]"
+                    checked={store.autoplayNext}
+                    onChange={(e) => store.updateSettings({ autoplayNext: e.target.checked })}
+                  />
+                  自动连播
+                </label>
+              </div>
             </div>
 
-            {/* 播放线路 / 选源面板（直接内嵌在播放页） */}
-            <div className="mt-4 p-3.5 bg-surface-raised rounded-xl border border-line">
+            {/* 播放线路 / 来源切换栏（横向滚动 Pill 药丸设计） */}
+            <div className="mt-3.5 p-3.5 bg-surface-raised rounded-xl border border-line shadow-sm">
               <div className="flex items-center justify-between gap-2 mb-2.5">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-semibold text-content flex items-center gap-1.5">
@@ -475,7 +496,7 @@ function WatchContent() {
                   onClick={() => setSwitchOpen(true)}
                   title="打开测速弹窗查看详细延迟与各源集数"
                 >
-                  <span>详细测速面板</span>
+                  <span>测速面板</span>
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
@@ -483,7 +504,7 @@ function WatchContent() {
               </div>
 
               {/* 线路水平滚动按钮栏 */}
-              <div className="flex items-center gap-2 overflow-x-auto pb-1.5 pt-0.5 scrollbar-thin">
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-0.5 no-scrollbar scroll-smooth">
                 {candidates.map((c) => {
                   const isCurrent = c.source.key === sourceKey;
                   const isFailed = failedSources.has(c.source.key);
@@ -493,18 +514,18 @@ function WatchContent() {
                       type="button"
                       onClick={() => switchToCandidate(c, true)}
                       className={cn(
-                        'px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1.5 border',
+                        'px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1.5 border shrink-0 touch-manipulation',
                         isCurrent
                           ? 'bg-accent text-white border-accent shadow-sm'
                           : isFailed
-                            ? 'bg-surface text-danger/70 border-danger/30 hover:border-danger/60'
+                            ? 'bg-surface text-danger/80 border-danger/30 hover:border-danger/60'
                             : 'bg-surface hover:bg-hover text-muted hover:text-content border-line'
                       )}
                       title={isFailed ? '该线路刚刚发生播放故障，点击可重新尝试' : c.source.name}
                     >
                       <span
                         className={cn(
-                          'w-1.5 h-1.5 rounded-full',
+                          'w-1.5 h-1.5 rounded-full shrink-0',
                           isCurrent ? 'bg-white animate-pulse' : isFailed ? 'bg-danger' : 'bg-emerald-500'
                         )}
                       />
@@ -515,35 +536,36 @@ function WatchContent() {
                   );
                 })}
                 {candidatesQuery.isLoading && (
-                  <span className="text-xs text-faint flex items-center gap-1.5 px-2 py-1">
+                  <span className="text-xs text-faint flex items-center gap-1.5 px-2 py-1 shrink-0">
                     <Spinner size="sm" /> 正在搜寻其他线路...
                   </span>
                 )}
                 {!candidatesQuery.isLoading && candidates.length === 0 && (
-                  <span className="text-xs text-faint px-1">未找到其他同名播放线路</span>
+                  <span className="text-xs text-faint px-1 shrink-0">未找到其他同名播放线路</span>
                 )}
               </div>
             </div>
           </div>
 
-          {/* 剧集侧栏 */}
-          <aside className="bg-surface-raised rounded-lg p-3 h-fit">
-            <div className="flex items-center justify-between gap-2 mb-2.5">
-              <h2 className="text-sm font-semibold text-content">
-                剧集列表{episodes.length > 0 && `（${episodes.length}）`}
-              </h2>
+          {/* 剧集侧栏（桌面置右，移动端自适应置底，网格密度自动调整） */}
+          <aside className="bg-surface-raised rounded-xl p-3 sm:p-3.5 h-fit border border-line shadow-sm">
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <div className="flex items-center gap-1.5">
+                <h3 className="text-sm font-semibold text-content">剧集列表</h3>
+                {episodes.length > 0 && <span className="text-xs text-faint">({episodes.length})</span>}
+              </div>
               {episodes.length > 1 && (
                 <button
-                  className="btn-ghost btn-sm shrink-0"
+                  type="button"
+                  className="btn-ghost btn-sm !px-2 !py-1 text-xs shrink-0 flex items-center gap-1"
                   onClick={() => setReversed((v) => !v)}
-                  aria-label={reversed ? '切换为正序排列' : '切换为倒序排列'}
-                  title="调整剧集列表的排列顺序"
+                  title="切换剧集列表排列顺序"
                 >
                   <Icon
                     name="arrowDown"
-                    className={cn('w-3.5 h-3.5 transition-transform', reversed && 'rotate-180')}
+                    className={cn('w-3.5 h-3.5 transition-transform mr-0.5', reversed && 'rotate-180')}
                   />
-                  {reversed ? '正序排列' : '倒序排列'}
+                  <span>{reversed ? '倒序' : '正序'}</span>
                 </button>
               )}
             </div>
@@ -554,7 +576,7 @@ function WatchContent() {
                 <EmptyState variant="plain" title={detailQuery.isError ? '获取剧集失败' : '暂无剧集信息'} />
               )
             ) : (
-              <div className="grid grid-cols-5 lg:grid-cols-4 gap-1.5 max-h-[65vh] overflow-y-auto scrollbar-thin pr-1">
+              <div className="grid grid-cols-6 sm:grid-cols-8 lg:grid-cols-4 gap-1.5 max-h-[48vh] lg:max-h-[calc(100vh-230px)] overflow-y-auto scrollbar-thin pr-1">
                 {orderedEpisodes.map((realIndex) => (
                   <EpisodeButton
                     key={realIndex}
@@ -565,8 +587,8 @@ function WatchContent() {
                 ))}
               </div>
             )}
-            <p className="hidden md:block text-[10px] text-faint mt-3 leading-relaxed">
-              快捷键：空格 播放/暂停 · ←/→ 快退/快进 5s · ↑/↓ 音量 · F 全屏 · Alt+←/→ 切换集数
+            <p className="hidden lg:block text-[10px] text-faint mt-3 leading-relaxed">
+              快捷键：空格 播放/暂停 · ←/→ 快退/快进 · ↑/↓ 音量 · F 全屏 · Alt+←/→ 切集
             </p>
           </aside>
         </div>
@@ -586,7 +608,7 @@ function WatchContent() {
   );
 }
 
-/** 集数按钮：激活时自动滚动进可视区（长剧列表） */
+/** 集数按钮：激活时自动滚动进可视区（长剧列表），统一高度与高质感圆角 */
 function EpisodeButton({ index, active, onClick }: { index: number; active: boolean; onClick: () => void }) {
   const ref = useRef<HTMLButtonElement>(null);
 
@@ -597,7 +619,10 @@ function EpisodeButton({ index, active, onClick }: { index: number; active: bool
   return (
     <button
       ref={ref}
-      className={cn('btn btn-sm !px-1', active ? 'episode-active' : 'btn-ghost')}
+      className={cn(
+        'btn btn-sm !px-1 h-9 font-medium text-xs rounded-lg transition-all',
+        active ? 'episode-active font-bold shadow-sm' : 'btn-ghost bg-surface hover:bg-hover'
+      )}
       onClick={onClick}
     >
       {index + 1}
@@ -609,12 +634,13 @@ function BackButton() {
   const router = useRouter();
   return (
     <button
-      className="p-2 -ml-2 rounded-md text-muted hover:text-content hover:bg-hover transition-colors"
+      className="p-1.5 rounded-lg text-muted hover:text-content hover:bg-hover transition-colors shrink-0"
       onClick={() => {
         if (window.history.length > 1) router.back();
         else router.push('/');
       }}
       aria-label="返回"
+      title="返回"
     >
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -628,7 +654,7 @@ function HomeButton() {
   return (
     <Link
       href="/"
-      className="p-2 rounded-md text-muted hover:text-content hover:bg-hover transition-colors"
+      className="p-1.5 rounded-lg text-muted hover:text-content hover:bg-hover transition-colors shrink-0"
       aria-label="回首页"
       title="回首页"
     >

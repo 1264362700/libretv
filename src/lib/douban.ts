@@ -88,7 +88,7 @@ export async function fetchDoubanRecommend(
   const size = Math.min(50, Math.max(14, pageSize));
   const pageno = Math.max(1, Math.floor(pageStart / size) + 1);
 
-  const cacheKey = `kan360:${catId}:${area}:${genre}:${rank}:${pageno}:${size}`;
+  const cacheKey = `kan360:v2:${catId}:${area}:${genre}:${rank}:${pageno}:${size}`;
   const cached = getCache<DoubanItem[]>(cacheKey);
   if (cached) return cached;
 
@@ -111,10 +111,15 @@ export async function fetchDoubanRecommend(
           .map((m) => {
             const rawCover = m.cdncover || m.cover || '';
             const cover = rawCover.startsWith('//') ? `https:${rawCover}` : rawCover;
-            const score =
-              m.doubanscore && m.doubanscore !== '0' && m.doubanscore !== '0.0' && m.doubanscore !== '0.00'
-                ? String(m.doubanscore)
-                : m.comment || undefined;
+            // 严格仅提取纯数字评分（如 7.1, 9.0），绝不使用 comment 一句话短评兜底，防止文字污染
+            let score: string | undefined;
+            const rawScore = m.doubanscore || m.score;
+            if (rawScore) {
+              const num = parseFloat(String(rawScore));
+              if (!Number.isNaN(num) && num > 0 && num <= 10) {
+                score = num.toFixed(1);
+              }
+            }
 
             return {
               id: `360_${m.id || Math.random().toString(36).slice(2)}`,

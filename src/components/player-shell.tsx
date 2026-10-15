@@ -637,48 +637,33 @@ export function PlayerShell({
         </div>
       )}
 
-      {/* 9zhoukj 同款：片头跳过浮层药丸 */}
+      {/* 片头跳过浮层药丸 */}
       {showSkipOpening && !error && (
-        <div className="absolute bottom-16 left-4 z-20 flex items-center gap-2 animate-fade-in pointer-events-auto">
+        <div className="absolute bottom-12 left-3 sm:bottom-14 sm:left-4 z-20 flex items-center animate-fade-in pointer-events-auto">
           <button
             type="button"
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-black/80 hover:bg-black/95 text-white border border-white/20 text-xs sm:text-sm font-medium backdrop-blur shadow-lg transition-all active:scale-95"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/80 hover:bg-black/95 text-white border border-white/20 text-xs sm:text-sm font-medium backdrop-blur shadow-lg transition-all active:scale-95"
             onClick={() => {
               if (artRef.current) {
                 artRef.current.currentTime = skipConfig.headEnd;
                 hasSkippedOpeningRef.current = true;
                 setShowSkipOpening(false);
-                showHint(`已精准跳过片头 (${formatTime(skipConfig.headEnd)})`);
+                showHint(`已跳过片头 (${formatTime(skipConfig.headEnd)})`);
               }
             }}
           >
             <span>⏩ 跳过片头</span>
             <span className="text-accent text-xs font-mono">{formatTime(skipConfig.headEnd)}</span>
           </button>
-          <button
-            type="button"
-            className="px-2 py-1.5 rounded-lg bg-black/60 hover:bg-black/85 text-white/70 hover:text-white border border-white/10 text-xs backdrop-blur transition-all"
-            title="将当前进度精准标记为本剧片头点"
-            onClick={() => {
-              if (artRef.current) {
-                const cur = Math.round(artRef.current.currentTime);
-                saveShowPreciseSkip(showKeyRef.current, { headEnd: cur });
-                setSkipConfig((prev) => ({ ...prev, headEnd: cur, isCustomMarked: true }));
-                showHint(`已将 ${formatTime(cur)} 设为本剧精准片头点`);
-              }
-            }}
-          >
-            🎯 设为片头点
-          </button>
         </div>
       )}
 
-      {/* 9zhoukj 同款：片尾跳过浮层药丸 */}
+      {/* 片尾跳过浮层药丸 */}
       {showSkipEnding && !error && (
-        <div className="absolute bottom-16 left-4 z-20 flex items-center gap-2 animate-fade-in pointer-events-auto">
+        <div className="absolute bottom-12 left-3 sm:bottom-14 sm:left-4 z-20 flex items-center animate-fade-in pointer-events-auto">
           <button
             type="button"
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-black/80 hover:bg-black/95 text-white border border-white/20 text-xs sm:text-sm font-medium backdrop-blur shadow-lg transition-all active:scale-95"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/80 hover:bg-black/95 text-white border border-white/20 text-xs sm:text-sm font-medium backdrop-blur shadow-lg transition-all active:scale-95"
             onClick={() => {
               endedRef.current = true;
               setShowSkipEnding(false);
@@ -689,31 +674,16 @@ export function PlayerShell({
             <span>⏩ 跳过片尾</span>
             <span className="text-accent text-xs font-medium">连播下集</span>
           </button>
-          <button
-            type="button"
-            className="px-2 py-1.5 rounded-lg bg-black/60 hover:bg-black/85 text-white/70 hover:text-white border border-white/10 text-xs backdrop-blur transition-all"
-            title="将当前播放进度设为本剧精准片尾起始点"
-            onClick={() => {
-              if (artRef.current) {
-                const offset = Math.round(Math.max(10, artRef.current.duration - artRef.current.currentTime));
-                saveShowPreciseSkip(showKeyRef.current, { tailOffset: offset });
-                setSkipConfig((prev) => ({ ...prev, tailOffset: offset, isCustomMarked: true }));
-                showHint(`已将剩余 ${formatTime(offset)} 设为本剧精准片尾点`);
-              }
-            }}
-          >
-            🎯 设为片尾点
-          </button>
         </div>
       )}
 
       {/* 自动跳过片头后的撤销条 */}
       {undoIntro && !error && (
-        <div className="absolute bottom-16 left-4 z-20 flex items-center gap-2 bg-black/80 text-white text-xs px-3 py-1.5 rounded-lg border border-white/20 backdrop-blur shadow-md animate-fade-in pointer-events-auto">
-          <span>已自动跳过片头 ({formatTime(skipConfig.headEnd)})</span>
+        <div className="absolute bottom-12 left-3 sm:bottom-14 sm:left-4 z-20 flex items-center gap-2 bg-black/85 text-white text-xs px-3 py-1.5 rounded-full border border-white/20 backdrop-blur shadow-md animate-fade-in pointer-events-auto">
+          <span>已跳过片头 ({formatTime(skipConfig.headEnd)})</span>
           <button
             type="button"
-            className="text-accent hover:underline font-medium"
+            className="text-accent hover:underline font-medium ml-1"
             onClick={() => {
               if (artRef.current) {
                 artRef.current.currentTime = 0;
@@ -722,7 +692,7 @@ export function PlayerShell({
               }
             }}
           >
-            返回片头
+            撤销
           </button>
         </div>
       )}

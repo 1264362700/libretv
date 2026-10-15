@@ -81,18 +81,17 @@ export function AggregatedCard({
   const adult = useMemo(() => group.items.some((i) => i.isAdult), [group.items]);
 
   const activate = () => {
-    if (multi) setExpanded((v) => !v);
-    else onOpen(group.items[0]);
+    // 搜索页面点击直接播放：默认第一集、第一个线路
+    onOpen(group.items[0]);
   };
 
   return (
-    <div className={cn('card', !multi && 'hover:scale-[1.02] hover:shadow-md', multi && expanded && 'ring-1 ring-accent/40')}>
-      {/* 不用 h-full：展开面板需要撑高卡片，等高裁切会让面板不可见 */}
+    <div className={cn('card group/item', !multi && 'hover:scale-[1.02] hover:shadow-md', multi && expanded && 'ring-1 ring-accent/40')}>
+      {/* 点击卡片主体直接起播 */}
       <div
         className="flex h-full cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/60"
         role="button"
         tabIndex={0}
-        aria-expanded={multi ? expanded : undefined}
         onClick={activate}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
@@ -144,19 +143,31 @@ export function AggregatedCard({
             <p className="text-xs text-muted line-clamp-2 mb-2">{group.remarks || '暂无介绍'}</p>
           </div>
           <div className="flex items-center justify-between mt-auto pt-1.5 border-t border-line">
-            <span className="tag bg-chip text-muted truncate max-w-[80%]">
-              {multi ? `${group.items.length} 个来源` : group.items[0].sourceName}
+            <span className="tag bg-chip text-muted truncate max-w-[70%]">
+              {multi ? `${group.items.length} 个来源 · 默认线路1` : group.items[0].sourceName}
             </span>
             {multi && (
-              <svg
-                className={cn('w-4 h-4 text-faint transition-transform', expanded && 'rotate-180')}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                aria-hidden
+              <button
+                type="button"
+                className="p-1 -mr-1 rounded hover:bg-hover text-muted hover:text-content text-xs flex items-center gap-0.5"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setExpanded((v) => !v);
+                }}
+                title={expanded ? '收起源列表' : '展开其他来源'}
+                aria-expanded={expanded}
               >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
+                <span className="text-[10px] text-faint">选源</span>
+                <svg
+                  className={cn('w-3.5 h-3.5 text-faint transition-transform', expanded && 'rotate-180')}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  aria-hidden
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
             )}
           </div>
         </div>
@@ -269,6 +280,17 @@ export function DoubanCard({ item, onClick }: { item: { title: string; cover: st
   const [imgFailed, setImgFailed] = useState(false);
   useEffect(() => setImgFailed(false), [item.cover]);
 
+  // 严格校验纯数字评分（如 7.1, 9.0），非数字文本一律不展示，防止长短评污染海报
+  const numericRating = useMemo(() => {
+    if (!item.rating) return null;
+    const trimmed = item.rating.trim();
+    const num = parseFloat(trimmed);
+    if (!Number.isNaN(num) && num > 0 && num <= 10 && /^\d+(\.\d+)?$/.test(trimmed)) {
+      return num.toFixed(1);
+    }
+    return null;
+  }, [item.rating]);
+
   return (
     <div
       className="group relative flex flex-col rounded-xl overflow-hidden cursor-pointer bg-surface border border-line/40 hover:border-accent/40 hover:shadow-xl hover:shadow-black/20 hover:-translate-y-1 active:scale-95 transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 touch-manipulation"
@@ -303,11 +325,11 @@ export function DoubanCard({ item, onClick }: { item: { title: string; cover: st
         {/* 底部微渐变暗影 */}
         <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/80 via-black/30 to-transparent pointer-events-none" />
 
-        {/* 右上角高质感金黄色评分角标 */}
-        {item.rating && item.rating !== '0' && item.rating !== '0.0' && (
+        {/* 右上角高质感金黄色评分角标：仅纯数字评分时展示 */}
+        {numericRating && (
           <span className="absolute top-1.5 right-1.5 px-1.5 sm:px-2 py-0.5 rounded-md bg-black/75 backdrop-blur-md text-[10px] sm:text-xs text-amber-400 font-bold border border-white/10 shadow-sm flex items-center gap-0.5">
             <span>★</span>
-            <span>{item.rating}</span>
+            <span>{numericRating}</span>
           </span>
         )}
 
@@ -323,7 +345,6 @@ export function DoubanCard({ item, onClick }: { item: { title: string; cover: st
         </div>
         <div className="flex items-center justify-between text-[11px] text-muted mt-1">
           <span className="truncate">超清极速播放</span>
-          {item.rating && <span className="text-amber-500/90 font-medium shrink-0">评分 {item.rating}</span>}
         </div>
       </div>
     </div>

@@ -101,8 +101,8 @@ function DoubanMultiCategoryView({ onPick }: { onPick: (title: string) => void }
   const [docTag, setDocTag] = useState('全部');
   const [docSort, setDocSort] = useState('recommend');
 
-  // 换一批偏移游标
-  const [shuffleIndex, setShuffleIndex] = useState(0);
+  // 换一批真实分页页码
+  const [page, setPage] = useState(1);
   const [isShuffling, setIsShuffling] = useState(false);
 
   // 计算目标豆瓣请求参数
@@ -114,7 +114,7 @@ function DoubanMultiCategoryView({ onPick }: { onPick: (title: string) => void }
           t = movieRegion;
         } else if (movieSort === 'classic') t = '经典';
         else if (movieSort === 'underrated') t = '冷门佳片';
-        else if (movieSort === 'rank') t = '豆瓣高分';
+        else if (movieSort === 'rank') t = '高分';
         else if (movieSort === 'time') t = '最新';
         const s: 'recommend' | 'time' | 'rank' = movieSort === 'time' ? 'time' : movieSort === 'rank' ? 'rank' : 'recommend';
         return { type: 'movie' as const, tag: t, sort: s };
@@ -124,7 +124,7 @@ function DoubanMultiCategoryView({ onPick }: { onPick: (title: string) => void }
         if (tvRegion !== '全部') {
           t = tvRegion;
         } else if (tvSort === 'time') t = '最新';
-        else if (tvSort === 'rank') t = '豆瓣高分';
+        else if (tvSort === 'rank') t = '高分';
         const s: 'recommend' | 'time' | 'rank' = tvSort === 'time' ? 'time' : tvSort === 'rank' ? 'rank' : 'recommend';
         return { type: 'tv' as const, tag: t, sort: s };
       }
@@ -149,8 +149,8 @@ function DoubanMultiCategoryView({ onPick }: { onPick: (title: string) => void }
   })();
 
   const query = useQuery({
-    queryKey: ['douban-multi', category, type, tag, sort],
-    queryFn: ({ signal }) => api.douban(type, tag, 0, 50, signal, sort),
+    queryKey: ['douban-multi', category, type, tag, sort, page],
+    queryFn: ({ signal }) => api.douban(type, tag, (page - 1) * 20, 20, signal, sort),
     enabled: !(category === 'anime' && animeViewMode === 'bangumi'),
   });
 
@@ -170,7 +170,10 @@ function DoubanMultiCategoryView({ onPick }: { onPick: (title: string) => void }
                   ? 'bg-accent text-on-accent shadow-sm scale-100 font-semibold'
                   : 'text-muted hover:text-content hover:bg-hover'
               )}
-              onClick={() => setCategory(tab.id)}
+              onClick={() => {
+                setCategory(tab.id);
+                setPage(1);
+              }}
             >
               <span className="text-sm sm:text-base">{tab.icon}</span>
               <span>{tab.label}</span>
@@ -184,24 +187,46 @@ function DoubanMultiCategoryView({ onPick }: { onPick: (title: string) => void }
       <div className="bg-chip/40 border border-line/50 rounded-xl p-2.5 sm:p-3.5 space-y-1.5 sm:space-y-2">
         {category === 'movie' && (
           <>
-            <FilterRow label="地区" options={MOVIE_REGIONS} active={movieRegion} onSelect={setMovieRegion} />
+            <FilterRow
+              label="地区"
+              options={MOVIE_REGIONS}
+              active={movieRegion}
+              onSelect={(r) => {
+                setMovieRegion(r);
+                setPage(1);
+              }}
+            />
             <FilterRow
               label="排序"
               options={MOVIE_SORTS.map((s) => s.label)}
               active={MOVIE_SORTS.find((s) => s.id === movieSort)?.label ?? '热门推荐'}
-              onSelect={(label) => setMovieSort(MOVIE_SORTS.find((s) => s.label === label)?.id ?? 'recommend')}
+              onSelect={(label) => {
+                setMovieSort(MOVIE_SORTS.find((s) => s.label === label)?.id ?? 'recommend');
+                setPage(1);
+              }}
             />
           </>
         )}
 
         {category === 'tv' && (
           <>
-            <FilterRow label="版本" options={TV_REGIONS} active={tvRegion} onSelect={setTvRegion} />
+            <FilterRow
+              label="版本"
+              options={TV_REGIONS}
+              active={tvRegion}
+              onSelect={(r) => {
+                setTvRegion(r);
+                setPage(1);
+              }}
+            />
             <FilterRow
               label="排序"
               options={TV_SORTS.map((s) => s.label)}
               active={TV_SORTS.find((s) => s.id === tvSort)?.label ?? '热门热播'}
-              onSelect={(label) => setTvSort(TV_SORTS.find((s) => s.label === label)?.id ?? 'recommend')}
+              onSelect={(label) => {
+                setTvSort(TV_SORTS.find((s) => s.label === label)?.id ?? 'recommend');
+                setPage(1);
+              }}
             />
           </>
         )}
@@ -284,15 +309,16 @@ function DoubanMultiCategoryView({ onPick }: { onPick: (title: string) => void }
         <div className="flex items-center gap-2">
           <button
             type="button"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-line hover:border-accent/50 text-xs text-muted hover:text-content bg-chip/60 hover:bg-chip transition-all active:scale-95 touch-manipulation"
+            disabled={query.isFetching}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-line hover:border-accent/50 text-xs text-muted hover:text-content bg-chip/60 hover:bg-chip transition-all active:scale-95 touch-manipulation cursor-pointer disabled:opacity-50"
             onClick={() => {
               setIsShuffling(true);
+              setPage((prev) => (prev % 10) + 1);
               setTimeout(() => setIsShuffling(false), 500);
-              setShuffleIndex((prev) => (prev + 14 >= items.length ? 0 : prev + 14));
             }}
           >
-            <span className={cn('text-xs transition-transform duration-500', isShuffling && 'rotate-180')}>🔄</span>
-            <span>换一批</span>
+            <span className={cn('text-xs transition-transform duration-500', (isShuffling || query.isFetching) && 'rotate-180')}>🔄</span>
+            <span>换一批 {page > 1 ? `第${page}组` : ''}</span>
           </button>
         </div>
       </div>
@@ -308,7 +334,7 @@ function DoubanMultiCategoryView({ onPick }: { onPick: (title: string) => void }
         <p className="text-center text-sm text-faint py-12">该分类组合暂无内容，请尝试其他标签</p>
       ) : (
         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-7 gap-2.5 sm:gap-3.5">
-          {(items.length > 14 ? items.slice(shuffleIndex, shuffleIndex + 14) : items).map((item) => (
+          {items.slice(0, 14).map((item) => (
             <DoubanCard key={item.id} item={item} onClick={() => onPick(item.title)} />
           ))}
         </div>

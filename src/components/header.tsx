@@ -113,20 +113,24 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
 
           <div className="flex-1 sm:hidden" />
 
-          <nav className="flex items-center gap-0.5 sm:gap-1.5 ml-auto">
+          <nav className="flex items-center gap-1 sm:gap-1.5 shrink-0 ml-auto">
             <HeaderLink href="/live" active={pathname === '/live'}>
               直播
             </HeaderLink>
-            <HeaderLink href="/about" active={pathname === '/about'}>
-              关于
-            </HeaderLink>
+            <div className="hidden sm:inline-flex">
+              <HeaderLink href="/about" active={pathname === '/about'}>
+                关于
+              </HeaderLink>
+            </div>
             <ThemeToggle />
             <IconButton label="观看历史" onClick={() => setHistoryOpen(true)}>
               <Icon name="clock" />
             </IconButton>
-            <IconButton label="下载管理" onClick={requestShowDownloadManager}>
-              <Icon name="download" />
-            </IconButton>
+            <div className="hidden sm:inline-flex">
+              <IconButton label="下载管理" onClick={requestShowDownloadManager}>
+                <Icon name="download" />
+              </IconButton>
+            </div>
             <IconButton label="设置" onClick={() => setSettingsOpen(true)}>
               <Icon name="gear" />
             </IconButton>
@@ -147,13 +151,13 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
             {verified ? (
               <div className="flex items-center gap-1 pl-1 border-l border-line/60">
                 <span
-                  className="text-xs text-faint max-w-[5rem] truncate hidden sm:inline"
+                  className="text-xs text-faint max-w-[4rem] sm:max-w-[5rem] truncate hidden sm:inline"
                   title={`当前账号: ${user?.username}`}
                 >
                   {user?.username}
                 </span>
                 <button
-                  className="p-1.5 rounded-lg text-muted hover:text-danger hover:bg-danger/10 text-xs active:scale-90 transition-all"
+                  className="px-2 py-1 rounded-lg text-muted hover:text-danger hover:bg-danger/10 text-xs active:scale-90 transition-all cursor-pointer shrink-0"
                   onClick={logout}
                   title="登出账号"
                 >
@@ -165,7 +169,8 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
                 className="btn-primary px-2.5 py-1 text-xs rounded-lg active:scale-95 shrink-0"
                 onClick={openLogin}
               >
-                登录 / 注册
+                <span className="sm:hidden">登录</span>
+                <span className="hidden sm:inline">登录 / 注册</span>
               </button>
             )}
           </nav>

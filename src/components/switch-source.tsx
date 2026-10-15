@@ -30,12 +30,14 @@ export function SwitchSourceModal({
   currentSourceKey,
   currentVodId,
   currentIndex,
+  currentPosition,
   onClose,
 }: {
   currentTitle: string;
   currentSourceKey: string;
   currentVodId: string;
   currentIndex: number;
+  currentPosition?: number;
   onClose: () => void;
 }) {
   const store = useAppStore();
@@ -159,6 +161,7 @@ export function SwitchSourceModal({
         title: c.result.name || currentTitle,
         sourceUrl: c.source.url,
         detail: c.source.detail,
+        position: currentPosition && currentPosition > 0 ? currentPosition : undefined,
       })
     );
   };

@@ -244,15 +244,14 @@ export function PlayerShell({
           break;
         }
         case 'switch-source': {
-          // 覆盖播放开始后的场景：起播失败走 setError 遮罩；
-          // 播放中失败走回调弹换源面板（父级未提供回调时同样 setError）
+          // 无论起播前或播放中，通知父级尝试自动切至可用备用线路
           const message = `${describeHlsError(data.type, data.details)}：${decision.reason}`;
           if (playbackStartedRef.current) {
             showHint(message);
-            propsRef.current.onRequestSwitchSource?.(decision.reason);
           } else {
             setError(`视频加载失败，${message}，请尝试其他视频源`);
           }
+          propsRef.current.onRequestSwitchSource?.(decision.reason);
           break;
         }
       }
@@ -392,6 +391,7 @@ export function PlayerShell({
         return;
       }
       setError('视频播放失败，请尝试其他视频源');
+      propsRef.current.onRequestSwitchSource?.('播放器底层解码或加载异常');
     });
     art.on('video:timeupdate', () => {
       const now = Date.now();
@@ -604,11 +604,26 @@ export function PlayerShell({
         />
       )}
       {error && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/80">
-          <p className="text-danger text-sm">{error}</p>
-          <button className="btn-ghost text-xs" onClick={() => location.reload()}>
-            重新加载
-          </button>
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/85 p-4 z-30 animate-fade-in">
+          <p className="text-danger text-sm font-medium text-center">{error}</p>
+          <div className="flex items-center gap-2">
+            {propsRef.current.onRequestSwitchSource && (
+              <button
+                type="button"
+                className="btn-primary text-xs px-3 py-1.5"
+                onClick={() => propsRef.current.onRequestSwitchSource?.('用户手动换源')}
+              >
+                自动切换至备用线路
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn-ghost text-xs px-3 py-1.5"
+              onClick={() => location.reload()}
+            >
+              重新加载
+            </button>
+          </div>
         </div>
       )}
       {hint && (

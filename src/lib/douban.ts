@@ -1,14 +1,15 @@
 import type { DoubanItem } from './types';
 import { fetchUpstream, getCache, setCache } from './fetch-utils';
+import { fetchHotList } from './douban-weekly';
 
 /**
- * 豆瓣推荐数据获取（服务端直连，带内存缓存与降级链）。
- * 旧版在浏览器里经公共 CORS 代理请求豆瓣（隐私差且不稳定），
- * 重构后由服务端直连，仅在直连被拒时降级到公共代理。
+ * 豆瓣推荐数据获取：
+ * 支持直连断路器（Circuit Breaker）、并发竞速（Smart Race）与双重兜底链路。
+ * 机房环境直连受阻时秒级熔断，彻底杜绝 8 秒超时串行堆叠。
  */
 
 const DOUBAN_API = 'https://movie.douban.com/j/search_subjects';
-const CACHE_TTL = 10 * 60 * 1000;
+const CACHE_TTL = 60 * 60 * 1000; // 缓存 1 小时
 const UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
 
@@ -20,7 +21,8 @@ interface DoubanRawSubject {
   url?: string;
 }
 
-import { fetchHotList } from './douban-weekly';
+/** 境外机房/数据中心直连被封锁时的熔断时间戳（毫秒） */
+let directBlockedUntil = 0;
 
 function fallbackProxies(): string[] {
   const proxies: string[] = [];
@@ -31,6 +33,31 @@ function fallbackProxies(): string[] {
   proxies.push('https://corsproxy.io/?');
   proxies.push('https://api.allorigins.win/raw?url=');
   return proxies;
+}
+
+async function fetchDirect(target: string): Promise<DoubanRawSubject[] | undefined> {
+  const res = await fetchUpstream(target, {
+    timeoutMs: 1500, // 压缩至 1.5 秒快速失败
+    headers: { 'User-Agent': UA, Referer: 'https://movie.douban.com/', Accept: 'application/json' },
+  });
+  if (res.ok) {
+    const data = (await res.json()) as { subjects?: DoubanRawSubject[] };
+    if (data.subjects && data.subjects.length > 0) return data.subjects;
+  }
+  return undefined;
+}
+
+async function fetchFromProxy(proxy: string, target: string): Promise<DoubanRawSubject[] | undefined> {
+  const proxyUrl = `${proxy}${encodeURIComponent(target)}`;
+  const res = await fetchUpstream(proxyUrl, {
+    timeoutMs: 4000,
+    headers: { Accept: 'application/json' },
+  });
+  if (res.ok) {
+    const data = (await res.json()) as { subjects?: DoubanRawSubject[] };
+    if (data.subjects && data.subjects.length > 0) return data.subjects;
+  }
+  return undefined;
 }
 
 export async function fetchDoubanRecommend(
@@ -48,43 +75,51 @@ export async function fetchDoubanRecommend(
 
   let raw: DoubanRawSubject[] | undefined;
 
-  // 1) 服务端直连
-  try {
-    const res = await fetchUpstream(target, {
-      timeoutMs: 8000,
-      headers: { 'User-Agent': UA, Referer: 'https://movie.douban.com/', Accept: 'application/json' },
-    });
-    if (res.ok) {
-      const data = (await res.json()) as { subjects?: DoubanRawSubject[] };
-      raw = data.subjects;
-    }
-  } catch {
-    // 忽略，走降级
-  }
+  // 1) 若直连已被判定受限（云端机房环境），直接走高速中继代理，跳过无谓死等
+  const isDirectBlocked = Date.now() < directBlockedUntil;
 
-  // 2) 降级：经 FALLBACK_CORS_PROXY 与内置高可用代理中继
-  if (!raw || raw.length === 0) {
+  if (isDirectBlocked) {
     for (const proxy of fallbackProxies()) {
       try {
-        const proxyUrl = `${proxy}${encodeURIComponent(target)}`;
-        const res = await fetchUpstream(proxyUrl, {
-          timeoutMs: 8000,
-          headers: { Accept: 'application/json' },
-        });
-        if (res.ok) {
-          const data = (await res.json()) as { subjects?: DoubanRawSubject[] };
-          if (data.subjects && data.subjects.length > 0) {
-            raw = data.subjects;
-            break;
-          }
-        }
+        raw = await fetchFromProxy(proxy, target);
+        if (raw && raw.length > 0) break;
       } catch {
         // 继续尝试下一个代理
       }
     }
+  } else {
+    // 2) 首次探测：直连（1.5s快速超时）与主代理并发竞速，谁快谁胜出
+    const primaryProxy = fallbackProxies()[0];
+    try {
+      raw = await Promise.any([
+        fetchDirect(target).then((res) => {
+          if (!res) throw new Error('直连无数据');
+          return res;
+        }),
+        fetchFromProxy(primaryProxy, target).then((res) => {
+          if (!res) throw new Error('代理无数据');
+          return res;
+        }),
+      ]);
+    } catch {
+      // 并发均未能在时限内返回
+    }
+
+    // 若直连失败，标记直连熔断 30 分钟，后续直接走代理通道
+    if (!raw) {
+      directBlockedUntil = Date.now() + 30 * 60 * 1000;
+      for (const proxy of fallbackProxies().slice(1)) {
+        try {
+          raw = await fetchFromProxy(proxy, target);
+          if (raw && raw.length > 0) break;
+        } catch {
+          // 继续尝试备用代理
+        }
+      }
+    }
   }
 
-  // 3) 双重兜底：若代理均暂时无法连接，无缝降级到内置热榜，确保不发生 502 阻断
+  // 3) 双重兜底：若所有代理均遭遇网络阻断，无缝降级到内置热榜，确保不发生 502 阻断
   if (!raw || raw.length === 0) {
     try {
       const hotId = type === 'movie' ? 'douban_movie_weekly' : 'douban_tv_chinese';

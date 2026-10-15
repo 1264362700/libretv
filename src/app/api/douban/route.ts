@@ -18,11 +18,25 @@ export async function GET(req: Request) {
 
   try {
     const items = await fetchDoubanRecommend(type, tag, pageStart, pageSize, sort);
-    return NextResponse.json({ items });
+    return NextResponse.json(
+      { items },
+      {
+        headers: {
+          'Cache-Control': 'public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400',
+        },
+      }
+    );
   } catch (err) {
-    return NextResponse.json({
-      items: [],
-      warning: err instanceof Error ? err.message : '豆瓣推荐获取失败'
-    });
+    return NextResponse.json(
+      {
+        items: [],
+        warning: err instanceof Error ? err.message : '豆瓣推荐获取失败',
+      },
+      {
+        headers: {
+          'Cache-Control': 'no-store',
+        },
+      }
+    );
   }
 }

@@ -22,9 +22,16 @@ ENV HOSTNAME=0.0.0.0
 # 非 root 用户
 RUN addgroup -S nodejs && adduser -S nextjs -G nodejs
 
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
-COPY --from=builder /app/public ./public
+# 预先创建数据持久化目录并授权
+RUN mkdir -p /app/data && chown -R nextjs:nodejs /app
+
+COPY --chown=nextjs:nodejs --from=builder /app/.next/standalone ./
+COPY --chown=nextjs:nodejs --from=builder /app/.next/static ./.next/static
+COPY --chown=nextjs:nodejs --from=builder /app/public ./public
+
+# 确保运行时数据目录权限与持久化卷
+RUN mkdir -p /app/data && chown -R nextjs:nodejs /app/data
+VOLUME ["/app/data"]
 
 USER nextjs
 

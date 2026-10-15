@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import os from 'node:os';
 
 /**
  * 账号系统与邀请码底层存储引擎（基于 JSON 文件，具备密码加盐 Hash、顶号版本号与动态加源）
@@ -43,8 +44,82 @@ interface AuthDataStore {
   globalSources: Record<string, GlobalSourceRecord>;
 }
 
-const DATA_DIR = path.join(process.cwd(), 'data');
-const STORE_FILE = path.join(DATA_DIR, 'auth-store.json');
+// 支持 DATA_DIR 环境变量并针对容器环境做权限容灾兜底
+function getDataDir(): string {
+  // 1. 优先使用自定义环境变量 DATA_DIR
+  const envDir = process.env.DATA_DIR?.trim();
+  if (envDir) {
+    try {
+      if (!fs.existsSync(envDir)) {
+        fs.mkdirSync(envDir, { recursive: true });
+      }
+      fs.accessSync(envDir, fs.constants.W_OK);
+      return envDir;
+    } catch (e) {
+      console.warn(`[LibreTV] DATA_DIR '${envDir}' 不可写，尝试工作区目录:`, e);
+    }
+  }
+
+  // 2. 默认工作区目录 /app/data 或 ./data
+  const defaultDir = path.join(process.cwd(), 'data');
+  try {
+    if (!fs.existsSync(defaultDir)) {
+      fs.mkdirSync(defaultDir, { recursive: true });
+    }
+    fs.accessSync(defaultDir, fs.constants.W_OK);
+    return defaultDir;
+  } catch (err) {
+    // 3. 容灾降级：容器非 Root 用户在 /app 无权限时，平滑降级至 /tmp/libretv-data 避免 500 崩溃
+    console.warn(`[LibreTV] 默认数据目录 '${defaultDir}' 权限不足 (EACCES)，平滑降级至临时可写目录:`, err);
+    const tmpDir = path.join(os.tmpdir(), 'libretv-data');
+    try {
+      if (!fs.existsSync(tmpDir)) {
+        fs.mkdirSync(tmpDir, { recursive: true });
+      }
+      return tmpDir;
+    } catch {
+      return os.tmpdir();
+    }
+  }
+}
+
+function getStoreFilePath(): string {
+  return path.join(getDataDir(), 'auth-store.json');
+}
+
+/** 方案 B：精选顶级秒播蓝光 CMS 矩阵（开箱即用，高画质秒播） */
+const CURATED_DEFAULT_SOURCES: { key: string; name: string; url: string; type: 'vod' | 'live' }[] = [
+  {
+    key: 'curated_ffzy',
+    name: '非凡资源 (极速秒播)',
+    url: 'https://cj.ffzyapi.com/api.php/provide/vod',
+    type: 'vod',
+  },
+  {
+    key: 'curated_lzzy',
+    name: '量子资源 (蓝光秒开)',
+    url: 'https://cj.lziapi.com/api.php/provide/vod',
+    type: 'vod',
+  },
+  {
+    key: 'curated_snzy',
+    name: '索尼资源 (高清备用)',
+    url: 'https://suoniapi.com/api.php/provide/vod',
+    type: 'vod',
+  },
+  {
+    key: 'curated_bfzy',
+    name: '暴风资源 (影剧综全)',
+    url: 'https://bfzyapi.com/api.php/provide/vod',
+    type: 'vod',
+  },
+  {
+    key: 'curated_gszy',
+    name: '光速资源 (超低延迟)',
+    url: 'https://api.guangsuapi.com/api.php/provide/vod',
+    type: 'vod',
+  },
+];
 
 let inMemoryStore: AuthDataStore | null = null;
 
@@ -61,20 +136,26 @@ function generateRandomCode(prefix = 'LTV'): string {
   return `${prefix}-${rand.slice(0, 4)}-${rand.slice(4)}`;
 }
 
+function bootstrapCuratedSources(store: AuthDataStore) {
+  // 如果当前尚未配置任何全局源，自动注入精选秒播矩阵，确保普通用户开箱即用
+  if (!store.globalSources || Object.keys(store.globalSources).length === 0) {
+    store.globalSources = {};
+    for (const src of CURATED_DEFAULT_SOURCES) {
+      store.globalSources[src.key] = {
+        ...src,
+        createdAt: Date.now(),
+      };
+    }
+  }
+}
+
 function loadStore(): AuthDataStore {
   if (inMemoryStore) return inMemoryStore;
 
-  if (!fs.existsSync(DATA_DIR)) {
+  const storeFile = getStoreFilePath();
+  if (fs.existsSync(storeFile)) {
     try {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-    } catch {
-      // 容错处理
-    }
-  }
-
-  if (fs.existsSync(STORE_FILE)) {
-    try {
-      const content = fs.readFileSync(STORE_FILE, 'utf-8');
+      const content = fs.readFileSync(storeFile, 'utf-8');
       inMemoryStore = JSON.parse(content) as AuthDataStore;
     } catch {
       inMemoryStore = { users: {}, invites: {}, globalSources: {} };
@@ -83,10 +164,16 @@ function loadStore(): AuthDataStore {
     inMemoryStore = { users: {}, invites: {}, globalSources: {} };
   }
 
+  if (!inMemoryStore.globalSources) inMemoryStore.globalSources = {};
+  if (!inMemoryStore.invites) inMemoryStore.invites = {};
+  if (!inMemoryStore.users) inMemoryStore.users = {};
+
   // 确保管理员账号初始化
   bootstrapAdmin(inMemoryStore);
   // 确保初始种子邀请码
   bootstrapSeedInvites(inMemoryStore);
+  // 方案 B：确保预置顶级秒播 CMS 源矩阵
+  bootstrapCuratedSources(inMemoryStore);
 
   saveStore(inMemoryStore);
   return inMemoryStore;
@@ -94,10 +181,12 @@ function loadStore(): AuthDataStore {
 
 function saveStore(store: AuthDataStore): void {
   try {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
+    const dataDir = getDataDir();
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
     }
-    fs.writeFileSync(STORE_FILE, JSON.stringify(store, null, 2), 'utf-8');
+    const storeFile = path.join(dataDir, 'auth-store.json');
+    fs.writeFileSync(storeFile, JSON.stringify(store, null, 2), 'utf-8');
   } catch (err) {
     console.error('Failed to save auth-store.json:', err);
   }

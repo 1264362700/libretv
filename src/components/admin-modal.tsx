@@ -123,7 +123,7 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
 
   // 复制邀请口令
   const handleCopyInvite = async (code: string) => {
-    const text = `您好，这是 LibreTV 影视服务邀请码：${code}，请在首页注册使用！`;
+    const text = `您好，这是星芒影院影视服务邀请码：${code}，请在首页注册使用！`;
     const ok = await copyToClipboard(text);
     if (ok) toast('邀请口令已复制到剪贴板', 'success');
   };

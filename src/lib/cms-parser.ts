@@ -168,6 +168,35 @@ export function filterAdultResults<T extends { typeName?: string }>(items: T[], 
 }
 
 /**
+ * 智能清洗搜索词：
+ * 1. 剔除外层书名号、括号、特殊标点与年份（如《三体 (2023)》-> 三体）
+ * 2. 剥离中英文双语标题中的英文副标（如「周处除三害 The Pig, the Snake and the Pigeon」-> 周处除三害）
+ * 3. 提取主体中文名，大幅提升 CMS 采集站的 LIKE 模糊匹配命中率
+ */
+export function sanitizeSearchQuery(query: string): string {
+  if (!query) return '';
+  let s = query.trim();
+
+  // 1. 去除外层书名号或引号《》“”''""
+  s = s.replace(/^《([^》]+)》$/, '$1').replace(/^["'“”‘']([^"'“”‘']+)["'“”‘']$/, '$1').trim();
+
+  // 2. 移除尾部或括号内的年份，如 "三体 (2023)"、"狂飙[2023]"
+  s = s.replace(/[\(（\[【]\s*\b(19\d\d|20\d\d)\b\s*[\)）\]】]/g, '');
+  s = s.replace(/\b(19\d\d|20\d\d)\b\s*$/g, '');
+
+  // 3. 中英文混排处理：若前面有 2 个以上汉字，后面跟着大段纯英文片名，提取前面的中文主要片名
+  const zhEnMatch = s.match(/^([\u4e00-\u9fa50-9·：:—\-]{2,})\s+[A-Za-z0-9\s:,'\.-]{2,}$/);
+  if (zhEnMatch && zhEnMatch[1]) {
+    s = zhEnMatch[1];
+  }
+
+  // 4. 清理首尾可能残留的连字符、冒号与标点
+  s = s.replace(/^[\s,.:;!?'"“”‘’（）\(\)\[\]【】·—\-]+|[\s,.:;!?'"“”‘’（）\(\)\[\]【】·—\-]+$/g, '');
+
+  return s.trim() || query.trim();
+}
+
+/**
  * 归一化标题/关键词：去空白、标点与符号，转小写。
  * 用于跨标点差异匹配（源站存「摔跤吧!爸爸」而用户搜「摔跤吧！爸爸」）。
  */
@@ -177,22 +206,25 @@ export function normalizeTitle(s: string): string {
 
 /**
  * 相关性判断：结果标题是否真的命中了搜索词。
- * 部分采集站会做分词/OR 模糊搜索（搜「摔跤吧！爸爸」返回一堆「爸爸XXX」），
- * 逐条校验后只保留真正相关的结果。
- *
- * 规则：归一化后的标题包含归一化后的完整关键词；
- * 多词查询（空格分隔）时放宽为「每个词都命中」即可（如「钢铁侠 2008」）。
+ * 部分采集站会做分词/OR 模糊搜索，逐条校验后只保留真正相关的结果。
  */
 export function isRelevant(name: string, wd: string): boolean {
   const nName = normalizeTitle(name);
   const nWd = normalizeTitle(wd);
   if (!nName || !nWd) return true; // 空关键词不参与过滤
   if (nName.includes(nWd)) return true;
+
+  // 容错 1：尝试经过智能清洗后的核心词
+  const clean = sanitizeSearchQuery(wd);
+  const nClean = normalizeTitle(clean);
+  if (nClean && (nName.includes(nClean) || nClean.includes(nName))) return true;
+
+  // 容错 2：多词查询（空格分隔）时任意核心大词命中即可
   const tokens = wd.trim().split(/\s+/);
   if (tokens.length > 1) {
-    return tokens.every((t) => {
+    return tokens.some((t) => {
       const n = normalizeTitle(t);
-      return n && nName.includes(n);
+      return n && n.length >= 2 && nName.includes(n);
     });
   }
   return false;

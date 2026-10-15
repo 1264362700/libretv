@@ -270,7 +270,7 @@ function AuthModal({
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-bold text-content flex items-center gap-2">
               <span className="text-accent text-xl">🎬</span>
-              <span>LibreTV 访问中心</span>
+              <span>星芒影院 访问中心</span>
             </h2>
             <button
               className="text-faint hover:text-content text-sm p-1 rounded-md active:scale-90"

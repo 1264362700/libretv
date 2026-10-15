@@ -42,19 +42,21 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
     <>
       <header className="sticky top-0 z-40 bg-surface/90 backdrop-blur border-b border-line">
         <div className="max-w-6xl mx-auto px-4 h-14 flex items-center gap-3">
-          <Link href="/" aria-label="LibreTV 首页" className="flex items-center gap-2.5 shrink-0 group">
-            <div className="relative flex items-center justify-center w-8 h-8 rounded-xl bg-gradient-to-tr from-accent via-indigo-500 to-purple-500 shadow-md shadow-accent/25 group-hover:scale-105 transition-transform duration-200">
-              <svg className="w-4 h-4 text-white fill-current translate-x-0.5" viewBox="0 0 24 24">
-                <path d="M5 3.868v16.264c0 .848.94 1.36 1.65.908l13.25-8.132a1.07 1.07 0 000-1.816L6.65 2.96C5.94 2.508 5 3.02 5 3.868z" />
+          <Link href="/" aria-label="星芒影院 首页" className="flex items-center gap-2.5 shrink-0 group">
+            <div className="flex items-center justify-center w-8 h-8 rounded-lg border border-line/70 bg-surface/80 group-hover:border-accent/70 group-hover:bg-accent/5 transition-all">
+              <svg className="w-4.5 h-4.5 text-accent transition-transform duration-300 group-hover:scale-110" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2.5" y="4" width="19" height="13" rx="3" />
+                <polygon points="10 8 15.5 10.5 10 13 10 8" />
+                <line x1="8" y1="20" x2="16" y2="20" />
+                <line x1="12" y1="17" x2="12" y2="20" />
               </svg>
-              <div className="absolute inset-0 rounded-xl bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
             </div>
-            <div className="flex items-baseline gap-1">
-              <span className="text-lg font-bold tracking-tight bg-gradient-to-r from-content via-content to-accent bg-clip-text text-transparent">
-                Libre<span className="text-accent">TV</span>
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-base sm:text-lg font-bold tracking-tight text-content group-hover:text-accent transition-colors">
+                星芒<span className="text-accent">影院</span>
               </span>
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-accent/15 text-accent border border-accent/20 tracking-wider uppercase hidden sm:inline-block">
-                CINEMA
+              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded border border-line text-muted tracking-wider uppercase hidden sm:inline-block">
+                NOVA
               </span>
             </div>
           </Link>

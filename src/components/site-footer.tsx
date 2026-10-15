@@ -8,16 +8,11 @@ export function SiteFooter() {
   return (
     <footer className="border-t border-line py-4">
       <p className="text-center text-xs text-faint">
-        <a
-          href="https://github.com/LibreSpark/LibreTV"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="group relative inline-block cursor-help hover:text-accent"
-        >
-          LibreTV{version ? ` v${version}` : ''}
-        </a>
+        <span className="font-medium text-muted">
+          星芒影院 Nova Cinema{version ? ` v${version}` : ''}
+        </span>
         {' · '}
-        AGPL-3.0 License
+        影院级超清影视探索平台
       </p>
     </footer>
   );

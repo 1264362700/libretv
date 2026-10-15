@@ -4,11 +4,11 @@ import { Providers } from '@/components/providers';
 
 export const metadata: Metadata = {
   title: {
-    default: 'LibreTV - 免费在线视频搜索与观看平台',
-    template: '%s - LibreTV',
+    default: '星芒影院 - 影院级超清影视探索平台',
+    template: '%s - 星芒影院',
   },
   description:
-    'LibreTV 是一个免费的在线视频搜索平台，无广告、安全，提供来自多个视频源的内容搜索与观看服务，无需注册即可使用。',
+    '星芒影院（Nova Cinema）是一个现代化全网聚合在线影视平台，无广告、极速秒播，支持跳过片头片尾与原画播放。',
   manifest: '/manifest.webmanifest',
   // 图标与门户站（LibreTV-portal）同一套：同一张 artwork 导出的多尺寸 + 根目录 favicon.ico 兜底。
   // 只声明单张 512 时，抓取端只能拿大图缩放，小尺寸下易糊、看起来「没填满」。

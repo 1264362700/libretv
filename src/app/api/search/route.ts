@@ -1,6 +1,13 @@
 import { NextResponse } from 'next/server';
 import { guardRequest } from '@/lib/api-guard';
-import { cmsRequestHeaders, filterAdultResults, filterRelevantResults, normalizeTitle, parseSearchList } from '@/lib/cms-parser';
+import {
+  cmsRequestHeaders,
+  filterAdultResults,
+  filterRelevantResults,
+  normalizeTitle,
+  parseSearchList,
+  sanitizeSearchQuery,
+} from '@/lib/cms-parser';
 import { fetchUpstream, getCache, setCache } from '@/lib/fetch-utils';
 import { checkUpstreamAllowed } from '@/lib/ssrf';
 import type { SearchResponse, SearchStreamEvent, SourceConfig, SourceSearchOutcome } from '@/lib/types';
@@ -91,8 +98,10 @@ async function searchSource(source: SourceConfig, wd: string): Promise<SourceSea
   });
 
   const base = source.url.replace(/\/+$/, '');
-  const fetchPage = async (page: number) => {
-    const api = `${base}?ac=videolist&wd=${encodeURIComponent(wd)}&pg=${page}`;
+  const cleanWd = sanitizeSearchQuery(wd);
+
+  const fetchPage = async (page: number, queryWd: string = wd) => {
+    const api = `${base}?ac=videolist&wd=${encodeURIComponent(queryWd)}&pg=${page}`;
     const res = await fetchUpstream(api, {
       timeoutMs: 8000,
       headers: cmsRequestHeaders(),
@@ -103,8 +112,25 @@ async function searchSource(source: SourceConfig, wd: string): Promise<SourceSea
   };
 
   const run = async (): Promise<SourceSearchOutcome> => {
-    const first = await fetchPage(1);
-    const list = parseSearchList(first, source);
+    let activeWd = wd;
+    let first = await fetchPage(1, activeWd);
+    let list = parseSearchList(first, source);
+
+    // 智能容错降级：若原词未命中且清洗后的词不同，立即自动使用清洗后的核心词重试
+    if (list.length === 0 && cleanWd && cleanWd !== wd) {
+      try {
+        const retryFirst = await fetchPage(1, cleanWd);
+        const retryList = parseSearchList(retryFirst, source);
+        if (retryList.length > 0) {
+          first = retryFirst;
+          list = retryList;
+          activeWd = cleanWd;
+        }
+      } catch {
+        // 忽略降级失败
+      }
+    }
+
     // 源站真实总页数与配置上限取较小者；pagecount 缺失或非法时视为 1 页
     const rawPageCount = parseInt(String((first as { pagecount?: unknown }).pagecount ?? '1'), 10);
     const pageCount = Math.min(Number.isFinite(rawPageCount) ? Math.max(1, rawPageCount) : 1, SEARCH_MAX_PAGES);
@@ -112,7 +138,7 @@ async function searchSource(source: SourceConfig, wd: string): Promise<SourceSea
       const extraPages = await Promise.all(
         Array.from({ length: pageCount - 1 }, (_, i) => i + 2).map(async (page) => {
           try {
-            return parseSearchList(await fetchPage(page), source);
+            return parseSearchList(await fetchPage(page, activeWd), source);
           } catch {
             return [];
           }

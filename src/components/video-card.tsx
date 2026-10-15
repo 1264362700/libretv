@@ -323,7 +323,7 @@ export function DoubanCard({ item, onClick }: { item: { title: string; cover: st
         </div>
         <div className="flex items-center justify-between text-[11px] text-muted mt-1">
           <span className="truncate">超清极速播放</span>
-          {item.rating && <span className="text-amber-500/90 font-medium shrink-0">豆瓣 {item.rating}</span>}
+          {item.rating && <span className="text-amber-500/90 font-medium shrink-0">评分 {item.rating}</span>}
         </div>
       </div>
     </div>

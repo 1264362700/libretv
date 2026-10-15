@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Header } from '@/components/header';
 import { RecommendSection } from '@/components/douban-section';
+import { HeroBanner } from '@/components/hero-banner';
 import { DetailModal } from '@/components/detail-modal';
 import { AggregatedCard, aggregateResults } from '@/components/video-card';
 import { useAppStore, resolveSource, isInDisabledSubscription, isSourceDisabled } from '@/lib/store';
@@ -158,6 +159,14 @@ function HomeContent() {
   // 跨源同名聚合：同名影片合并为一张卡片，展开后可选择具体来源
   const groups = useMemo(() => aggregateResults(list), [list]);
 
+  // 9zhoukj 同款首屏轮播大屏数据
+  const heroQuery = useQuery({
+    queryKey: ['douban-hero-banner'],
+    queryFn: ({ signal }) => api.douban('movie', '热门', 0, 8, signal),
+    staleTime: 600_000,
+    enabled: !urlQuery,
+  });
+
   // 分批渲染：新一次搜索（groups 变化）时重置回首批
   const [visibleCount, setVisibleCount] = useState(RESULT_PAGE_SIZE);
   const visibleGroups = useMemo(() => groups.slice(0, visibleCount), [groups, visibleCount]);
@@ -167,7 +176,7 @@ function HomeContent() {
     <div className="min-h-screen flex flex-col">
       <Header />
 
-      <main className="relative flex-1 max-w-6xl w-full mx-auto px-4 py-6">
+      <main className="relative flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6">
         {/* 首屏氛围渐变 */}
         {!urlQuery && (
           <div
@@ -180,8 +189,16 @@ function HomeContent() {
           />
         )}
 
+        {/* 9zhoukj 同款：首屏 Hero Banner 轮播大屏 */}
+        {!urlQuery && (
+          <HeroBanner
+            items={heroQuery.data?.items ?? []}
+            onPick={runSearch}
+          />
+        )}
+
         {/* 搜索区 */}
-        <section className={cn('flex flex-col items-center', urlQuery ? 'mb-6' : 'mt-8 mb-8')}>
+        <section className={cn('flex flex-col items-center', urlQuery ? 'mb-6' : 'mb-8')}>
           {!urlQuery && (
             <header className="text-center mb-6">
               <h1 className="text-4xl sm:text-5xl font-bold brand-gradient">LibreTV</h1>

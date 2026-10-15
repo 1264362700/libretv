@@ -20,8 +20,8 @@ const PRIMARY_TABS: { id: PrimaryCategory; label: string; icon: string }[] = [
   { id: 'documentary', label: '纪录片', icon: '🌍' },
 ];
 
-// 电影筛选维度（地区与排序）
-const MOVIE_REGIONS = ['全部', '华语', '欧美', '韩国', '日本', '中国香港', '中国台湾', '英国', '法国'];
+// 电影筛选维度（地区与排序，严格对齐豆瓣标准标签体系）
+const MOVIE_REGIONS = ['全部', '华语', '欧美', '韩国', '日本', '香港', '台湾', '英国', '法国'];
 const MOVIE_SORTS = [
   { id: 'recommend', label: '热门推荐' },
   { id: 'time', label: '最新上映' },
@@ -101,13 +101,18 @@ function DoubanMultiCategoryView({ onPick }: { onPick: (title: string) => void }
   const [docTag, setDocTag] = useState('全部');
   const [docSort, setDocSort] = useState('recommend');
 
+  // 换一批偏移游标
+  const [shuffleIndex, setShuffleIndex] = useState(0);
+  const [isShuffling, setIsShuffling] = useState(false);
+
   // 计算目标豆瓣请求参数
   const { type, tag, sort } = (() => {
     switch (category) {
       case 'movie': {
         let t = '热门';
-        if (movieRegion !== '全部') t = movieRegion;
-        else if (movieSort === 'classic') t = '经典';
+        if (movieRegion !== '全部') {
+          t = movieRegion;
+        } else if (movieSort === 'classic') t = '经典';
         else if (movieSort === 'underrated') t = '冷门佳片';
         else if (movieSort === 'rank') t = '豆瓣高分';
         else if (movieSort === 'time') t = '最新';
@@ -116,7 +121,10 @@ function DoubanMultiCategoryView({ onPick }: { onPick: (title: string) => void }
       }
       case 'tv': {
         let t = '热门';
-        if (tvRegion !== '全部') t = tvRegion;
+        if (tvRegion !== '全部') {
+          t = tvRegion;
+        } else if (tvSort === 'time') t = '最新';
+        else if (tvSort === 'rank') t = '豆瓣高分';
         const s: 'recommend' | 'time' | 'rank' = tvSort === 'time' ? 'time' : tvSort === 'rank' ? 'rank' : 'recommend';
         return { type: 'tv' as const, tag: t, sort: s };
       }
@@ -262,6 +270,33 @@ function DoubanMultiCategoryView({ onPick }: { onPick: (title: string) => void }
         )}
       </div>
 
+      {/* 9zhoukj 楼层头部：大号分类标题 + 悬停小箭头 + 换一批胶囊 */}
+      <div className="flex items-center justify-between pt-1 pb-1">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <h3 className="text-xl sm:text-2xl font-bold text-content flex items-center gap-1 group cursor-pointer">
+            <span>{PRIMARY_TABS.find((t) => t.id === category)?.label}热播大厅</span>
+            <span className="text-muted group-hover:translate-x-1 group-hover:text-accent transition-transform text-base sm:text-lg">→</span>
+          </h3>
+          <span className="text-xs text-muted hidden sm:inline-block">
+            {category === 'movie' ? '精选高分院线大片' : category === 'tv' ? '当下最火爆连续剧' : category === 'anime' ? '人气新番连载' : '爆笑娱乐综艺'}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-line hover:border-accent/50 text-xs text-muted hover:text-content bg-chip/60 hover:bg-chip transition-all active:scale-95 touch-manipulation"
+            onClick={() => {
+              setIsShuffling(true);
+              setTimeout(() => setIsShuffling(false), 500);
+              setShuffleIndex((prev) => (prev + 14 >= items.length ? 0 : prev + 14));
+            }}
+          >
+            <span className={cn('text-xs transition-transform duration-500', isShuffling && 'rotate-180')}>🔄</span>
+            <span>换一批</span>
+          </button>
+        </div>
+      </div>
+
       {/* 动漫新番周更表模式直接内嵌渲染 */}
       {category === 'anime' && animeViewMode === 'bangumi' ? (
         <BangumiInlineView onPick={onPick} />
@@ -272,8 +307,8 @@ function DoubanMultiCategoryView({ onPick }: { onPick: (title: string) => void }
       ) : items.length === 0 ? (
         <p className="text-center text-sm text-faint py-12">该分类组合暂无内容，请尝试其他标签</p>
       ) : (
-        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-2 sm:gap-3">
-          {items.map((item) => (
+        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-7 gap-2.5 sm:gap-3.5">
+          {(items.length > 14 ? items.slice(shuffleIndex, shuffleIndex + 14) : items).map((item) => (
             <DoubanCard key={item.id} item={item} onClick={() => onPick(item.title)} />
           ))}
         </div>

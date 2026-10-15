@@ -12,6 +12,12 @@ import {
 } from '@/lib/video-prefetcher';
 import { loadCacheSettings } from '@/lib/video-cache';
 import { formatTime } from '@/lib/utils';
+import {
+  getShowPreciseSkip,
+  saveShowPreciseSkip,
+  setGlobalAutoJump,
+  type PreciseSkipConfig,
+} from '@/lib/precise-skip';
 
 /**
  * 播放器外壳：ArtPlayer + hls.js（旧版 player.js 的 React 化）。
@@ -93,6 +99,21 @@ export function PlayerShell({
   const recoveryRef = useRef<PlaybackRecovery | null>(null);
   // 自然播完标记，卸载时不回写进度（避免覆盖「已看完」记录）
   const endedRef = useRef(false);
+
+  // 精准跳过片头片尾状态（9zhoukj 机制：每剧独立记忆 + 毫秒级打点）
+  const showKey = episodeKey ? episodeKey.split(':').slice(0, 2).join(':') : (title || '').split(' ')[0] || 'default';
+  const showKeyRef = useRef(showKey);
+  showKeyRef.current = showKey;
+
+  const [skipConfig, setSkipConfig] = useState<PreciseSkipConfig>(() => getShowPreciseSkip(showKey));
+  const skipConfigRef = useRef(skipConfig);
+  skipConfigRef.current = skipConfig;
+
+  const [showSkipOpening, setShowSkipOpening] = useState(false);
+  const [showSkipEnding, setShowSkipEnding] = useState(false);
+  const [undoIntro, setUndoIntro] = useState(false);
+  const hasSkippedOpeningRef = useRef(false);
+  const hasJumpedEndingRef = useRef(false);
 
   const showHint = (text: string) => {
     setHint(text);
@@ -249,6 +270,11 @@ export function PlayerShell({
     recoveryRef.current = new PlaybackRecovery();
     // 换集时清掉上一集的预取窗口，避免带宽被旧集占用
     getVideoPrefetcher().stop();
+    hasSkippedOpeningRef.current = false;
+    hasJumpedEndingRef.current = false;
+    setShowSkipOpening(false);
+    setShowSkipEnding(false);
+    setUndoIntro(false);
     setError('');
     setShowPoster(true);
     const art = artRef.current;
@@ -294,6 +320,45 @@ export function PlayerShell({
       theme: '#2563eb',
       lang: navigator.language.toLowerCase().startsWith('zh') ? 'zh-cn' : 'en',
       moreVideoAttr: { crossOrigin: 'anonymous', playsInline: true },
+      settings: [
+        {
+          html: '自动跳过片头片尾',
+          tooltip: skipConfigRef.current.autoJump ? '已开启' : '已关闭',
+          switch: skipConfigRef.current.autoJump,
+          onSwitch: (item: { switch?: boolean; tooltip?: string }) => {
+            const next = !item.switch;
+            item.tooltip = next ? '已开启' : '已关闭';
+            setGlobalAutoJump(next);
+            setSkipConfig((prev) => ({ ...prev, autoJump: next }));
+            showHint(next ? '已开启自动跳过片头片尾' : '已关闭自动跳过片头片尾');
+            return next;
+          },
+        },
+        {
+          html: '标记此处为本剧片头',
+          tooltip: `${Math.round(skipConfigRef.current.headEnd)}s`,
+          onClick: () => {
+            if (!artRef.current) return;
+            const cur = Math.round(artRef.current.currentTime);
+            saveShowPreciseSkip(showKeyRef.current, { headEnd: cur });
+            setSkipConfig((prev) => ({ ...prev, headEnd: cur, isCustomMarked: true }));
+            showHint(`已精准标记本剧片头：${formatTime(cur)}`);
+            art.setting.show = false;
+          },
+        },
+        {
+          html: '标记此处为本剧片尾',
+          tooltip: `${Math.round(skipConfigRef.current.tailOffset)}s`,
+          onClick: () => {
+            if (!artRef.current) return;
+            const offset = Math.round(Math.max(10, artRef.current.duration - artRef.current.currentTime));
+            saveShowPreciseSkip(showKeyRef.current, { tailOffset: offset });
+            setSkipConfig((prev) => ({ ...prev, tailOffset: offset, isCustomMarked: true }));
+            showHint(`已精准标记本剧片尾：倒数 ${formatTime(offset)}`);
+            art.setting.show = false;
+          },
+        },
+      ],
       customType: {
         m3u8: (video: HTMLVideoElement, mediaUrl: string) => {
           setupHls(video, mediaUrl, true);
@@ -330,16 +395,49 @@ export function PlayerShell({
     });
     art.on('video:timeupdate', () => {
       const now = Date.now();
+      const curTime = art.currentTime;
+      const dur = art.duration;
+      const cfg = skipConfigRef.current;
+
+      // 9zhoukj 片头精准跳过判定
+      if (curTime < cfg.headEnd && curTime >= 0) {
+        if (cfg.autoJump && !hasSkippedOpeningRef.current && curTime < 5) {
+          hasSkippedOpeningRef.current = true;
+          art.currentTime = cfg.headEnd;
+          setUndoIntro(true);
+          setShowSkipOpening(false);
+          setTimeout(() => setUndoIntro(false), 5000);
+        } else if (!hasSkippedOpeningRef.current) {
+          setShowSkipOpening(true);
+        }
+      } else {
+        setShowSkipOpening(false);
+      }
+
+      // 9zhoukj 片尾精准跳过与连播判定
+      if (dur > 30 && cfg.tailOffset > 0 && curTime >= dur - cfg.tailOffset) {
+        if (cfg.autoJump && !hasJumpedEndingRef.current) {
+          hasJumpedEndingRef.current = true;
+          endedRef.current = true;
+          propsRef.current.onEnded?.();
+          showHint('已为您跳过片尾，播放下一集');
+        } else if (!hasJumpedEndingRef.current) {
+          setShowSkipEnding(true);
+        }
+      } else {
+        setShowSkipEnding(false);
+      }
+
       if (now - lastSave > 5000) {
         lastSave = now;
-        propsRef.current.onTimeUpdate?.(art.currentTime, art.duration);
+        propsRef.current.onTimeUpdate?.(curTime, dur);
       }
       // 每 30s 续跑一次前向预取窗口（ensure 幂等，窗口未覆盖足够余量才会重建）
       if (now - lastPrefetchEnsureRef.current > 30_000) {
         lastPrefetchEnsureRef.current = now;
         // 用 currentMediaUrlRef（代理回退后的实际地址）：否则预取的 key 与
         // loader 读取的 key 不一致，缓存永不命中且直连 fetch 白耗流量
-        ensurePrefetch(currentMediaUrlRef.current, art.currentTime);
+        ensurePrefetch(currentMediaUrlRef.current, curTime);
       }
     });
     art.on('video:seeked', () => {
@@ -521,6 +619,96 @@ export function PlayerShell({
       {autoplayNext && !error && (
         <div className="absolute bottom-16 right-3 text-[10px] text-muted bg-black/50 px-2 py-0.5 rounded pointer-events-none">
           自动连播已开启
+        </div>
+      )}
+
+      {/* 9zhoukj 同款：片头跳过浮层药丸 */}
+      {showSkipOpening && !error && (
+        <div className="absolute bottom-16 left-4 z-20 flex items-center gap-2 animate-fade-in pointer-events-auto">
+          <button
+            type="button"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-black/80 hover:bg-black/95 text-white border border-white/20 text-xs sm:text-sm font-medium backdrop-blur shadow-lg transition-all active:scale-95"
+            onClick={() => {
+              if (artRef.current) {
+                artRef.current.currentTime = skipConfig.headEnd;
+                hasSkippedOpeningRef.current = true;
+                setShowSkipOpening(false);
+                showHint(`已精准跳过片头 (${formatTime(skipConfig.headEnd)})`);
+              }
+            }}
+          >
+            <span>⏩ 跳过片头</span>
+            <span className="text-accent text-xs font-mono">{formatTime(skipConfig.headEnd)}</span>
+          </button>
+          <button
+            type="button"
+            className="px-2 py-1.5 rounded-lg bg-black/60 hover:bg-black/85 text-white/70 hover:text-white border border-white/10 text-xs backdrop-blur transition-all"
+            title="将当前进度精准标记为本剧片头点"
+            onClick={() => {
+              if (artRef.current) {
+                const cur = Math.round(artRef.current.currentTime);
+                saveShowPreciseSkip(showKeyRef.current, { headEnd: cur });
+                setSkipConfig((prev) => ({ ...prev, headEnd: cur, isCustomMarked: true }));
+                showHint(`已将 ${formatTime(cur)} 设为本剧精准片头点`);
+              }
+            }}
+          >
+            🎯 设为片头点
+          </button>
+        </div>
+      )}
+
+      {/* 9zhoukj 同款：片尾跳过浮层药丸 */}
+      {showSkipEnding && !error && (
+        <div className="absolute bottom-16 left-4 z-20 flex items-center gap-2 animate-fade-in pointer-events-auto">
+          <button
+            type="button"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-black/80 hover:bg-black/95 text-white border border-white/20 text-xs sm:text-sm font-medium backdrop-blur shadow-lg transition-all active:scale-95"
+            onClick={() => {
+              endedRef.current = true;
+              setShowSkipEnding(false);
+              propsRef.current.onEnded?.();
+              showHint('已跳过片尾，播放下一集');
+            }}
+          >
+            <span>⏩ 跳过片尾</span>
+            <span className="text-accent text-xs font-medium">连播下集</span>
+          </button>
+          <button
+            type="button"
+            className="px-2 py-1.5 rounded-lg bg-black/60 hover:bg-black/85 text-white/70 hover:text-white border border-white/10 text-xs backdrop-blur transition-all"
+            title="将当前播放进度设为本剧精准片尾起始点"
+            onClick={() => {
+              if (artRef.current) {
+                const offset = Math.round(Math.max(10, artRef.current.duration - artRef.current.currentTime));
+                saveShowPreciseSkip(showKeyRef.current, { tailOffset: offset });
+                setSkipConfig((prev) => ({ ...prev, tailOffset: offset, isCustomMarked: true }));
+                showHint(`已将剩余 ${formatTime(offset)} 设为本剧精准片尾点`);
+              }
+            }}
+          >
+            🎯 设为片尾点
+          </button>
+        </div>
+      )}
+
+      {/* 自动跳过片头后的撤销条 */}
+      {undoIntro && !error && (
+        <div className="absolute bottom-16 left-4 z-20 flex items-center gap-2 bg-black/80 text-white text-xs px-3 py-1.5 rounded-lg border border-white/20 backdrop-blur shadow-md animate-fade-in pointer-events-auto">
+          <span>已自动跳过片头 ({formatTime(skipConfig.headEnd)})</span>
+          <button
+            type="button"
+            className="text-accent hover:underline font-medium"
+            onClick={() => {
+              if (artRef.current) {
+                artRef.current.currentTime = 0;
+                setUndoIntro(false);
+                showHint('已返回视频开头');
+              }
+            }}
+          >
+            返回片头
+          </button>
         </div>
       )}
     </div>

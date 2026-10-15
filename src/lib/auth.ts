@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { getUser } from './auth-store';
+import { getUser, verifyUserCredentials } from './auth-store';
 
 /**
  * 会话鉴权：httpOnly cookie + HMAC 签名。
@@ -37,21 +37,25 @@ function hmac(payload: string): string {
 }
 
 /** 生成签名会话 token：`<base64Payload>.<hmac>` */
-export function signSession(user: {
-  username: string;
-  role: 'admin' | 'user';
-  sessionVersion: number;
+export function signSession(user?: {
+  username?: string;
+  role?: 'admin' | 'user';
+  sessionVersion?: number;
 }): { token: string; expiresAt: number } {
   const expiresAt = Date.now() + SESSION_TTL_MS;
   const payloadObj: SessionPayload = {
-    username: user.username,
-    role: user.role,
-    sessionVersion: user.sessionVersion,
+    username: user?.username || 'admin',
+    role: user?.role || 'admin',
+    sessionVersion: user?.sessionVersion ?? 1,
     expiresAt,
   };
   const payload = Buffer.from(JSON.stringify(payloadObj)).toString('base64url');
   const token = `${payload}.${hmac(payload)}`;
   return { token, expiresAt };
+}
+
+export function checkPassword(password: string): boolean {
+  return verifyUserCredentials('admin', password).success;
 }
 
 /** 校验会话 token 的签名、有效期、封禁状态与顶号版本 */

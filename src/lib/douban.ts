@@ -60,13 +60,21 @@ async function fetchFromProxy(proxy: string, target: string): Promise<DoubanRawS
   return undefined;
 }
 
+function normalizeDoubanTag(tag: string): string {
+  const t = tag.trim();
+  if (t === '中国香港') return '香港';
+  if (t === '中国台湾') return '台湾';
+  return t;
+}
+
 export async function fetchDoubanRecommend(
   type: 'movie' | 'tv',
-  tag: string,
+  rawTag: string,
   pageStart: number,
   pageSize: number,
   sort: 'recommend' | 'time' | 'rank' = 'recommend'
 ): Promise<DoubanItem[]> {
+  const tag = normalizeDoubanTag(rawTag);
   const cacheKey = `douban:${type}:${tag}:${pageStart}:${pageSize}:${sort}`;
   const cached = getCache<DoubanItem[]>(cacheKey);
   if (cached) return cached;

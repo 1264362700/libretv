@@ -262,7 +262,7 @@ export function VideoCard({ item, onClick }: { item: SearchResultItem; onClick: 
   );
 }
 
-/** 豆瓣推荐卡片（无来源徽章，点击直接搜索，优化移动端与 iPad 触控视觉） */
+/** 豆瓣推荐卡片（9zhoukj 影院级高质感：微浮起、景深阴影、磨砂金色角标） */
 export function DoubanCard({ item, onClick }: { item: { title: string; cover: string; rating?: string }; onClick: () => void }) {
   const imageProxyMode = useAppStore((s) => s.imageProxyMode);
   const customImageProxy = useAppStore((s) => s.customImageProxy);
@@ -271,7 +271,7 @@ export function DoubanCard({ item, onClick }: { item: { title: string; cover: st
 
   return (
     <div
-      className="card rounded-xl overflow-hidden cursor-pointer hover:scale-[1.03] active:scale-95 transition-all duration-200 shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 touch-manipulation"
+      className="group relative flex flex-col rounded-xl overflow-hidden cursor-pointer bg-surface border border-line/40 hover:border-accent/40 hover:shadow-xl hover:shadow-black/20 hover:-translate-y-1 active:scale-95 transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 touch-manipulation"
       role="button"
       tabIndex={0}
       onClick={onClick}
@@ -282,14 +282,14 @@ export function DoubanCard({ item, onClick }: { item: { title: string; cover: st
         }
       }}
     >
-      <div className="relative aspect-[2/3] bg-chip overflow-hidden">
+      <div className="relative aspect-[2/3] bg-chip overflow-hidden rounded-t-xl">
         {item.cover && !imgFailed ? (
           <SmartImage
             url={item.cover}
             mode={imageProxyMode}
             customProxy={customImageProxy}
             alt={item.title}
-            className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
+            className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-108"
             onExhausted={() => setImgFailed(true)}
           />
         ) : (
@@ -299,15 +299,31 @@ export function DoubanCard({ item, onClick }: { item: { title: string; cover: st
             </svg>
           </div>
         )}
-        {item.rating && (
-          <span className="absolute top-1 sm:top-1.5 right-1 sm:right-1.5 px-1.5 py-0.5 rounded-md bg-black/75 backdrop-blur-xs text-[10px] sm:text-xs text-rating font-bold shadow-sm">
-            ★ {item.rating}
+
+        {/* 底部微渐变暗影 */}
+        <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/80 via-black/30 to-transparent pointer-events-none" />
+
+        {/* 右上角高质感金黄色评分角标 */}
+        {item.rating && item.rating !== '0' && item.rating !== '0.0' && (
+          <span className="absolute top-1.5 right-1.5 px-1.5 sm:px-2 py-0.5 rounded-md bg-black/75 backdrop-blur-md text-[10px] sm:text-xs text-amber-400 font-bold border border-white/10 shadow-sm flex items-center gap-0.5">
+            <span>★</span>
+            <span>{item.rating}</span>
           </span>
         )}
+
+        {/* 左上角轻量蓝光极速标签 */}
+        <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded-md bg-accent/80 text-[10px] text-white font-medium shadow-sm">
+          蓝光
+        </span>
       </div>
-      <div className="p-1.5 sm:p-2">
-        <div className="text-xs sm:text-sm font-medium text-content line-clamp-1 leading-snug" title={item.title}>
+
+      <div className="p-2 sm:p-2.5 flex flex-col flex-1 justify-between">
+        <div className="text-xs sm:text-sm font-semibold text-content line-clamp-1 leading-snug group-hover:text-accent transition-colors" title={item.title}>
           {item.title}
+        </div>
+        <div className="flex items-center justify-between text-[11px] text-muted mt-1">
+          <span className="truncate">超清极速播放</span>
+          {item.rating && <span className="text-amber-500/90 font-medium shrink-0">豆瓣 {item.rating}</span>}
         </div>
       </div>
     </div>

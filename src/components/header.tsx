@@ -42,9 +42,21 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
     <>
       <header className="sticky top-0 z-40 bg-surface/90 backdrop-blur border-b border-line">
         <div className="max-w-6xl mx-auto px-4 h-14 flex items-center gap-3">
-          <Link href="/" aria-label="LibreTV 首页" className="flex items-center shrink-0">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/icons/icon-512.png" alt="LibreTV" className="w-7 h-7 rounded-lg" />
+          <Link href="/" aria-label="LibreTV 首页" className="flex items-center gap-2.5 shrink-0 group">
+            <div className="relative flex items-center justify-center w-8 h-8 rounded-xl bg-gradient-to-tr from-accent via-indigo-500 to-purple-500 shadow-md shadow-accent/25 group-hover:scale-105 transition-transform duration-200">
+              <svg className="w-4 h-4 text-white fill-current translate-x-0.5" viewBox="0 0 24 24">
+                <path d="M5 3.868v16.264c0 .848.94 1.36 1.65.908l13.25-8.132a1.07 1.07 0 000-1.816L6.65 2.96C5.94 2.508 5 3.02 5 3.868z" />
+              </svg>
+              <div className="absolute inset-0 rounded-xl bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+            </div>
+            <div className="flex items-baseline gap-1">
+              <span className="text-lg font-bold tracking-tight bg-gradient-to-r from-content via-content to-accent bg-clip-text text-transparent">
+                Libre<span className="text-accent">TV</span>
+              </span>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-accent/15 text-accent border border-accent/20 tracking-wider uppercase hidden sm:inline-block">
+                CINEMA
+              </span>
+            </div>
           </Link>
 
           {showSearch && (

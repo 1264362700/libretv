@@ -150,30 +150,30 @@ function DoubanMultiCategoryView({ onPick }: { onPick: (title: string) => void }
 
   return (
     <section aria-label="影视多维分类大厅" className="space-y-4">
-      {/* 一级核心分类大导航 */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-line/60">
-        <div className="flex items-center gap-1.5 sm:gap-2 bg-chip p-1 rounded-xl">
+      {/* 一级核心分类大导航：支持移动端/iPad单行横向滑动手势 */}
+      <div className="flex items-center justify-between gap-3 pb-2 border-b border-line/60">
+        <div className="flex items-center gap-1.5 sm:gap-2 bg-chip/80 p-1 rounded-xl overflow-x-auto no-scrollbar max-w-full">
           {PRIMARY_TABS.map((tab) => (
             <button
               key={tab.id}
               className={cn(
-                'px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 flex items-center gap-1.5',
+                'px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 flex items-center gap-1.5 shrink-0 active:scale-95 touch-manipulation',
                 category === tab.id
-                  ? 'bg-accent text-on-accent shadow-sm scale-100'
+                  ? 'bg-accent text-on-accent shadow-sm scale-100 font-semibold'
                   : 'text-muted hover:text-content hover:bg-hover'
               )}
               onClick={() => setCategory(tab.id)}
             >
-              <span>{tab.icon}</span>
+              <span className="text-sm sm:text-base">{tab.icon}</span>
               <span>{tab.label}</span>
             </button>
           ))}
         </div>
-        <span className="text-xs text-faint hidden sm:inline-block">点击海报即刻智能聚合全网起播</span>
+        <span className="text-xs text-faint hidden lg:inline-block shrink-0">点击海报即刻智能聚合全网起播</span>
       </div>
 
-      {/* 多维网页版筛选面板 */}
-      <div className="bg-chip/50 border border-line/50 rounded-xl p-3 sm:p-4 space-y-2.5">
+      {/* 多维网页版筛选面板：单行自适应横滑，高度精简压缩70% */}
+      <div className="bg-chip/40 border border-line/50 rounded-xl p-2.5 sm:p-3.5 space-y-1.5 sm:space-y-2">
         {category === 'movie' && (
           <>
             <FilterRow label="地区" options={MOVIE_REGIONS} active={movieRegion} onSelect={setMovieRegion} />
@@ -200,13 +200,13 @@ function DoubanMultiCategoryView({ onPick }: { onPick: (title: string) => void }
 
         {category === 'anime' && (
           <>
-            <div className="flex items-center gap-2 mb-2 pb-2 border-b border-line/40">
-              <span className="text-xs text-faint w-10 sm:w-12 text-left sm:text-right">模式:</span>
+            <div className="flex items-center gap-2 pb-1.5 border-b border-line/40">
+              <span className="shrink-0 text-faint font-medium w-8 sm:w-10 text-left sm:text-right text-xs">模式:</span>
               <div className="flex gap-2">
                 <button
                   className={cn(
-                    'px-3 py-1 rounded-md text-xs font-medium transition-colors',
-                    animeViewMode === 'douban' ? 'bg-accent text-on-accent' : 'bg-chip text-muted hover:text-content'
+                    'px-2.5 py-1 rounded-md text-xs font-medium transition-all shrink-0 active:scale-95 touch-manipulation',
+                    animeViewMode === 'douban' ? 'bg-accent text-on-accent font-semibold' : 'bg-chip text-muted hover:text-content'
                   )}
                   onClick={() => setAnimeViewMode('douban')}
                 >
@@ -214,12 +214,12 @@ function DoubanMultiCategoryView({ onPick }: { onPick: (title: string) => void }
                 </button>
                 <button
                   className={cn(
-                    'px-3 py-1 rounded-md text-xs font-medium transition-colors',
-                    animeViewMode === 'bangumi' ? 'bg-accent text-on-accent' : 'bg-chip text-muted hover:text-content'
+                    'px-2.5 py-1 rounded-md text-xs font-medium transition-all shrink-0 active:scale-95 touch-manipulation',
+                    animeViewMode === 'bangumi' ? 'bg-accent text-on-accent font-semibold' : 'bg-chip text-muted hover:text-content'
                   )}
                   onClick={() => setAnimeViewMode('bangumi')}
                 >
-                  📅 新番周历 (Bangumi)
+                  📅 新番周历
                 </button>
               </div>
             </div>
@@ -272,7 +272,7 @@ function DoubanMultiCategoryView({ onPick }: { onPick: (title: string) => void }
       ) : items.length === 0 ? (
         <p className="text-center text-sm text-faint py-12">该分类组合暂无内容，请尝试其他标签</p>
       ) : (
-        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2.5">
+        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-2 sm:gap-3">
           {items.map((item) => (
             <DoubanCard key={item.id} item={item} onClick={() => onPick(item.title)} />
           ))}
@@ -282,7 +282,7 @@ function DoubanMultiCategoryView({ onPick }: { onPick: (title: string) => void }
   );
 }
 
-/** 单行多维筛选器条目组件 */
+/** 单行多维筛选器条目组件：横向单行自然平滑滚动 */
 function FilterRow({
   label,
   options,
@@ -295,21 +295,21 @@ function FilterRow({
   onSelect: (val: string) => void;
 }) {
   return (
-    <div className="flex items-start sm:items-center gap-2 text-xs">
-      <span className="shrink-0 text-faint font-medium w-10 sm:w-12 text-left sm:text-right py-1">
+    <div className="flex items-center gap-2 text-xs py-0.5">
+      <span className="shrink-0 text-faint font-medium w-8 sm:w-10 text-left sm:text-right">
         {label}:
       </span>
-      <div className="flex flex-wrap gap-1 sm:gap-1.5 flex-1">
+      <div className="flex items-center gap-1 sm:gap-1.5 flex-1 overflow-x-auto no-scrollbar py-0.5 scroll-smooth">
         {options.map((opt) => {
           const isSelected = opt === active;
           return (
             <button
               key={opt}
               className={cn(
-                'px-2.5 py-1 rounded-md transition-all duration-150',
+                'px-2.5 py-1 rounded-md text-xs transition-all duration-150 shrink-0 touch-manipulation active:scale-95',
                 isSelected
-                  ? 'bg-accent text-on-accent font-medium shadow-xs'
-                  : 'text-muted hover:text-content hover:bg-hover'
+                  ? 'bg-accent text-on-accent font-semibold shadow-xs'
+                  : 'text-muted hover:text-content hover:bg-hover bg-chip/40 sm:bg-transparent'
               )}
               onClick={() => onSelect(opt)}
             >
@@ -357,7 +357,7 @@ function BangumiInlineView({ onPick }: { onPick: (title: string) => void }) {
       ) : query.isLoading ? (
         <GridSkeleton />
       ) : (
-        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2.5">
+        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-2 sm:gap-3">
           {items.map((item) => (
             <DoubanCard key={item.id} item={item} onClick={() => onPick(item.title)} />
           ))}
@@ -412,7 +412,7 @@ function HotListView({ onPick }: { onPick: (title: string) => void }) {
       ) : query.isLoading ? (
         <GridSkeleton />
       ) : (
-        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2.5">
+        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-2 sm:gap-3">
           {items.map((item) => (
             <DoubanCard key={item.id} item={item} onClick={() => onPick(item.title)} />
           ))}
@@ -424,7 +424,7 @@ function HotListView({ onPick }: { onPick: (title: string) => void }) {
 
 function GridSkeleton() {
   return (
-    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2.5">
+    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8 gap-2 sm:gap-3">
       {Array.from({ length: 16 }).map((_, i) => (
         <div key={i}>
           <div className="aspect-[2/3] rounded-lg bg-chip animate-pulse" />

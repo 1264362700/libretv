@@ -154,3 +154,90 @@ body {
   0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); }
   50% { opacity: 0.55; box-shadow: 0 0 0 4px rgba(239, 68, 68, 0); }
 }
+
+/* 隐藏横向滚动条（移动端与 iPad 横滑标签） */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* ==========================================================================
+   原生 View Transitions 主题切换水波纹/日蚀动效
+   ========================================================================== */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+::view-transition-old(root) {
+  z-index: 1;
+}
+
+::view-transition-new(root) {
+  z-index: 2147483646;
+}
+
+/* 视图过渡期间强制禁用全站 CSS 过渡，杜绝掉帧 */
+html.theme-transitioning,
+html.theme-transitioning * {
+  transition: none !important;
+}
+
+/* 经典水波涟漪引力坍塌与晨光喷涌 */
+@keyframes theme-circle-collapse {
+  from {
+    clip-path: circle(var(--theme-transition-radius) at var(--theme-transition-x) var(--theme-transition-y));
+  }
+  to {
+    clip-path: circle(0px at var(--theme-transition-x) var(--theme-transition-y));
+  }
+}
+
+@keyframes theme-circle-expand {
+  from {
+    clip-path: circle(0px at var(--theme-transition-x) var(--theme-transition-y));
+  }
+  to {
+    clip-path: circle(var(--theme-transition-radius) at var(--theme-transition-x) var(--theme-transition-y));
+  }
+}
+
+/* To Dark: 顶层旧白天视图向鼠标点击点引力收缩消失，底层深色沉静浮现 */
+html[data-theme-style="circle"][data-theme-transition="to-dark"]::view-transition-old(root) {
+  z-index: 2147483646;
+  animation: theme-circle-collapse 420ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+html[data-theme-style="circle"][data-theme-transition="to-dark"]::view-transition-new(root) {
+  z-index: 1;
+}
+
+/* To Light: 顶层新浅色视图从鼠标原点向外如涟漪水波般喷涌扩散覆盖全屏 */
+html[data-theme-style="circle"][data-theme-transition="to-light"]::view-transition-old(root) {
+  z-index: 1;
+}
+html[data-theme-style="circle"][data-theme-transition="to-light"]::view-transition-new(root) {
+  z-index: 2147483646;
+  animation: theme-circle-expand 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* 日蚀月相天体蚀变动效 (Eclipse) */
+@keyframes theme-eclipse-to-dark {
+  from { clip-path: circle(0% at 100% 0%); }
+  to { clip-path: circle(150% at 100% 0%); }
+}
+@keyframes theme-eclipse-to-light {
+  from { clip-path: circle(0% at 0% 100%); }
+  to { clip-path: circle(150% at 0% 100%); }
+}
+html[data-theme-style="eclipse"][data-theme-transition="to-dark"]::view-transition-new(root) {
+  z-index: 2147483646;
+  animation: theme-eclipse-to-dark 450ms cubic-bezier(0.25, 1, 0.5, 1) both;
+}
+html[data-theme-style="eclipse"][data-theme-transition="to-light"]::view-transition-new(root) {
+  z-index: 2147483646;
+  animation: theme-eclipse-to-light 450ms cubic-bezier(0.25, 1, 0.5, 1) both;
+}

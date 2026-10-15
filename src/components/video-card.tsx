@@ -262,7 +262,7 @@ export function VideoCard({ item, onClick }: { item: SearchResultItem; onClick: 
   );
 }
 
-/** 豆瓣推荐卡片（无来源徽章，点击直接搜索） */
+/** 豆瓣推荐卡片（无来源徽章，点击直接搜索，优化移动端与 iPad 触控视觉） */
 export function DoubanCard({ item, onClick }: { item: { title: string; cover: string; rating?: string }; onClick: () => void }) {
   const imageProxyMode = useAppStore((s) => s.imageProxyMode);
   const customImageProxy = useAppStore((s) => s.customImageProxy);
@@ -271,26 +271,25 @@ export function DoubanCard({ item, onClick }: { item: { title: string; cover: st
 
   return (
     <div
-      className="card cursor-pointer hover:scale-[1.03] hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+      className="card rounded-xl overflow-hidden cursor-pointer hover:scale-[1.03] active:scale-95 transition-all duration-200 shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 touch-manipulation"
       role="button"
       tabIndex={0}
       onClick={onClick}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
-          // 阻止空格触发页面滚动（AggregatedCard 已是此写法，此处对齐）
           e.preventDefault();
           onClick();
         }
       }}
     >
-      <div className="relative aspect-[2/3] bg-chip">
+      <div className="relative aspect-[2/3] bg-chip overflow-hidden">
         {item.cover && !imgFailed ? (
           <SmartImage
             url={item.cover}
             mode={imageProxyMode}
             customProxy={customImageProxy}
             alt={item.title}
-            className="w-full h-full object-cover"
+            className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
             onExhausted={() => setImgFailed(true)}
           />
         ) : (
@@ -301,13 +300,13 @@ export function DoubanCard({ item, onClick }: { item: { title: string; cover: st
           </div>
         )}
         {item.rating && (
-          <span className={cn('absolute top-1.5 right-1.5 tag bg-black/70 text-rating font-medium')}>
+          <span className="absolute top-1 sm:top-1.5 right-1 sm:right-1.5 px-1.5 py-0.5 rounded-md bg-black/75 backdrop-blur-xs text-[10px] sm:text-xs text-rating font-bold shadow-sm">
             ★ {item.rating}
           </span>
         )}
       </div>
-      <div className="p-2">
-        <div className="text-xs font-medium text-content truncate" title={item.title}>
+      <div className="p-1.5 sm:p-2">
+        <div className="text-xs sm:text-sm font-medium text-content line-clamp-1 leading-snug" title={item.title}>
           {item.title}
         </div>
       </div>

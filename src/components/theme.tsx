@@ -65,19 +65,32 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   return <ThemeContext.Provider value={{ theme, resolved, setTheme }}>{children}</ThemeContext.Provider>;
 }
 
-/** 亮暗切换按钮：在 light → dark → system 三态间循环 */
+import { switchTheme } from '@/lib/theme-switcher';
+
+/** 亮暗切换按钮：在 light → dark → system 三态间循环（伴随水波涟漪动效） */
 export function ThemeToggle() {
   const { theme, resolved, setTheme } = useTheme();
   const next: ThemeChoice = theme === 'light' ? 'dark' : theme === 'dark' ? 'system' : 'light';
   const label = theme === 'system' ? '跟随系统（当前深色）' : theme === 'dark' ? '深色' : '浅色';
   const nextLabel = next === 'light' ? '浅色' : next === 'dark' ? '深色' : '跟随系统';
 
+  const handleToggle = (e: React.MouseEvent<HTMLButtonElement>) => {
+    switchTheme({
+      event: e,
+      isDark: resolved === 'dark',
+      style: 'circle',
+      callback: () => {
+        setTheme(next);
+      },
+    });
+  };
+
   return (
     <button
-      className="p-2 rounded-md text-muted hover:text-content hover:bg-hover transition-colors"
+      className="p-1.5 sm:p-2 rounded-lg text-muted hover:text-content hover:bg-hover active:scale-90 transition-all touch-manipulation"
       title={`主题：${label}，点击切换为${nextLabel}`}
       aria-label={`切换主题，当前 ${label}`}
-      onClick={() => setTheme(next)}
+      onClick={handleToggle}
     >
       {theme === 'system' ? (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

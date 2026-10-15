@@ -96,7 +96,7 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
 
           <div className="flex-1 sm:hidden" />
 
-          <nav className="flex items-center gap-1 ml-auto">
+          <nav className="flex items-center gap-0.5 sm:gap-1.5 ml-auto">
             <HeaderLink href="/live" active={pathname === '/live'}>
               直播
             </HeaderLink>
@@ -128,8 +128,8 @@ function HeaderLink({ href, active, children }: { href: string; active: boolean;
     <Link
       href={href}
       className={cn(
-        'px-2.5 py-1.5 rounded-md text-sm transition-colors',
-        active ? 'text-content bg-hover' : 'text-muted hover:text-content'
+        'px-2 sm:px-2.5 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all touch-manipulation active:scale-95',
+        active ? 'text-content bg-hover font-semibold' : 'text-muted hover:text-content'
       )}
     >
       {children}
@@ -140,7 +140,7 @@ function HeaderLink({ href, active, children }: { href: string; active: boolean;
 function IconButton({ label, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) {
   return (
     <button
-      className="p-2 rounded-md text-muted hover:text-content hover:bg-hover transition-colors"
+      className="p-1.5 sm:p-2 rounded-lg text-muted hover:text-content hover:bg-hover active:scale-90 transition-all touch-manipulation"
       title={label}
       aria-label={label}
       onClick={onClick}

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { ThemeToggle } from './theme';
+import { useAuth } from './auth';
 import { SourceManagerDrawer } from './source-manager';
 import { HistoryPanel } from './history-panel';
 import { requestShowDownloadManager } from './download-manager';
@@ -20,6 +21,8 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
   const [query, setQuery] = useState('');
   // 与首页搜索框共用同一套「最近搜索」下拉逻辑
   const searchHistory = useSearchHistory(query);
+
+  const { verified, user, isAdmin, openLogin, openAdminModal, logout } = useAuth();
 
   const submitSearch = (text: string) => {
     const q = text.trim().slice(0, 100);
@@ -113,6 +116,44 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
             <IconButton label="设置" onClick={() => setSettingsOpen(true)}>
               <Icon name="gear" />
             </IconButton>
+
+            {/* 管理员专属后台入口 */}
+            {isAdmin && (
+              <button
+                className="px-2 py-1 rounded-lg text-xs font-semibold bg-purple-500/15 text-purple-600 dark:text-purple-300 hover:bg-purple-500/25 active:scale-95 transition-all flex items-center gap-1 shrink-0"
+                onClick={openAdminModal}
+                title="打开管理员后台（邀请码、用户与全局源）"
+              >
+                <span>👑</span>
+                <span className="hidden sm:inline">管理中心</span>
+              </button>
+            )}
+
+            {/* 用户状态或登录入口 */}
+            {verified ? (
+              <div className="flex items-center gap-1 pl-1 border-l border-line/60">
+                <span
+                  className="text-xs text-faint max-w-[5rem] truncate hidden sm:inline"
+                  title={`当前账号: ${user?.username}`}
+                >
+                  {user?.username}
+                </span>
+                <button
+                  className="p-1.5 rounded-lg text-muted hover:text-danger hover:bg-danger/10 text-xs active:scale-90 transition-all"
+                  onClick={logout}
+                  title="登出账号"
+                >
+                  退出
+                </button>
+              </div>
+            ) : (
+              <button
+                className="btn-primary px-2.5 py-1 text-xs rounded-lg active:scale-95 shrink-0"
+                onClick={openLogin}
+              >
+                登录 / 注册
+              </button>
+            )}
           </nav>
         </div>
       </header>

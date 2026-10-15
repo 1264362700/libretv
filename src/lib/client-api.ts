@@ -108,14 +108,83 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 export const api = {
   status: () => request<AuthStatusResponse>('/api/status'),
 
-  login: (password: string) =>
-    request<{ success: boolean }>('/api/auth', {
+  login: (credentials: { username?: string; password: string } | string) => {
+    const payload =
+      typeof credentials === 'string'
+        ? { action: 'login', username: 'admin', password: credentials }
+        : { action: 'login', ...credentials };
+    return request<{ success: boolean; user?: { username: string; role: 'admin' | 'user' } }>('/api/auth', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password }),
+      body: JSON.stringify(payload),
+    });
+  },
+
+  register: (data: { username: string; password: string; inviteCode: string }) =>
+    request<{ success: boolean; user?: { username: string; role: 'admin' | 'user' }; message?: string }>('/api/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'register', ...data }),
     }),
 
   logout: () => request<{ success: boolean }>('/api/auth', { method: 'DELETE' }),
+
+  admin: {
+    getInvites: () =>
+      request<{ success: boolean; invites: Array<{ code: string; createdBy: string; maxUses: number; useCount: number; usedBy: string[]; active: boolean; createdAt: number }> }>('/api/admin?type=invites'),
+    createInvites: (data: { count?: number; maxUses?: number; prefix?: string }) =>
+      request<{ success: boolean; codes: Array<{ code: string }> }>('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'create_invite', ...data }),
+      }),
+    revokeInvite: (code: string) =>
+      request<{ success: boolean }>('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'revoke_invite', code }),
+      }),
+    getUsers: () =>
+      request<{ success: boolean; users: Array<{ id: string; username: string; role: 'admin' | 'user'; status: 'active' | 'banned'; sessionVersion: number; createdAt: number; lastLoginAt?: number }> }>('/api/admin?type=users'),
+    banUser: (username: string) =>
+      request<{ success: boolean; error?: string }>('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'ban_user', username }),
+      }),
+    unbanUser: (username: string) =>
+      request<{ success: boolean; error?: string }>('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'unban_user', username }),
+      }),
+    kickUser: (username: string) =>
+      request<{ success: boolean; error?: string }>('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'kick_user', username }),
+      }),
+    resetPassword: (username: string, newPassword: string) =>
+      request<{ success: boolean; error?: string }>('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'reset_password', username, newPassword }),
+      }),
+    getSources: () =>
+      request<{ success: boolean; sources: Array<{ key: string; name: string; url: string; type: 'vod' | 'live'; createdAt: number }> }>('/api/admin?type=sources'),
+    addSource: (data: { name: string; url: string; type: 'vod' | 'live' }) =>
+      request<{ success: boolean; source?: { key: string; name: string; url: string; type: 'vod' | 'live' }; error?: string }>('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'add_source', ...data }),
+      }),
+    removeSource: (key: string) =>
+      request<{ success: boolean; error?: string }>('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'remove_source', key }),
+      }),
+  },
 
   /**
    * 聚合搜索。传入 onSource 时走 /api/search?stream=1 的 NDJSON 流：

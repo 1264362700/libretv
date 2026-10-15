@@ -95,6 +95,12 @@ export interface AuthStatusResponse {
   passwordRequired: boolean;
   /** 当前会话是否已验证 */
   verified: boolean;
+  /** 当前登录用户信息 */
+  user?: { username: string; role: 'admin' | 'user' } | null;
+  /** 顶号/封禁具体状态 */
+  kickReason?: string | null;
+  /** 顶号/封禁友好提示文案 */
+  kickMessage?: string | null;
   version: string;
   /** 部署者通过 DEFAULT_SOURCES 环境变量预置的采集站（未配置时为空数组） */
   defaultSources: SourceConfig[];

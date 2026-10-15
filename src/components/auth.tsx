@@ -1,37 +1,42 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api, onUnauthorized, STATUS_QUERY_KEY } from '@/lib/client-api';
 import { applyEnvPresets } from '@/lib/subscription-sync';
 import type { AuthStatusResponse } from '@/lib/types';
 import { useToast } from './toast';
+import { AdminModal } from './admin-modal';
+import { cn } from '@/lib/utils';
 
-/**
- * 认证上下文：
- * - 页面加载时查询 /api/status 判断会话有效性；
- * - 任何 API 返回 401/503 时全局打开登录框（客户端 API 层统一触发，不再散落检查）。
- */
-
-type SetupRequired = boolean;
+export interface CurrentUser {
+  username: string;
+  role: 'admin' | 'user';
+}
 
 interface AuthContextValue {
   checked: boolean;
   verified: boolean;
-  /** 服务器未设置 PASSWORD，需要管理员配置 */
-  setupRequired: SetupRequired;
-  /** /api/status 返回的应用版本（构建时从 package.json 注入） */
+  user: CurrentUser | null;
+  isAdmin: boolean;
+  setupRequired: boolean;
   version: string | null;
+  kickNotice: string | null;
   openLogin: () => void;
+  openAdminModal: () => void;
   logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue>({
   checked: false,
   verified: false,
+  user: null,
+  isAdmin: false,
   setupRequired: false,
   version: null,
+  kickNotice: null,
   openLogin: () => {},
+  openAdminModal: () => {},
   logout: async () => {},
 });
 
@@ -42,13 +47,15 @@ export function useAuth(): AuthContextValue {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [checked, setChecked] = useState(false);
   const [verified, setVerified] = useState(false);
+  const [user, setUser] = useState<CurrentUser | null>(null);
   const [setupRequired, setSetupRequired] = useState(false);
   const [version, setVersion] = useState<string | null>(null);
+  const [kickNotice, setKickNotice] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [adminModalOpen, setAdminModalOpen] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // 与 Providers 共用同一 query key 与缓存，避免 /api/status 被请求两次
   useEffect(() => {
     let cancelled = false;
     queryClient
@@ -56,6 +63,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .then((s) => {
         if (cancelled) return;
         setVerified(s.verified);
+        setUser(s.user ?? null);
+        if (s.kickReason === 'KICKED_OUT') {
+          setKickNotice(s.kickMessage || '您的账号已在其他设备登录，当前会话已下线');
+          setModalOpen(true);
+        }
         setSetupRequired(!s.passwordRequired);
         setVersion(s.version);
         setChecked(true);
@@ -71,80 +83,118 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(
     () =>
       onUnauthorized((event) => {
-        const setup = (event as CustomEvent).detail === 'setup';
-        setSetupRequired(setup);
+        const detail = (event as CustomEvent).detail;
+        if (typeof detail === 'object' && detail?.code === 'KICKED_OUT') {
+          setKickNotice(detail.error || '您的账号已在其他设备登录，当前会话已下线');
+        } else if (typeof detail === 'string' && detail === 'setup') {
+          setSetupRequired(true);
+        }
         setVerified(false);
+        setUser(null);
         setModalOpen(true);
       }),
     []
   );
 
-  const openLogin = useCallback(() => setModalOpen(true), []);
+  const openLogin = useCallback(() => {
+    setKickNotice(null);
+    setModalOpen(true);
+  }, []);
+
+  const openAdminModal = useCallback(() => {
+    setAdminModalOpen(true);
+  }, []);
 
   const logout = useCallback(async () => {
     try {
       await api.logout();
     } finally {
       setVerified(false);
+      setUser(null);
       toast('已退出登录', 'info');
     }
   }, [toast]);
 
-  const handleLoginSuccess = useCallback(async () => {
-    setVerified(true);
-    setSetupRequired(false);
-    setModalOpen(false);
-    // 登录前以 401 失败的查询（如豆瓣推荐）需要重新拉取
-    queryClient.invalidateQueries();
-    toast('验证成功', 'success');
-    // 预置订阅（DEFAULT_SUBSCRIPTIONS）的首屏同步发生在登录之前，会 401 静默失败，
-    // 这里用缓存中的 /api/status 补跑一次（缓存缺失时回落为一次请求）
-    try {
-      const cached = queryClient.getQueryData<AuthStatusResponse>(STATUS_QUERY_KEY);
-      const status =
-        cached ??
-        (await queryClient.fetchQuery<AuthStatusResponse>({
-          queryKey: STATUS_QUERY_KEY,
-          queryFn: () => api.status(),
-          staleTime: 0,
-        }));
-      if (status) await applyEnvPresets(status);
-    } catch {
-      // 补拉预置数据失败不影响登录后的正常使用
-    }
-  }, [toast, queryClient]);
+  const handleLoginSuccess = useCallback(
+    async (loggedUser?: CurrentUser) => {
+      setVerified(true);
+      if (loggedUser) setUser(loggedUser);
+      setSetupRequired(false);
+      setKickNotice(null);
+      setModalOpen(false);
+      queryClient.invalidateQueries();
+      toast('登入成功', 'success');
+
+      try {
+        const cached = queryClient.getQueryData<AuthStatusResponse>(STATUS_QUERY_KEY);
+        const status =
+          cached ??
+          (await queryClient.fetchQuery<AuthStatusResponse>({
+            queryKey: STATUS_QUERY_KEY,
+            queryFn: () => api.status(),
+            staleTime: 0,
+          }));
+        if (status) await applyEnvPresets(status);
+      } catch {
+        // 忽略补拉
+      }
+    },
+    [toast, queryClient]
+  );
+
+  const isAdmin = user?.role === 'admin';
 
   return (
-    <AuthContext.Provider value={{ checked, verified, setupRequired, version, openLogin, logout }}>
+    <AuthContext.Provider
+      value={{
+        checked,
+        verified,
+        user,
+        isAdmin,
+        setupRequired,
+        version,
+        kickNotice,
+        openLogin,
+        openAdminModal,
+        logout,
+      }}
+    >
       {children}
       {modalOpen && (
-        <LoginModal
-          setupRequired={setupRequired}
+        <AuthModal
+          kickNotice={kickNotice}
           onSuccess={handleLoginSuccess}
           onClose={() => setModalOpen(false)}
         />
       )}
+      {isAdmin && <AdminModal open={adminModalOpen} onClose={() => setAdminModalOpen(false)} />}
     </AuthContext.Provider>
   );
 }
 
-function LoginModal({
-  setupRequired,
+/** 现代化双 Tab 门禁弹窗（账号登录 / 邀请码注册） */
+function AuthModal({
+  kickNotice,
   onSuccess,
   onClose,
 }: {
-  setupRequired: boolean;
-  onSuccess: () => void;
+  kickNotice: string | null;
+  onSuccess: (user?: CurrentUser) => void;
   onClose: () => void;
 }) {
-  const [password, setPassword] = useState('');
+  const [tab, setTab] = useState<'login' | 'register'>('login');
+
+  // 登录表单
+  const [loginUsername, setLoginUsername] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+
+  // 注册表单
+  const [regUsername, setRegUsername] = useState('');
+  const [regPassword, setRegPassword] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
+
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -154,18 +204,42 @@ function LoginModal({
     return () => window.removeEventListener('keydown', handler);
   }, [onClose]);
 
-  const submit = async () => {
-    if (!password.trim() || loading) return;
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!loginPassword.trim() || loading) return;
     setLoading(true);
     setError('');
     try {
-      await api.login(password);
-      onSuccess();
+      const res = await api.login({
+        username: loginUsername.trim() || 'admin',
+        password: loginPassword,
+      });
+      if (res.success) {
+        onSuccess(res.user);
+      }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '验证失败';
-      setError(msg === '需要登录' ? '密码错误' : msg);
-      setPassword('');
-      inputRef.current?.focus();
+      setError(err instanceof Error ? err.message : '用户名或密码不正确');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!regUsername.trim() || !regPassword.trim() || !inviteCode.trim() || loading) return;
+    setLoading(true);
+    setError('');
+    try {
+      const res = await api.register({
+        username: regUsername.trim(),
+        password: regPassword,
+        inviteCode: inviteCode.trim(),
+      });
+      if (res.success) {
+        onSuccess(res.user);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '注册失败，请核对邀请码');
     } finally {
       setLoading(false);
     }
@@ -173,51 +247,158 @@ function LoginModal({
 
   return (
     <div
-      className="fixed inset-0 z-[95] flex items-center justify-center bg-black/80 animate-fade-in"
+      className="fixed inset-0 z-[95] flex items-center justify-center bg-black/80 p-4 animate-fade-in"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
-        className="bg-surface-raised rounded-xl p-6 w-full max-w-sm mx-4 shadow-2xl"
+        className="bg-surface-raised rounded-2xl w-full max-w-sm shadow-2xl border border-line overflow-hidden animate-slide-up"
         role="dialog"
         aria-modal="true"
-        aria-label={setupRequired ? '需要配置密码' : '访问验证'}
       >
-        {setupRequired ? (
-          <>
-            <h2 className="text-lg font-semibold text-content mb-3">需要配置密码</h2>
-            <p className="text-sm text-muted leading-relaxed">
-              为确保安全，必须设置 <code className="text-accent">PASSWORD</code> 环境变量才能使用本服务。
-              请联系管理员在部署配置中添加该变量后重启服务。
-            </p>
-          </>
-        ) : (
-          <>
-            <h2 className="text-lg font-semibold text-content mb-1">访问验证</h2>
-            <p className="text-sm text-muted mb-4">请输入密码继续访问</p>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                submit();
+        {/* 顶号互踢告警横幅 */}
+        {kickNotice && (
+          <div className="bg-amber-500/15 border-b border-amber-500/30 px-4 py-2.5 text-xs text-amber-600 dark:text-amber-400 flex items-center gap-2">
+            <span>⚠️</span>
+            <span>{kickNotice}</span>
+          </div>
+        )}
+
+        {/* 标题与选项卡 */}
+        <div className="p-6 pb-2">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold text-content flex items-center gap-2">
+              <span className="text-accent text-xl">🎬</span>
+              <span>LibreTV 访问中心</span>
+            </h2>
+            <button
+              className="text-faint hover:text-content text-sm p-1 rounded-md active:scale-90"
+              onClick={onClose}
+            >
+              ✕
+            </button>
+          </div>
+
+          <div className="flex border-b border-line">
+            <button
+              className={cn(
+                'flex-1 py-2 text-xs font-semibold border-b-2 transition-all',
+                tab === 'login'
+                  ? 'border-accent text-accent'
+                  : 'border-transparent text-muted hover:text-content'
+              )}
+              onClick={() => {
+                setTab('login');
+                setError('');
               }}
             >
-              <input
-                ref={inputRef}
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="input w-full"
-                placeholder="密码"
-                autoComplete="current-password"
-              />
-              {error && <p className="mt-2 text-sm text-danger">{error}</p>}
-              <button type="submit" className="btn-primary w-full mt-4" disabled={loading || !password.trim()}>
-                {loading ? '验证中...' : '进入'}
+              账号登录
+            </button>
+            <button
+              className={cn(
+                'flex-1 py-2 text-xs font-semibold border-b-2 transition-all',
+                tab === 'register'
+                  ? 'border-accent text-accent'
+                  : 'border-transparent text-muted hover:text-content'
+              )}
+              onClick={() => {
+                setTab('register');
+                setError('');
+              }}
+            >
+              邀请码注册
+            </button>
+          </div>
+        </div>
+
+        {/* 表单内容 */}
+        <div className="p-6 pt-3">
+          {tab === 'login' ? (
+            <form onSubmit={handleLogin} className="space-y-3">
+              <div>
+                <label className="block text-[11px] text-faint mb-1">用户名 / 账号</label>
+                <input
+                  type="text"
+                  value={loginUsername}
+                  onChange={(e) => setLoginUsername(e.target.value)}
+                  className="input w-full py-2 text-xs"
+                  placeholder="admin 或 注册用户名"
+                  autoComplete="username"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] text-faint mb-1">密码</label>
+                <input
+                  type="password"
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  className="input w-full py-2 text-xs"
+                  placeholder="登录密码"
+                  autoComplete="current-password"
+                />
+              </div>
+
+              {error && <p className="text-xs text-danger pt-1">{error}</p>}
+
+              <button
+                type="submit"
+                className="btn-primary w-full py-2 mt-2 text-xs font-semibold active:scale-95"
+                disabled={loading || !loginPassword.trim()}
+              >
+                {loading ? '正在验证...' : '登入系统'}
               </button>
             </form>
-          </>
-        )}
+          ) : (
+            <form onSubmit={handleRegister} className="space-y-3">
+              <div>
+                <label className="block text-[11px] text-faint mb-1">设置用户名</label>
+                <input
+                  type="text"
+                  value={regUsername}
+                  onChange={(e) => setRegUsername(e.target.value)}
+                  className="input w-full py-2 text-xs"
+                  placeholder="3-20 位中英文、数字"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] text-faint mb-1">设置密码</label>
+                <input
+                  type="password"
+                  value={regPassword}
+                  onChange={(e) => setRegPassword(e.target.value)}
+                  className="input w-full py-2 text-xs"
+                  placeholder="至少 6 位密码"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] text-faint mb-1">专属邀请码</label>
+                <input
+                  type="text"
+                  value={inviteCode}
+                  onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+                  className="input w-full py-2 text-xs font-mono uppercase tracking-wider"
+                  placeholder="如 LTV-8A9X-2M4K"
+                />
+              </div>
+
+              {error && <p className="text-xs text-danger pt-1">{error}</p>}
+
+              <button
+                type="submit"
+                className="btn-primary w-full py-2 mt-2 text-xs font-semibold active:scale-95"
+                disabled={loading || !regUsername.trim() || !regPassword.trim() || !inviteCode.trim()}
+              >
+                {loading ? '正在注册...' : '激活邀请码并完成注册'}
+              </button>
+              <p className="text-[10px] text-faint text-center pt-1">
+                还没有邀请码？请联系站点管理员索取
+              </p>
+            </form>
+          )}
+        </div>
       </div>
     </div>
   );

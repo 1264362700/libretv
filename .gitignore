@@ -13,3 +13,4 @@ vitest-results.json
 .codebuddy/
 generated-images/
 cookies.txt
+data/*.json

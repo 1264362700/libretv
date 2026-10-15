@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { isPasswordConfigured, sessionFromCookieHeader } from '@/lib/auth';
+import { sessionFromCookieHeader } from '@/lib/auth';
+import { listGlobalSources } from '@/lib/auth-store';
 import { getEnvSources } from '@/lib/env-sources';
 import { getEnvLiveSources } from '@/lib/env-live-sources';
 import { getEnvSubscriptions } from '@/lib/env-subscriptions';
@@ -8,24 +9,29 @@ import { getEnvImageMode } from '@/lib/env-image-mode';
 
 export const runtime = 'nodejs';
 
-/** 站点状态：客户端据此决定是否弹出登录框 / 提示管理员配置密码，并获取预置采集站与预置直播源 */
+/** 站点状态：返回当前会话有效性、用户信息、动态全局源与预置源 */
 export async function GET(req: Request) {
-  const passwordRequired = isPasswordConfigured();
-  const verified = passwordRequired && sessionFromCookieHeader(req.headers.get('cookie'));
+  const session = sessionFromCookieHeader(req.headers.get('cookie'));
+
+  const globalSources = listGlobalSources();
+  const vodGlobals = globalSources
+    .filter((s) => s.type === 'vod')
+    .map((s) => ({ key: s.key, name: s.name, url: s.url }));
+  const liveGlobals = globalSources
+    .filter((s) => s.type === 'live')
+    .map((s) => ({ key: s.key, name: s.name, url: s.url }));
+
   return NextResponse.json({
-    passwordRequired,
-    verified,
-    // 构建时由 next.config.ts 从 package.json 注入
+    passwordRequired: true,
+    verified: session.valid,
+    user: session.user || null,
+    kickReason: session.reason || null,
+    kickMessage: session.message || null,
     version: process.env.APP_VERSION || 'dev',
-    // 部署者通过 DEFAULT_SOURCES 预置的采集站
-    defaultSources: getEnvSources(),
-    // 部署者通过 DEFAULT_LIVE_SOURCES 预置的直播源（M3U 订阅）
-    defaultLiveSources: getEnvLiveSources(),
-    // 部署者通过 DEFAULT_SUBSCRIPTIONS 预置的 SourceList 订阅链接
+    defaultSources: [...getEnvSources(), ...vodGlobals],
+    defaultLiveSources: [...getEnvLiveSources(), ...liveGlobals],
     defaultSubscriptions: getEnvSubscriptions(),
-    // 部署者通过 DEFAULT_RECOMMEND_SOURCE 指定的首页推荐数据源默认值（未配置时为 null）
     defaultRecommendSource: getEnvRecommendSource() ?? null,
-    // 部署者通过 DEFAULT_IMAGE_MODE 指定的封面图加载方式默认值（未配置时为 null）
     defaultImageMode: getEnvImageMode() ?? null,
   });
 }

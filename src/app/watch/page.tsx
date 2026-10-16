@@ -733,7 +733,7 @@ function WatchContent() {
           </div>
 
           {/* 右侧侧栏（Web 模式下：剧集选集 + 影片海报/演职员/概述；移动端顺位在播放器下方） */}
-          <aside className="space-y-3.5 min-w-0 w-full lg:sticky lg:top-20">
+          <aside className="space-y-3.5 min-w-0 w-full">
             {/* 1. 剧集选集卡片 */}
             <div className="bg-surface-raised rounded-xl p-3 sm:p-3.5 border border-line shadow-sm">
               <div className="flex items-center justify-between gap-2 mb-3">

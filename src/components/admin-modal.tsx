@@ -121,11 +121,24 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
     }
   };
 
-  // 复制邀请口令
+  const getInviteUrl = (code: string) => {
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    return `${origin}/login?invite=${encodeURIComponent(code)}`;
+  };
+
+  // 复制邀请直达链接
+  const handleCopyInviteLink = async (code: string) => {
+    const url = getInviteUrl(code);
+    const ok = await copyToClipboard(url);
+    if (ok) toast('邀请直达链接已复制到剪贴板！', 'success');
+  };
+
+  // 复制带链接的完整邀请口令
   const handleCopyInvite = async (code: string) => {
-    const text = `您好，这是 cl 影视服务邀请码：${code}，请在首页注册使用！`;
+    const url = getInviteUrl(code);
+    const text = `您好，这是 cl 影视注册邀请直达链接：\n${url}\n（专属邀请码：${code}），点击直接进入注册！`;
     const ok = await copyToClipboard(text);
-    if (ok) toast('邀请口令已复制到剪贴板', 'success');
+    if (ok) toast('邀请口令与链接已复制到剪贴板', 'success');
   };
 
   // 用户操作
@@ -324,8 +337,16 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
                         </span>
                         <div className="flex items-center gap-1.5">
                           <button
+                            className="px-2 py-0.5 rounded bg-accent/15 hover:bg-accent/25 text-accent font-semibold text-[11px] active:scale-95"
+                            onClick={() => handleCopyInviteLink(inv.code)}
+                            title="复制直达注册链接（包含邀请码）"
+                          >
+                            🔗 复制链接
+                          </button>
+                          <button
                             className="px-2 py-0.5 rounded bg-chip hover:bg-hover text-muted hover:text-content text-[11px] active:scale-95"
                             onClick={() => handleCopyInvite(inv.code)}
+                            title="复制带链接的邀请口令"
                           >
                             复制口令
                           </button>

@@ -41,6 +41,15 @@ function LoginContent() {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
+  // 识别 URL 中的邀请码并自动切换至注册模式
+  useEffect(() => {
+    const codeParam = searchParams.get('invite') || searchParams.get('code') || searchParams.get('inviteCode');
+    if (codeParam) {
+      setInviteCode(codeParam.trim());
+      setMode('register');
+    }
+  }, [searchParams]);
+
   // 已登录用户访问自动跳转
   useEffect(() => {
     if (checked && verified) {

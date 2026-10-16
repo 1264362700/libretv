@@ -244,3 +244,58 @@ html[data-theme-style="eclipse"][data-theme-transition="to-light"]::view-transit
   z-index: 2147483646;
   animation: theme-eclipse-to-light 450ms cubic-bezier(0.25, 1, 0.5, 1) both;
 }
+
+/* ==========================================================================
+   cl.tv 极简线条 SVG Logo 描边绘制与悬停流光动画
+   ========================================================================== */
+@keyframes cl-logo-draw {
+  0% {
+    stroke-dashoffset: 140;
+    opacity: 0.2;
+  }
+  60% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+}
+
+@keyframes cl-logo-flow {
+  0% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: -32;
+  }
+}
+
+@keyframes cl-logo-glow {
+  0%, 100% {
+    filter: drop-shadow(0 0 0px rgba(0, 184, 230, 0));
+  }
+  50% {
+    filter: drop-shadow(0 0 5px rgba(0, 184, 230, 0.5));
+  }
+}
+
+.cl-logo-svg .cl-logo-draw {
+  stroke-dasharray: 140;
+  animation: cl-logo-draw 1.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.cl-logo-svg .cl-logo-play {
+  stroke-dasharray: 40;
+  animation: cl-logo-draw 1.2s cubic-bezier(0.16, 1, 0.3, 1) 0.3s forwards;
+}
+
+.group:hover .cl-logo-svg {
+  animation: cl-logo-glow 2.2s ease-in-out infinite;
+}
+
+.group:hover .cl-logo-svg .cl-logo-draw {
+  stroke-dasharray: 10 4;
+  animation: cl-logo-flow 1.6s linear infinite;
+}

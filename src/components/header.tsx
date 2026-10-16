@@ -64,11 +64,11 @@ export function Header(_props?: { showSearch?: boolean }) {
   return (
     <>
       <header className="sticky top-0 z-40 bg-surface/90 backdrop-blur border-b border-line shadow-xs">
-        <div className="max-w-6xl mx-auto px-4 h-14 flex items-center gap-2.5 sm:gap-3">
-          {/* 手机模式专属侧边栏呼出按钮（汉堡菜单图标） */}
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 h-14 flex items-center gap-2 sm:gap-3 lg:gap-4">
+          {/* 手机与平板竖屏模式专属侧边栏呼出按钮（汉堡菜单图标） */}
           <button
             type="button"
-            className="md:hidden p-1.5 -ml-1 rounded-lg text-muted hover:text-content hover:bg-hover active:scale-90 transition-all touch-manipulation cursor-pointer"
+            className="lg:hidden p-1.5 -ml-1 rounded-lg text-muted hover:text-content hover:bg-hover active:scale-90 transition-all touch-manipulation cursor-pointer"
             onClick={() => setMobileNavOpen(true)}
             aria-label="打开侧边导航"
             title="打开侧边导航"
@@ -80,11 +80,53 @@ export function Header(_props?: { showSearch?: boolean }) {
             </svg>
           </button>
 
-          {/* 极简 cl 品牌 Logo */}
-          <Link href="/" aria-label="cl 首页" className="flex items-center gap-2 shrink-0 group">
-            <div className="flex items-center justify-center w-8 h-8 rounded-xl bg-accent text-white font-black text-sm tracking-tighter shadow-sm group-hover:scale-105 transition-all">
-              cl
-            </div>
+          {/* cl.tv 极简线条 SVG 品牌 Logo（带线条绘制与流光动画） */}
+          <Link href="/" aria-label="cl 首页" className="flex items-center gap-2 shrink-0 group select-none">
+            <svg
+              className="w-7 h-7 sm:w-8 sm:h-8 text-accent cl-logo-svg transition-transform duration-300 group-hover:scale-105 shrink-0"
+              viewBox="0 0 32 32"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              {/* 极简天线折线 */}
+              <path
+                d="M11 3.5L14.5 7M21 3.5L17.5 7"
+                className="cl-logo-draw"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+              />
+              {/* 极简圆角电视屏幕线框 */}
+              <rect
+                x="3.5"
+                y="7"
+                width="25"
+                height="18"
+                rx="4.5"
+                className="cl-logo-draw"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              {/* 极简悬浮支架线 */}
+              <path
+                d="M12 28.5H20"
+                className="cl-logo-draw"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+              />
+              {/* 极简中心播放折线 */}
+              <path
+                d="M13.5 12.5L19.5 16L13.5 19.5V12.5Z"
+                className="cl-logo-play"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
             <div className="flex items-baseline gap-1">
               <span className="text-base sm:text-lg font-extrabold tracking-tight text-content group-hover:text-accent transition-colors font-mono">
                 cl<span className="text-accent">.tv</span>
@@ -92,7 +134,7 @@ export function Header(_props?: { showSearch?: boolean }) {
             </div>
           </Link>
 
-          {/* 桌面端单行大导航（仅在 lg: 1024px 及以上大屏展示，平板/手机端移入次顶栏彻底防碰撞） */}
+          {/* 桌面端单行大导航（在 lg: 1024px 及以上大屏展示，严格防折行与挤压） */}
           <Suspense fallback={null}>
             <DesktopChannelNav />
           </Suspense>
@@ -103,23 +145,21 @@ export function Header(_props?: { showSearch?: boolean }) {
             <button
               type="button"
               onClick={() => setSpotlightOpen(true)}
-              className="flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl bg-surface hover:bg-hover border border-line hover:border-accent/40 text-muted hover:text-content text-xs transition-all cursor-pointer group shrink-0"
+              className="flex items-center gap-1.5 xl:gap-2 px-2.5 xl:px-3 py-1.5 rounded-xl bg-surface hover:bg-hover border border-line hover:border-accent/40 text-muted hover:text-content text-xs transition-all cursor-pointer group shrink-0"
               title="全局搜索 (⌘K / Ctrl+K)"
               aria-label="全局搜索 (⌘K)"
             >
               <Icon name="search" className="w-3.5 h-3.5 text-muted group-hover:text-accent transition-colors shrink-0" />
-              <span className="text-muted/80 group-hover:text-content transition-colors font-medium hidden md:inline">
+              <span className="text-muted/80 group-hover:text-content transition-colors font-medium hidden xl:inline whitespace-nowrap">
                 搜索影片...
+              </span>
+              <span className="text-muted/80 group-hover:text-content transition-colors font-medium hidden lg:inline xl:hidden whitespace-nowrap">
+                搜索
               </span>
               <kbd className="hidden lg:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-surface-raised border border-line text-[10px] font-mono text-faint group-hover:border-accent/40">
                 <span>⌘</span>K
               </kbd>
             </button>
-            <div className="hidden xl:inline-flex">
-              <HeaderLink href="/about" active={false}>
-                {t('nav.about', '关于')}
-              </HeaderLink>
-            </div>
             <LanguageToggle />
             <ThemeToggle />
             <IconButton label={t('nav.history', '观看历史')} onClick={() => setHistoryOpen(true)}>
@@ -224,7 +264,7 @@ function DesktopChannelNav() {
   const { t } = useTranslation();
 
   return (
-    <nav className="hidden lg:flex items-center gap-1 ml-3">
+    <nav className="hidden lg:flex items-center gap-0.5 xl:gap-1 ml-2 xl:ml-4 shrink-0">
       {CHANNELS.map((ch) => {
         const isActive = currentId === ch.id;
         return (
@@ -251,7 +291,7 @@ function TabletMobileChannelBar() {
             key={ch.id}
             href={ch.href}
             className={cn(
-              'shrink-0 px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-full text-xs sm:text-sm font-medium transition-all active:scale-95 touch-manipulation',
+              'shrink-0 px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-full text-xs sm:text-sm font-medium transition-all active:scale-95 touch-manipulation whitespace-nowrap',
               isActive
                 ? 'bg-accent text-on-accent font-semibold shadow-xs'
                 : 'text-muted hover:text-content hover:bg-hover bg-chip/40'
@@ -447,7 +487,7 @@ function HeaderLink({ href, active, children }: { href: string; active: boolean;
     <Link
       href={href}
       className={cn(
-        'px-2.5 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all touch-manipulation active:scale-95',
+        'px-2 xl:px-2.5 py-1 xl:py-1.5 rounded-lg text-xs xl:text-sm font-medium transition-all touch-manipulation active:scale-95 whitespace-nowrap shrink-0',
         active ? 'text-accent bg-accent/10 font-semibold' : 'text-muted hover:text-content hover:bg-hover'
       )}
     >

@@ -12,7 +12,7 @@ import { HistoryPanel } from './history-panel';
 import { requestShowDownloadManager } from './download-manager';
 import { SHOW_HISTORY_EVENT, SHOW_SETTINGS_EVENT } from './mobile-bottom-bar';
 import { Icon } from './icon';
-import { SearchHistoryDropdown, useSearchHistory } from './search-history';
+import { SpotlightModal } from './spotlight-modal';
 import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 
@@ -28,13 +28,12 @@ export const CHANNELS = [
 ];
 
 /** 顶部导航：Logo、全频道大厅入口、搜索框、历史、设置与移动端专属频道栏 */
-export function Header({ showSearch = false }: { showSearch?: boolean }) {
-  const router = useRouter();
+export function Header(_props?: { showSearch?: boolean }) {
+  void _props;
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [query, setQuery] = useState('');
-  const searchHistory = useSearchHistory(query);
+  const [spotlightOpen, setSpotlightOpen] = useState(false);
 
   const { verified, user, isAdmin, openAdminModal, logout } = useAuth();
   const { t } = useTranslation();
@@ -50,18 +49,17 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
     };
   }, []);
 
-  const submitSearch = (text: string) => {
-    const q = text.trim().slice(0, 100);
-    if (!q) return;
-    searchHistory.close();
-    router.push(`/?s=${encodeURIComponent(q)}`, { scroll: false });
-    searchHistory.record(q);
-  };
-
-  const pickHistory = (text: string) => {
-    setQuery(text);
-    submitSearch(text);
-  };
+  // ⌘K 或 Ctrl+K 全局快捷键呼出 Spotlight 搜索
+  useEffect(() => {
+    const handleKeyDown = (e: globalThis.KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setSpotlightOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   return (
     <>
@@ -99,57 +97,24 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
             <DesktopChannelNav />
           </Suspense>
 
-          {showSearch && (
-            <form
-              className="flex-1 max-w-[160px] sm:max-w-[220px] md:max-w-xs lg:max-w-sm hidden sm:block mx-2 min-w-0"
-              onSubmit={(e) => {
-                e.preventDefault();
-                submitSearch(query);
-              }}
-            >
-              <div ref={searchHistory.containerRef} className="relative">
-                <input
-                  className={cn(
-                    'input w-full h-9 text-xs sm:text-sm',
-                    searchHistory.visible &&
-                      'rounded-b-none border-accent border-b-line bg-surface-raised focus-visible:ring-0'
-                  )}
-                  aria-label="搜索影片"
-                  placeholder="搜索影片..."
-                  value={query}
-                  maxLength={100}
-                  onChange={(e) => {
-                    setQuery(e.target.value);
-                    searchHistory.resetActive();
-                  }}
-                  onFocus={searchHistory.onFocus}
-                  onKeyDown={(e) => searchHistory.onKeyDown(e, pickHistory)}
-                  role="combobox"
-                  aria-expanded={searchHistory.visible}
-                  aria-controls="header-search-history"
-                  aria-autocomplete="list"
-                  aria-activedescendant={
-                    searchHistory.visible && searchHistory.activeIndex >= 0
-                      ? `header-search-history-${searchHistory.activeIndex}`
-                      : undefined
-                  }
-                />
-                {searchHistory.visible && (
-                  <SearchHistoryDropdown
-                    id="header-search-history"
-                    matches={searchHistory.matches}
-                    activeIndex={searchHistory.activeIndex}
-                    onPick={pickHistory}
-                    onRemove={searchHistory.remove}
-                    onClearAll={searchHistory.clearAll}
-                  />
-                )}
-              </div>
-            </form>
-          )}
-
-          {/* 右侧功能入口组：ml-auto 永久居右对齐，与左侧/搜索形成安全呼吸间隔 */}
+          {/* 右侧功能入口组：ml-auto 永久居右对齐，与左侧频道形成安全呼吸间隔 */}
           <nav className="flex items-center gap-1 sm:gap-1.5 shrink-0 ml-auto">
+            {/* 全局 Spotlight 搜索触发胶囊：释放顶栏空间，点击或 ⌘K 唤出居中浮窗 */}
+            <button
+              type="button"
+              onClick={() => setSpotlightOpen(true)}
+              className="flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl bg-surface hover:bg-hover border border-line hover:border-accent/40 text-muted hover:text-content text-xs transition-all cursor-pointer group shrink-0"
+              title="全局搜索 (⌘K / Ctrl+K)"
+              aria-label="全局搜索 (⌘K)"
+            >
+              <Icon name="search" className="w-3.5 h-3.5 text-muted group-hover:text-accent transition-colors shrink-0" />
+              <span className="text-muted/80 group-hover:text-content transition-colors font-medium hidden md:inline">
+                搜索影片...
+              </span>
+              <kbd className="hidden lg:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-surface-raised border border-line text-[10px] font-mono text-faint group-hover:border-accent/40">
+                <span>⌘</span>K
+              </kbd>
+            </button>
             <div className="hidden xl:inline-flex">
               <HeaderLink href="/about" active={false}>
                 {t('nav.about', '关于')}
@@ -231,6 +196,7 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
           onOpenSettings={() => setSettingsOpen(true)}
         />
       </Suspense>
+      <SpotlightModal open={spotlightOpen} onClose={() => setSpotlightOpen(false)} />
     </>
   );
 }

@@ -1,11 +1,12 @@
 'use client';
 
-import { Suspense, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Header } from '@/components/header';
 import { SiteFooter } from '@/components/site-footer';
 import { DoubanCard } from '@/components/video-card';
+import { MobileFilterSheet } from '@/components/mobile-filter-sheet';
 import { api } from '@/lib/client-api';
 import { buildWatchUrl, cn } from '@/lib/utils';
 
@@ -104,6 +105,14 @@ function CatalogContent() {
   const currentPage = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
 
   const [jumpPageInput, setJumpPageInput] = useState('');
+  const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
+  const [showBackToTop, setShowBackToTop] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => setShowBackToTop(window.scrollY > 400);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   const activeChannelConfig = useMemo(
     () => CHANNELS_CONFIG.find((c) => c.id === currentChannel) || CHANNELS_CONFIG[0],
@@ -182,12 +191,16 @@ function CatalogContent() {
 
   const hasActiveFilters =
     currentRegion !== '全部' || currentGenre !== '全部' || currentYear !== '全部' || currentSort !== 'recommend';
+  const activeFilterCount =
+    (currentRegion !== '全部' ? 1 : 0) +
+    (currentGenre !== '全部' ? 1 : 0) +
+    (currentYear !== '全部' ? 1 : 0);
 
   return (
     <div className="min-h-screen flex flex-col bg-bg text-content">
       <Header showSearch />
 
-      <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-5 space-y-5">
+      <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-5 space-y-5 pb-28 md:pb-8">
         {/* 频道大横幅与引导标语 */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-line/60">
           <div>
@@ -226,8 +239,8 @@ function CatalogContent() {
           ))}
         </div>
 
-        {/* 网页版多维聚合筛选器面板 */}
-        <div className="bg-chip/35 border border-line/50 rounded-2xl p-3 sm:p-4 space-y-2.5 sm:space-y-3">
+        {/* 网页版多维聚合筛选器面板 (桌面端) */}
+        <div className="hidden md:block bg-chip/35 border border-line/50 rounded-2xl p-3 sm:p-4 space-y-2.5 sm:space-y-3">
           {/* 地区行 */}
           <FilterRow
             label="地区"
@@ -288,6 +301,103 @@ function CatalogContent() {
           </div>
         </div>
 
+        {/* 移动端专属精炼筛选栏 (手机端) */}
+        <div className="md:hidden space-y-2">
+          <div className="flex items-center justify-between gap-2 bg-chip/50 border border-line/60 rounded-xl p-2">
+            {/* 呼出半屏抽屉 */}
+            <button
+              type="button"
+              onClick={() => setMobileFilterOpen(true)}
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all active:scale-95 touch-manipulation cursor-pointer border shrink-0',
+                activeFilterCount > 0
+                  ? 'bg-accent text-on-accent border-accent shadow-xs'
+                  : 'bg-surface border-line text-content hover:bg-hover'
+              )}
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+              </svg>
+              <span>筛选</span>
+              {activeFilterCount > 0 && (
+                <span className="w-4 h-4 rounded-full bg-white text-accent text-[10px] font-bold flex items-center justify-center">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+
+            {/* 排序快捷选项 */}
+            <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
+              {SORTS.map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => updateFilters({ sort: s.id })}
+                  className={cn(
+                    'px-2.5 py-1 rounded-lg text-xs font-medium transition-all shrink-0 active:scale-95 touch-manipulation',
+                    currentSort === s.id
+                      ? 'bg-accent text-on-accent font-semibold shadow-xs'
+                      : 'text-muted hover:text-content bg-surface border border-line/50'
+                  )}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+
+            {/* 重置 */}
+            {hasActiveFilters && (
+              <button
+                onClick={() => router.push(`/catalog?type=${currentChannel}`, { scroll: false })}
+                className="text-xs text-muted hover:text-accent shrink-0 p-1 active:scale-90"
+                title="重置全部筛选"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          {/* 已选条件小胶囊 */}
+          {activeFilterCount > 0 && (
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar text-xs py-0.5 px-0.5">
+              <span className="text-muted text-[11px] shrink-0">已选:</span>
+              {currentRegion !== '全部' && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 border border-accent/30 text-accent font-medium text-[11px] shrink-0">
+                  {currentRegion}
+                  <button onClick={() => updateFilters({ region: '全部' })} className="hover:opacity-70">×</button>
+                </span>
+              )}
+              {currentGenre !== '全部' && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 border border-accent/30 text-accent font-medium text-[11px] shrink-0">
+                  {currentGenre}
+                  <button onClick={() => updateFilters({ genre: '全部' })} className="hover:opacity-70">×</button>
+                </span>
+              )}
+              {currentYear !== '全部' && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 border border-accent/30 text-accent font-medium text-[11px] shrink-0">
+                  {currentYear}年
+                  <button onClick={() => updateFilters({ year: '全部' })} className="hover:opacity-70">×</button>
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* 移动端筛选抽屉组件 */}
+        <MobileFilterSheet
+          open={mobileFilterOpen}
+          onClose={() => setMobileFilterOpen(false)}
+          regions={activeChannelConfig.regions}
+          genres={activeChannelConfig.genres}
+          years={YEARS}
+          activeRegion={currentRegion}
+          activeGenre={currentGenre}
+          activeYear={currentYear}
+          onApply={(f) => {
+            updateFilters({ region: f.region, genre: f.genre, year: f.year });
+          }}
+          totalCount={total}
+        />
+
         {/* 统计提示与换页状态 */}
         <div className="flex items-center justify-between text-xs text-muted px-1">
           <span>
@@ -339,79 +449,126 @@ function CatalogContent() {
 
         {/* 真分页导航条 */}
         {totalPages > 1 && (
-          <div className="pt-6 pb-8 flex flex-col sm:flex-row items-center justify-center gap-3">
-            <div className="flex items-center gap-1.5">
+          <div className="pt-6 pb-8">
+            {/* 移动端大按键上一页 / 下一页 */}
+            <div className="sm:hidden flex items-center justify-between w-full gap-3">
               <button
                 disabled={currentPage <= 1 || catalogQuery.isFetching}
-                onClick={() => updateFilters({ page: 1 })}
-                className="btn-ghost btn-sm px-2.5 text-xs disabled:opacity-30 disabled:pointer-events-none"
-                title="第一页"
-              >
-                首页
-              </button>
-              <button
-                disabled={currentPage <= 1 || catalogQuery.isFetching}
-                onClick={() => updateFilters({ page: currentPage - 1 })}
-                className="btn-ghost btn-sm px-3 text-xs flex items-center gap-1 disabled:opacity-30 disabled:pointer-events-none"
+                onClick={() => {
+                  updateFilters({ page: currentPage - 1 });
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className="flex-1 h-11 rounded-xl bg-surface border border-line text-content text-xs font-semibold flex items-center justify-center gap-1.5 active:scale-95 disabled:opacity-30 disabled:pointer-events-none shadow-xs touch-manipulation cursor-pointer"
               >
                 <span>‹</span>
                 <span>上一页</span>
               </button>
-
-              {/* 页码按钮群 */}
-              <div className="flex items-center gap-1">
-                {renderPageNumbers(currentPage, totalPages, (p) => updateFilters({ page: p }))}
+              <div className="px-3 py-1.5 rounded-lg bg-chip/60 border border-line/40 text-xs font-semibold text-content shrink-0">
+                {currentPage} / {totalPages}
               </div>
-
               <button
                 disabled={currentPage >= totalPages || catalogQuery.isFetching}
-                onClick={() => updateFilters({ page: currentPage + 1 })}
-                className="btn-ghost btn-sm px-3 text-xs flex items-center gap-1 disabled:opacity-30 disabled:pointer-events-none"
+                onClick={() => {
+                  updateFilters({ page: currentPage + 1 });
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className="flex-1 h-11 rounded-xl bg-surface border border-line text-content text-xs font-semibold flex items-center justify-center gap-1.5 active:scale-95 disabled:opacity-30 disabled:pointer-events-none shadow-xs touch-manipulation cursor-pointer"
               >
                 <span>下一页</span>
                 <span>›</span>
               </button>
-              <button
-                disabled={currentPage >= totalPages || catalogQuery.isFetching}
-                onClick={() => updateFilters({ page: totalPages })}
-                className="btn-ghost btn-sm px-2.5 text-xs disabled:opacity-30 disabled:pointer-events-none"
-                title="末页"
-              >
-                末页
-              </button>
             </div>
 
-            {/* 页面快速跳转 */}
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                const p = parseInt(jumpPageInput.trim(), 10);
-                if (!Number.isNaN(p) && p >= 1 && p <= totalPages) {
-                  updateFilters({ page: p });
-                  setJumpPageInput('');
-                }
-              }}
-              className="flex items-center gap-1 text-xs text-muted"
-            >
-              <span>跳至</span>
-              <input
-                type="number"
-                min={1}
-                max={totalPages}
-                value={jumpPageInput}
-                onChange={(e) => setJumpPageInput(e.target.value)}
-                placeholder={String(currentPage)}
-                className="w-12 h-7 rounded border border-line bg-surface text-center text-content text-xs focus:border-accent focus:outline-none"
-              />
-              <span>页</span>
-              <button
-                type="submit"
-                className="px-2 py-1 rounded bg-chip hover:bg-hover border border-line text-content text-xs active:scale-95"
+            {/* 桌面端完整数字分页 */}
+            <div className="hidden sm:flex flex-row items-center justify-center gap-3">
+              <div className="flex items-center gap-1.5">
+                <button
+                  disabled={currentPage <= 1 || catalogQuery.isFetching}
+                  onClick={() => updateFilters({ page: 1 })}
+                  className="btn-ghost btn-sm px-2.5 text-xs disabled:opacity-30 disabled:pointer-events-none"
+                  title="第一页"
+                >
+                  首页
+                </button>
+                <button
+                  disabled={currentPage <= 1 || catalogQuery.isFetching}
+                  onClick={() => updateFilters({ page: currentPage - 1 })}
+                  className="btn-ghost btn-sm px-3 text-xs flex items-center gap-1 disabled:opacity-30 disabled:pointer-events-none"
+                >
+                  <span>‹</span>
+                  <span>上一页</span>
+                </button>
+
+                {/* 页码按钮群 */}
+                <div className="flex items-center gap-1">
+                  {renderPageNumbers(currentPage, totalPages, (p) => updateFilters({ page: p }))}
+                </div>
+
+                <button
+                  disabled={currentPage >= totalPages || catalogQuery.isFetching}
+                  onClick={() => updateFilters({ page: currentPage + 1 })}
+                  className="btn-ghost btn-sm px-3 text-xs flex items-center gap-1 disabled:opacity-30 disabled:pointer-events-none"
+                >
+                  <span>下一页</span>
+                  <span>›</span>
+                </button>
+                <button
+                  disabled={currentPage >= totalPages || catalogQuery.isFetching}
+                  onClick={() => updateFilters({ page: totalPages })}
+                  className="btn-ghost btn-sm px-2.5 text-xs disabled:opacity-30 disabled:pointer-events-none"
+                  title="末页"
+                >
+                  末页
+                </button>
+              </div>
+
+              {/* 页面快速跳转 */}
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const p = parseInt(jumpPageInput.trim(), 10);
+                  if (!Number.isNaN(p) && p >= 1 && p <= totalPages) {
+                    updateFilters({ page: p });
+                    setJumpPageInput('');
+                  }
+                }}
+                className="flex items-center gap-1 text-xs text-muted"
               >
-                GO
-              </button>
-            </form>
+                <span>跳至</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={totalPages}
+                  value={jumpPageInput}
+                  onChange={(e) => setJumpPageInput(e.target.value)}
+                  placeholder={String(currentPage)}
+                  className="w-12 h-7 rounded border border-line bg-surface text-center text-content text-xs focus:border-accent focus:outline-none"
+                />
+                <span>页</span>
+                <button
+                  type="submit"
+                  className="px-2 py-1 rounded bg-chip hover:bg-hover border border-line text-content text-xs active:scale-95"
+                >
+                  GO
+                </button>
+              </form>
+            </div>
           </div>
+        )}
+
+        {/* 浮动回到顶部按钮 */}
+        {showBackToTop && (
+          <button
+            type="button"
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            className="fixed bottom-20 right-4 md:bottom-8 md:right-8 z-30 p-2.5 rounded-full bg-surface-raised/90 border border-line shadow-lg text-content hover:text-accent hover:border-accent/60 active:scale-90 transition-all backdrop-blur cursor-pointer touch-manipulation"
+            aria-label="回到顶部"
+            title="回到顶部"
+          >
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="18 15 12 9 6 15" />
+            </svg>
+          </button>
         )}
       </main>
 

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Suspense, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { ThemeToggle } from './theme';
 import { useAuth } from './auth';
@@ -9,6 +9,7 @@ import { Drawer } from './drawer';
 import { SourceManagerDrawer } from './source-manager';
 import { HistoryPanel } from './history-panel';
 import { requestShowDownloadManager } from './download-manager';
+import { SHOW_HISTORY_EVENT, SHOW_SETTINGS_EVENT } from './mobile-bottom-bar';
 import { Icon } from './icon';
 import { SearchHistoryDropdown, useSearchHistory } from './search-history';
 import { cn } from '@/lib/utils';
@@ -33,6 +34,17 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
   const searchHistory = useSearchHistory(query);
 
   const { verified, user, isAdmin, openLogin, openAdminModal, logout } = useAuth();
+
+  useEffect(() => {
+    const handleHistory = () => setHistoryOpen(true);
+    const handleSettings = () => setSettingsOpen(true);
+    window.addEventListener(SHOW_HISTORY_EVENT, handleHistory);
+    window.addEventListener(SHOW_SETTINGS_EVENT, handleSettings);
+    return () => {
+      window.removeEventListener(SHOW_HISTORY_EVENT, handleHistory);
+      window.removeEventListener(SHOW_SETTINGS_EVENT, handleSettings);
+    };
+  }, []);
 
   const submitSearch = (text: string) => {
     const q = text.trim().slice(0, 100);

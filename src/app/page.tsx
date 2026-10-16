@@ -58,6 +58,8 @@ function HomeContent() {
   const yellowFilter = useAppStore((s) => s.yellowFilter);
   const sourceHealth = useAppStore((s) => s.sourceHealth);
   const subscriptions = useAppStore((s) => s.subscriptions);
+  const doubanEnabled = useAppStore((s) => s.doubanEnabled);
+  const recommendSource = useAppStore((s) => s.recommendSource);
   const [input, setInput] = useState(urlQuery);
   const [detailItem, setDetailItem] = useState<SearchResultItem | null>(null);
   /** 流式搜索中已结算的源（data 就绪前用于增量渲染） */
@@ -171,12 +173,37 @@ function HomeContent() {
   // 跨源同名聚合：同名影片合并为一张卡片，展开后可选择具体来源
   const groups = useMemo(() => aggregateResults(list), [list]);
 
-  // 9zhoukj 同款首屏轮播大屏数据
+  // 首屏轮播大屏数据：根据推荐数据源动态自适应并提供毫秒级高可用兜底
   const heroQuery = useQuery({
-    queryKey: ['douban-hero-banner'],
-    queryFn: ({ signal }) => api.douban('movie', '热门', 0, 8, signal),
+    queryKey: ['hero-banner', recommendSource],
+    queryFn: async ({ signal }) => {
+      try {
+        if (recommendSource === 'baidu-top') {
+          const res = await api.hotList('baidu_movie', signal);
+          if (res?.items && res.items.length > 0) return res;
+          return await api.hotList('baidu_teleplay', signal);
+        }
+        if (recommendSource === 'douban-top250') {
+          return await api.hotList('douban_top250', signal);
+        }
+        if (recommendSource === 'bangumi') {
+          const res = await api.bangumiCalendar(signal);
+          const flat = res?.days ? res.days.flatMap((d) => d.items) : [];
+          return { items: flat.slice(0, 10), total: flat.length };
+        }
+        if (recommendSource === 'hot-list') {
+          return await api.hotList('douban_movie_weekly', signal);
+        }
+        // 默认豆瓣多维推荐，若遇网络慢/偶发异常则自动平滑回退百度热门
+        const res = await api.douban('movie', '热门', 0, 8, signal);
+        if (res?.items && res.items.length > 0) return res;
+        return await api.hotList('baidu_movie', signal);
+      } catch {
+        return await api.hotList('baidu_movie', signal);
+      }
+    },
     staleTime: 600_000,
-    enabled: !urlQuery,
+    enabled: !urlQuery && doubanEnabled,
   });
 
   // 分批渲染：新一次搜索（groups 变化）时重置回首批
@@ -202,7 +229,7 @@ function HomeContent() {
         )}
 
         {/* 9zhoukj 同款：首屏 Hero Banner 轮播大屏 */}
-        {!urlQuery && (
+        {!urlQuery && doubanEnabled && (
           <HeroBanner
             items={heroQuery.data?.items ?? []}
             onPick={handlePlayTitle}

@@ -63,12 +63,14 @@ const DOC_SORTS = [
   { id: 'time', label: '最新发布' },
 ];
 
-/** 首页推荐区：支持全功能多维筛选 + 动漫新番周历 + 影视热榜 */
+/** 首页推荐区：支持全功能多维筛选 + 动漫新番周历 + 影视热榜 + 百度实时榜 + 豆瓣Top250 */
 export function RecommendSection({ onPick }: { onPick: (title: string) => void }) {
   const doubanEnabled = useAppStore((s) => s.doubanEnabled);
   const recommendSource = useAppStore((s) => s.recommendSource);
 
   if (!doubanEnabled) return null;
+  if (recommendSource === 'baidu-top') return <BaiduTopView onPick={onPick} />;
+  if (recommendSource === 'douban-top250') return <DoubanTop250View onPick={onPick} />;
   if (recommendSource === 'bangumi') return <BangumiView onPick={onPick} />;
   if (recommendSource === 'hot-list') return <HotListView onPick={onPick} />;
   return <DoubanMultiCategoryView onPick={onPick} />;
@@ -450,13 +452,93 @@ function BangumiView({ onPick }: { onPick: (title: string) => void }) {
   );
 }
 
+const BAIDU_TOP_LISTS = [
+  { id: 'baidu_teleplay', label: '🔥 热门电视剧' },
+  { id: 'baidu_movie', label: '🎬 热门电影' },
+];
+
+/** 百度实时风云榜视图：直连秒开、无限流、高可用 */
+function BaiduTopView({ onPick }: { onPick: (title: string) => void }) {
+  const [listId, setListId] = useState(BAIDU_TOP_LISTS[0].id);
+
+  const query = useQuery({
+    queryKey: ['baidu-top', listId],
+    queryFn: ({ signal }) => api.hotList(listId, signal),
+  });
+
+  const items = query.data?.items ?? [];
+
+  return (
+    <section aria-label="百度实时热榜" className="space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <h2 className="text-base sm:text-lg font-bold text-content">百度实时风云榜</h2>
+          <span className="text-xs text-faint">极速直连 · 实时更新</span>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {BAIDU_TOP_LISTS.map((l) => (
+            <ChipButton key={l.id} active={listId === l.id} onClick={() => setListId(l.id)}>
+              {l.label}
+            </ChipButton>
+          ))}
+        </div>
+      </div>
+
+      {query.isError ? (
+        <p className="text-center text-sm text-faint py-8">热榜数据加载失败，请稍后重试</p>
+      ) : query.isLoading ? (
+        <GridSkeleton />
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-2 sm:gap-3">
+          {items.map((item) => (
+            <DoubanCard key={item.id} item={item} onClick={() => onPick(item.title)} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** 豆瓣 Top250 经典殿堂视图 */
+function DoubanTop250View({ onPick }: { onPick: (title: string) => void }) {
+  const query = useQuery({
+    queryKey: ['douban-top250'],
+    queryFn: ({ signal }) => api.hotList('douban_top250', signal),
+  });
+
+  const items = query.data?.items ?? [];
+
+  return (
+    <section aria-label="豆瓣 Top250" className="space-y-4">
+      <div className="flex items-center gap-2">
+        <h2 className="text-base sm:text-lg font-bold text-content">豆瓣电影 Top 250</h2>
+        <span className="text-xs text-faint">影史殿堂级高分经典</span>
+      </div>
+
+      {query.isError ? (
+        <p className="text-center text-sm text-faint py-8">豆瓣 Top250 加载失败，请稍后重试</p>
+      ) : query.isLoading ? (
+        <GridSkeleton />
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-2 sm:gap-3">
+          {items.map((item) => (
+            <DoubanCard key={item.id} item={item} onClick={() => onPick(item.title)} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 const HOT_LISTS = [
+  { id: 'baidu_teleplay', label: '百度热剧' },
+  { id: 'baidu_movie', label: '百度电影' },
   { id: 'douban_movie_weekly', label: '电影周榜' },
   { id: 'douban_tv_chinese', label: '国产剧周榜' },
   { id: 'douban_tv_global', label: '海外剧周榜' },
   { id: 'douban_show_chinese', label: '国内综艺' },
   { id: 'douban_show_global', label: '海外综艺' },
-  { id: 'baidu_teleplay', label: '百度热播剧' },
+  { id: 'douban_top250', label: '豆瓣 Top250' },
 ];
 
 /** 影视热榜视图 */

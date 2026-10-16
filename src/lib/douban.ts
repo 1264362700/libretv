@@ -1,6 +1,7 @@
 import type { DoubanItem } from './types';
 import { fetchUpstream, getCache, setCache } from './fetch-utils';
 import { fetchHotList } from './douban-weekly';
+import { fetchBangumiCalendar } from './bangumi';
 
 /**
  * 影视多维分类与探索大厅数据引擎：
@@ -12,7 +13,7 @@ import { fetchHotList } from './douban-weekly';
  * 5. 百度/60s 影视榜单作为二级高可用兜底。
  */
 
-const CACHE_TTL = 30 * 60 * 1000; // 缓存 30 分钟
+const CACHE_TTL = 2 * 60 * 60 * 1000; // 缓存 2 小时
 
 interface MovieItem360 {
   id?: string;
@@ -144,7 +145,8 @@ export async function fetchDoubanRecommend(
   try {
     const apiUrl = `https://api.web.360kan.com/v1/filter/list?catid=${catId}&rank=${rank}&area=${encodeURIComponent(area)}&cat=${encodeURIComponent(genre)}&act=&year=${encodeURIComponent(year)}&pageno=${pageno}&size=${size}`;
     const res = await fetchUpstream(apiUrl, {
-      timeoutMs: 4500,
+      timeoutMs: 8000,
+      retries: 1,
       headers: {
         Accept: 'application/json',
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
@@ -192,12 +194,38 @@ export async function fetchDoubanRecommend(
   }
 
   // 2. 兜底容灾：仅当无任何筛选条件（完全默认大盘推荐首页）且 360kan 偶发故障时才允许兜底。
-  // 若用户指定了特定地区、类型或年份，绝不使用热播榜兜底（防止返回风马牛不相及的静态榜单导致所有筛选看起来一模一样）。
+  // 严格区分电影、剧集、综艺、动漫各自的专项榜单，绝不共用同一榜单导致不同分类显示一模一样。
   const hasSpecificFilter = Boolean(area || genre || year || pageno > 1);
   if (!hasSpecificFilter) {
     try {
-      const hotId = catId === 1 ? 'douban_movie_weekly' : 'baidu_teleplay';
-      const fallbackList = await fetchHotList(hotId);
+      let fallbackList: DoubanItem[] = [];
+      if (catId === 1) {
+        try {
+          fallbackList = await fetchHotList('baidu_movie');
+        } catch {
+          fallbackList = await fetchHotList('douban_movie_weekly');
+        }
+      } else if (catId === 2) {
+        try {
+          fallbackList = await fetchHotList('baidu_teleplay');
+        } catch {
+          fallbackList = await fetchHotList('douban_tv_chinese');
+        }
+      } else if (catId === 3) {
+        fallbackList = await fetchHotList('douban_show_chinese');
+      } else if (catId === 4) {
+        try {
+          const bangumiMap = await fetchBangumiCalendar();
+          if (bangumiMap) {
+            fallbackList = Object.values(bangumiMap).flat().slice(0, 30);
+          }
+        } catch {
+          // ignore
+        }
+      } else {
+        fallbackList = await fetchHotList('douban_movie_weekly');
+      }
+
       if (fallbackList && fallbackList.length > 0) {
         const result: DoubanRecommendResult = { items: fallbackList, total: fallbackList.length };
         setCache(cacheKey, result, CACHE_TTL);

@@ -44,7 +44,9 @@ function isAnonymousImageHost(host: string): boolean {
   return (
     isDoubanHost(h) ||
     h === 'doubanio.viki.moe' || h.endsWith('.doubanio.viki.moe') ||
-    h === 'bgm.tv' || h.endsWith('.bgm.tv')
+    h === 'bgm.tv' || h.endsWith('.bgm.tv') ||
+    h === 'qhimg.com' || h.endsWith('.qhimg.com') ||
+    h === 'bdstatic.com' || h.endsWith('.bdstatic.com')
   );
 }
 

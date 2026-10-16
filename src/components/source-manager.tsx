@@ -21,6 +21,7 @@ import { EmptyState, Spinner } from './states';
 import { useSourceProbe } from './use-source-probe';
 import { allLiveSources, isSourceDisabled, keyBelongsToSubscription, resolveSource, subKeyPrefix, useAppStore } from '@/lib/store';
 import type { SourceConfig } from '@/lib/types';
+import type { RecommendSourceValue } from '@/lib/env-recommend-source';
 import { useToast } from './toast';
 import { formatRelativeTime, hostnameOf, validateSourceUrl, cn } from '@/lib/utils';
 import { exportConfig, importConfig } from '@/lib/db';
@@ -714,11 +715,13 @@ function HomePanel() {
         <SelectRow
           label="推荐数据源"
           value={store.recommendSource}
-          onChange={(v) => store.updateSettings({ recommendSource: v as 'douban' | 'bangumi' | 'hot-list' })}
+          onChange={(v) => store.updateSettings({ recommendSource: v as RecommendSourceValue })}
           options={[
-            { value: 'douban', label: '豆瓣', hint: '热门电影与剧集' },
-            { value: 'bangumi', label: 'Bangumi', hint: '每日新番放送（免 key）' },
-            { value: 'hot-list', label: '影视榜单', hint: '豆瓣周榜 / 百度热播' },
+            { value: 'baidu-top', label: '百度实时热榜', hint: '极速直连 · 热门电影与剧集' },
+            { value: 'douban', label: '豆瓣分类大厅', hint: '多维分类与筛选' },
+            { value: 'bangumi', label: 'Bangumi 新番', hint: '每日新番放送（免 key）' },
+            { value: 'hot-list', label: '影视周榜', hint: '豆瓣周榜 / 综艺榜' },
+            { value: 'douban-top250', label: '豆瓣 Top250', hint: '影史高分经典神作' },
           ]}
         />
       </div>

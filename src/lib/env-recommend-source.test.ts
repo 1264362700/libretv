@@ -22,11 +22,13 @@ describe('getEnvRecommendSource', () => {
     }
   });
 
-  it('三个合法取值（大小写不敏感，自动去空白）', () => {
+  it('五个合法取值（大小写不敏感，自动去空白）', () => {
     for (const [raw, expected] of [
       ['douban', 'douban'],
       ['BANGUMI', 'bangumi'],
       [' hot-list ', 'hot-list'],
+      ['baidu-top', 'baidu-top'],
+      ['DOUBAN-TOP250', 'douban-top250'],
     ] as const) {
       process.env[KEY] = raw;
       expect(getEnvRecommendSource()).toBe(expected);

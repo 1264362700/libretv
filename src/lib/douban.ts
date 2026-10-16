@@ -49,7 +49,7 @@ function mapCatId(type: string, tag: string): number {
 
 function mapArea(tag: string): string {
   const t = (tag || '').trim();
-  if (!t || t === '全部') return '';
+  if (!t || t === '全部' || t === '热门' || t === '最新' || t === '经典' || t === '高分' || t === '冷门佳片') return '';
   if (t === '日本' || t === '日剧' || t === '日本动画') return '日本';
   if (t === '韩国' || t === '韩剧' || t === '韩国综艺') return '韩国';
   if (t === '欧美' || t === '美剧' || t === '欧美动画' || t === '欧美综艺' || t === '美国') return '美国';
@@ -59,7 +59,9 @@ function mapArea(tag: string): string {
   if (t === '英国' || t === '英剧') return '英国';
   if (t === '法国') return '法国';
   if (t === '泰国' || t === '泰剧') return '泰国';
-  return t;
+  const validAreas = ['大陆', '美国', '香港', '台湾', '日本', '韩国', '英国', '法国', '德国', '意大利', '泰国', '印度', '俄罗斯', '加拿大', '西班牙'];
+  if (validAreas.includes(t)) return t;
+  return '';
 }
 
 function mapRank(sort: string): 'rankhot' | 'ranklatest' | 'rankpoint' {
@@ -70,17 +72,17 @@ function mapRank(sort: string): 'rankhot' | 'ranklatest' | 'rankpoint' {
 
 function mapGenre(tag: string): string {
   const t = (tag || '').trim();
-  if (!t || t === '全部' || t === '热门') return '';
+  if (!t || t === '全部' || t === '热门' || t === '最新' || t === '经典' || t === '高分' || t === '冷门佳片') return '';
   const genres = [
     '动作', '喜剧', '爱情', '科幻', '恐怖', '惊悚', '战争', '悬疑', '动画', '剧情',
     '纪录片', '脱口秀', '真人秀', '古装', '都市', '武侠', '刑侦', '历史', '奇幻', '犯罪',
     '热血', '冒险', '搞笑', '战斗', '恋爱', '校园', '治愈', '音乐', '竞技', '访谈',
-    '情感', '美食', '自然', '科学', '人文', '军事', '探险', '地理', '选秀'
+    '情感', '美食', '自然', '科学', '人文', '军事', '探险', '地理', '选秀', '家庭', '传记', '歌舞'
   ];
   for (const g of genres) {
     if (t.includes(g)) return g;
   }
-  return t;
+  return '';
 }
 
 export interface DoubanRecommendResult {
@@ -97,15 +99,18 @@ export async function fetchDoubanRecommend(
   options?: { area?: string; genre?: string; year?: string }
 ): Promise<DoubanRecommendResult> {
   const catId = mapCatId(type, rawTag);
-  const rawArea = options?.area && options.area !== '全部' ? options.area : rawTag;
-  const area = mapArea(rawArea);
 
-  const rawGenre = options?.genre && options.genre !== '全部' ? options.genre : (options?.area ? '' : rawTag);
-  const genre = mapGenre(rawGenre);
+  // 1. 地区提取：显式 options.area 优先；未传 options.area 时才尝试从 rawTag 解析
+  const area = options?.area !== undefined ? mapArea(options.area) : mapArea(rawTag);
 
-  let year = options?.year && options.year !== '全部' ? options.year.trim() : '';
-  if (year && !/^\d{4}$/.test(year)) {
-    year = '';
+  // 2. 类型提取：显式 options.genre 优先；未传 options.genre 时才尝试从 rawTag 解析
+  const genre = options?.genre !== undefined ? mapGenre(options.genre) : mapGenre(rawTag);
+
+  // 3. 年份提取：严格仅接受 4 位纯数字
+  let year = '';
+  if (options?.year && options.year !== '全部') {
+    const y = options.year.trim();
+    if (/^\d{4}$/.test(y)) year = y;
   }
 
   const rank = mapRank(sort);
@@ -113,7 +118,7 @@ export async function fetchDoubanRecommend(
   const pageno = Math.max(1, Math.floor(pageStart / size) + 1);
 
   // 严格隔离缓存 key，彻底杜绝历史坏榜单缓存污染
-  const cacheKey = `kan360:v5:${catId}:${area}:${genre}:${year}:${rank}:${pageno}:${size}`;
+  const cacheKey = `kan360:v6:${catId}:${area}:${genre}:${year}:${rank}:${pageno}:${size}`;
   const cached = getCache<DoubanRecommendResult>(cacheKey);
   if (cached) return cached;
 

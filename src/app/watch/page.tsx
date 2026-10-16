@@ -580,7 +580,7 @@ function WatchContent() {
       </header>
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-2 sm:px-4 py-3 sm:py-5 overflow-x-hidden">
-        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_340px] gap-4 sm:gap-5 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[minmax(0,1fr)_380px] gap-4 sm:gap-5 items-start">
           {/* 左侧主视区：播放器 + 视频信息 + 就地选源面板 */}
           <div className="min-w-0 w-full space-y-3.5">
             <div className="relative aspect-video max-h-[72vh] w-full bg-black rounded-xl overflow-hidden shadow-2xl border border-line/40">
@@ -730,9 +730,57 @@ function WatchContent() {
                 )}
               </div>
             </div>
+          </div>
 
-            {/* 影片档案卡片（海报 + 备用剧照微相册 + 演员表 + 剧情概述折叠） */}
-            <div className="relative p-3.5 sm:p-5 bg-surface-raised rounded-xl border border-line shadow-sm overflow-hidden min-w-0">
+          {/* 右侧侧栏（Web 模式下：剧集选集 + 影片海报/演职员/概述；移动端顺位在播放器下方） */}
+          <aside className="space-y-3.5 min-w-0 w-full lg:sticky lg:top-20">
+            {/* 1. 剧集选集卡片 */}
+            <div className="bg-surface-raised rounded-xl p-3 sm:p-3.5 border border-line shadow-sm">
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <div className="flex items-center gap-1.5">
+                  <h3 className="text-sm font-semibold text-content">剧集列表</h3>
+                  {episodes.length > 0 && <span className="text-xs text-faint">({episodes.length})</span>}
+                </div>
+                {episodes.length > 1 && (
+                  <button
+                    type="button"
+                    className="btn-ghost btn-sm !px-2 !py-1 text-xs shrink-0 flex items-center gap-1"
+                    onClick={() => setReversed((v) => !v)}
+                    title="切换剧集列表排列顺序"
+                  >
+                    <Icon
+                      name="arrowDown"
+                      className={cn('w-3.5 h-3.5 transition-transform mr-0.5', reversed && 'rotate-180')}
+                    />
+                    <span>{reversed ? '倒序' : '正序'}</span>
+                  </button>
+                )}
+              </div>
+              {episodes.length === 0 ? (
+                detailQuery.isLoading ? (
+                  <LoadingState />
+                ) : (
+                  <EmptyState variant="plain" title={detailQuery.isError ? '获取剧集失败' : '暂无剧集信息'} />
+                )
+              ) : (
+                <div className="grid grid-cols-6 sm:grid-cols-8 lg:grid-cols-4 gap-1.5 max-h-[30vh] sm:max-h-[34vh] overflow-y-auto scrollbar-thin pr-1">
+                  {orderedEpisodes.map((realIndex) => (
+                    <EpisodeButton
+                      key={realIndex}
+                      index={realIndex}
+                      active={realIndex === currentIndex}
+                      onClick={() => goEpisode(realIndex)}
+                    />
+                  ))}
+                </div>
+              )}
+              <p className="hidden lg:block text-[10px] text-faint mt-3 leading-relaxed">
+                快捷键：空格 播放/暂停 · ←/→ 快退/快进 · ↑/↓ 音量 · F 全屏 · Alt+←/→ 切集
+              </p>
+            </div>
+
+            {/* 2. 影片档案卡片（海报 + 备用剧照微相册 + 演员表 + 剧情概述折叠） */}
+            <div className="relative p-3.5 sm:p-4 bg-surface-raised rounded-xl border border-line shadow-sm overflow-hidden min-w-0">
               {/* 背景微弱环境氛围微晕 */}
               {activePoster && (
                 <div
@@ -742,212 +790,158 @@ function WatchContent() {
                 />
               )}
 
-              <div className="flex flex-col sm:flex-row gap-3.5 sm:gap-5 items-start">
-                {/* 封面海报与备选剧照缩略栏 */}
-                <div className="shrink-0 flex flex-col items-center sm:items-start gap-2 w-full sm:w-auto">
-                  <div className="relative w-28 sm:w-32 md:w-36 aspect-[2/3] rounded-lg sm:rounded-xl overflow-hidden bg-chip shadow-md border border-line/50 shrink-0 mx-auto sm:mx-0 group">
-                    {activePoster ? (
-                      <SmartImage
-                        url={activePoster}
-                        mode={store.imageProxyMode}
-                        customProxy={store.customImageProxy}
-                        alt={videoTitle}
-                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-faint">
-                        <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={1.5}
-                            d="M7 4v16m10-16v16M3 6a1 1 0 011-1h1a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V6zm4 0a1 1 0 011-1h1a1 1 0 011 1v12a1 1 0 01-1 1h-1a1 1 0 01-1-1V6zm8 0a1 1 0 011-1h1a1 1 0 011 1v12a1 1 0 01-1 1h-1a1 1 0 01-1-1V6zm4 0a1 1 0 011-1h1a1 1 0 011 1v12a1 1 0 01-1 1h-1a1 1 0 01-1-1V6z"
-                          />
-                        </svg>
-                      </div>
-                    )}
-                    {remarksText && (
-                      <span className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-black/75 text-white/90 backdrop-blur-sm pointer-events-none truncate max-w-[90%]">
-                        {remarksText}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* 多图联动：展示其他源探测到的剧照/海报缩略图 */}
-                  {extraPics.length > 1 && (
-                    <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar max-w-[144px] py-0.5">
-                      {extraPics.slice(0, 4).map((pic, idx) => (
-                        <button
-                          key={pic + idx}
-                          type="button"
-                          onClick={() => setSelectedPoster(pic)}
-                          className={cn(
-                            'w-7 h-10 rounded border overflow-hidden shrink-0 transition-all cursor-pointer',
-                            activePoster === pic ? 'ring-2 ring-accent border-accent scale-105' : 'opacity-70 hover:opacity-100 border-line'
-                          )}
-                          title={`查看第 ${idx + 1} 张封面/剧照`}
-                        >
-                          <SmartImage
-                            url={pic}
-                            mode={store.imageProxyMode}
-                            customProxy={store.customImageProxy}
-                            alt=""
-                            className="w-full h-full object-cover"
-                          />
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* 影片主体信息 */}
-                <div className="flex-1 min-w-0 space-y-2.5 sm:space-y-3 w-full">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2 mb-1.5">
-                      <h2 className="text-base sm:text-lg font-bold text-content leading-snug break-words">
-                        {videoTitle}
-                      </h2>
-                      {remarksText && !remarksText.includes('全') && (
-                        <span className="tag bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-medium text-[11px]">
+              <div className="flex flex-col gap-3">
+                {/* 顶部：海报 + 核心信息 */}
+                <div className="flex gap-3 items-start">
+                  {/* 封面海报 */}
+                  <div className="shrink-0 flex flex-col items-center gap-1.5">
+                    <div className="relative w-24 sm:w-28 aspect-[2/3] rounded-lg overflow-hidden bg-chip shadow-md border border-line/50 shrink-0 group">
+                      {activePoster ? (
+                        <SmartImage
+                          url={activePoster}
+                          mode={store.imageProxyMode}
+                          customProxy={store.customImageProxy}
+                          alt={videoTitle}
+                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-faint">
+                          <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={1.5}
+                              d="M7 4v16m10-16v16M3 6a1 1 0 011-1h1a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V6zm4 0a1 1 0 011-1h1a1 1 0 011 1v12a1 1 0 01-1 1h-1a1 1 0 01-1-1V6zm8 0a1 1 0 011-1h1a1 1 0 011 1v12a1 1 0 01-1 1h-1a1 1 0 01-1-1V6zm4 0a1 1 0 011-1h1a1 1 0 011 1v12a1 1 0 01-1 1h-1a1 1 0 01-1-1V6z"
+                            />
+                          </svg>
+                        </div>
+                      )}
+                      {remarksText && (
+                        <span className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-black/75 text-white/90 backdrop-blur-sm pointer-events-none truncate max-w-[90%]">
                           {remarksText}
                         </span>
                       )}
                     </div>
 
+                    {/* 多图联动：展示其他源探测到的剧照/海报缩略图 */}
+                    {extraPics.length > 1 && (
+                      <div className="flex items-center gap-1 overflow-x-auto no-scrollbar max-w-[112px] py-0.5">
+                        {extraPics.slice(0, 4).map((pic, idx) => (
+                          <button
+                            key={pic + idx}
+                            type="button"
+                            onClick={() => setSelectedPoster(pic)}
+                            className={cn(
+                              'w-6 h-8 rounded border overflow-hidden shrink-0 transition-all cursor-pointer',
+                              activePoster === pic ? 'ring-2 ring-accent border-accent scale-105' : 'opacity-70 hover:opacity-100 border-line'
+                            )}
+                            title={`查看第 ${idx + 1} 张封面/剧照`}
+                          >
+                            <SmartImage
+                              url={pic}
+                              mode={store.imageProxyMode}
+                              customProxy={store.customImageProxy}
+                              alt=""
+                              className="w-full h-full object-cover"
+                            />
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 核心标签与导演 */}
+                  <div className="flex-1 min-w-0 space-y-2">
+                    <h3 className="text-sm sm:text-base font-bold text-content leading-snug break-words">
+                      {videoTitle}
+                    </h3>
+
                     {/* 元数据标签组 */}
-                    <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                    <div className="flex flex-wrap items-center gap-1 text-[11px]">
                       {typeText && <span className="tag bg-accent/15 text-accent">{typeText}</span>}
                       {yearText && <span className="tag bg-purple-500/15 text-purple-600 dark:text-purple-300">{yearText}</span>}
                       {areaText && <span className="tag bg-chip text-muted">{areaText}</span>}
-                      {episodes.length > 0 && (
-                        <span className="tag bg-blue-500/10 text-blue-600 dark:text-blue-400">共 {episodes.length} 集</span>
-                      )}
                     </div>
-                  </div>
 
-                  {/* 导演与主创 */}
-                  {directorList.length > 0 && (
-                    <div className="flex items-center gap-2 text-xs text-muted flex-wrap">
-                      <span className="text-faint shrink-0">导演：</span>
-                      <div className="flex flex-wrap gap-1">
-                        {directorList.map((d) => (
-                          <button
-                            key={d}
-                            type="button"
-                            onClick={() => router.push(`/?s=${encodeURIComponent(d)}`)}
-                            className="text-content hover:text-accent hover:underline cursor-pointer"
-                            title={`点击搜索 ${d} 执导的作品`}
-                          >
-                            {d}
-                          </button>
-                        ))}
+                    {/* 导演 */}
+                    {directorList.length > 0 && (
+                      <div className="text-xs text-muted flex items-center gap-1 flex-wrap">
+                        <span className="text-faint shrink-0">导演：</span>
+                        <div className="flex flex-wrap gap-1">
+                          {directorList.map((d) => (
+                            <button
+                              key={d}
+                              type="button"
+                              onClick={() => router.push(`/?s=${encodeURIComponent(d)}`)}
+                              className="text-content hover:text-accent hover:underline cursor-pointer"
+                              title={`点击搜索 ${d} 执导的作品`}
+                            >
+                              {d}
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  )}
-
-                  {/* 演员表（芯片徽章 Pill 模式，支持点击直接搜索） */}
-                  {actorList.length > 0 && (
-                    <div className="text-xs">
-                      <div className="text-faint mb-1.5 flex items-center justify-between">
-                        <span>演员阵容 ({actorList.length})</span>
-                        <span className="text-[10px] text-faint hidden sm:inline">点击演员名可快速搜片</span>
-                      </div>
-                      <div className="flex flex-wrap gap-1.5 max-h-24 sm:max-h-28 overflow-y-auto scrollbar-thin pr-1">
-                        {actorList.map((act) => (
-                          <button
-                            key={act}
-                            type="button"
-                            onClick={() => router.push(`/?s=${encodeURIComponent(act)}`)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-chip/60 hover:bg-accent/15 text-content hover:text-accent border border-line/60 hover:border-accent/40 transition-colors touch-manipulation cursor-pointer"
-                            title={`搜索 ${act} 参演的作品`}
-                          >
-                            <span className="w-1.5 h-1.5 rounded-full bg-accent/70 shrink-0" />
-                            <span>{act}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 剧情简介 / 概述 */}
-                  <div className="text-xs sm:text-sm pt-2 border-t border-line/40">
-                    <div className="text-faint text-xs mb-1 font-medium">剧情概述</div>
-                    {cleanDesc ? (
-                      <div>
-                        <p
-                          className={cn(
-                            'text-muted leading-relaxed transition-all duration-300',
-                            !descExpanded && 'line-clamp-3'
-                          )}
-                        >
-                          {cleanDesc}
-                        </p>
-                        {cleanDesc.length > 80 && (
-                          <button
-                            type="button"
-                            onClick={() => setDescExpanded((v) => !v)}
-                            className="inline-flex items-center gap-1 text-xs text-accent hover:underline mt-1 font-medium cursor-pointer"
-                          >
-                            <span>{descExpanded ? '收起简介' : '展开全文'}</span>
-                            <Icon
-                              name="arrowDown"
-                              className={cn('w-3 h-3 transition-transform duration-200', descExpanded && 'rotate-180')}
-                            />
-                          </button>
-                        )}
-                      </div>
-                    ) : (
-                      <p className="text-faint text-xs">暂无剧情简介</p>
                     )}
                   </div>
                 </div>
-              </div>
-            </div>
-          </div>
 
-          {/* 剧集侧栏（桌面置右，移动端自适应置底，网格密度自动调整） */}
-          <aside className="bg-surface-raised rounded-xl p-3 sm:p-3.5 h-fit border border-line shadow-sm lg:sticky lg:top-20">
-            <div className="flex items-center justify-between gap-2 mb-3">
-              <div className="flex items-center gap-1.5">
-                <h3 className="text-sm font-semibold text-content">剧集列表</h3>
-                {episodes.length > 0 && <span className="text-xs text-faint">({episodes.length})</span>}
+                {/* 演员表（芯片徽章 Pill 模式，支持点击直接搜索） */}
+                {actorList.length > 0 && (
+                  <div className="text-xs pt-1 border-t border-line/40">
+                    <div className="text-faint mb-1.5 flex items-center justify-between text-[11px]">
+                      <span>演员阵容 ({actorList.length})</span>
+                      <span className="text-[10px] text-faint">点击演员搜片</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto scrollbar-thin pr-1">
+                      {actorList.map((act) => (
+                        <button
+                          key={act}
+                          type="button"
+                          onClick={() => router.push(`/?s=${encodeURIComponent(act)}`)}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-chip/60 hover:bg-accent/15 text-content hover:text-accent border border-line/60 hover:border-accent/40 transition-colors touch-manipulation cursor-pointer"
+                          title={`搜索 ${act} 参演的作品`}
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-accent/70 shrink-0" />
+                          <span>{act}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 剧情简介 / 概述 */}
+                <div className="text-xs pt-2 border-t border-line/40">
+                  <div className="text-faint text-[11px] mb-1 font-medium">剧情概述</div>
+                  {cleanDesc ? (
+                    <div>
+                      <p
+                        className={cn(
+                          'text-muted leading-relaxed transition-all duration-300 text-xs sm:text-sm',
+                          !descExpanded && 'line-clamp-3'
+                        )}
+                      >
+                        {cleanDesc}
+                      </p>
+                      {cleanDesc.length > 80 && (
+                        <button
+                          type="button"
+                          onClick={() => setDescExpanded((v) => !v)}
+                          className="inline-flex items-center gap-1 text-xs text-accent hover:underline mt-1 font-medium cursor-pointer"
+                        >
+                          <span>{descExpanded ? '收起简介' : '展开全文'}</span>
+                          <Icon
+                            name="arrowDown"
+                            className={cn('w-3 h-3 transition-transform duration-200', descExpanded && 'rotate-180')}
+                          />
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-faint text-xs">暂无剧情简介</p>
+                  )}
+                </div>
               </div>
-              {episodes.length > 1 && (
-                <button
-                  type="button"
-                  className="btn-ghost btn-sm !px-2 !py-1 text-xs shrink-0 flex items-center gap-1"
-                  onClick={() => setReversed((v) => !v)}
-                  title="切换剧集列表排列顺序"
-                >
-                  <Icon
-                    name="arrowDown"
-                    className={cn('w-3.5 h-3.5 transition-transform mr-0.5', reversed && 'rotate-180')}
-                  />
-                  <span>{reversed ? '倒序' : '正序'}</span>
-                </button>
-              )}
             </div>
-            {episodes.length === 0 ? (
-              detailQuery.isLoading ? (
-                <LoadingState />
-              ) : (
-                <EmptyState variant="plain" title={detailQuery.isError ? '获取剧集失败' : '暂无剧集信息'} />
-              )
-            ) : (
-              <div className="grid grid-cols-6 sm:grid-cols-8 lg:grid-cols-4 gap-1.5 max-h-[48vh] lg:max-h-[calc(100vh-230px)] overflow-y-auto scrollbar-thin pr-1">
-                {orderedEpisodes.map((realIndex) => (
-                  <EpisodeButton
-                    key={realIndex}
-                    index={realIndex}
-                    active={realIndex === currentIndex}
-                    onClick={() => goEpisode(realIndex)}
-                  />
-                ))}
-              </div>
-            )}
-            <p className="hidden lg:block text-[10px] text-faint mt-3 leading-relaxed">
-              快捷键：空格 播放/暂停 · ←/→ 快退/快进 · ↑/↓ 音量 · F 全屏 · Alt+←/→ 切集
-            </p>
           </aside>
         </div>
 

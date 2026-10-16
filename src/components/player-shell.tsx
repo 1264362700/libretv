@@ -303,7 +303,7 @@ export function PlayerShell({
       volume: 0.8,
       autoplay: true,
       pip: true,
-      autoMini: true,
+      autoMini: false,
       screenshot: true,
       setting: true,
       playbackRate: true,

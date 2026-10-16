@@ -17,8 +17,8 @@ export interface AppSettings {
   yellowFilter: boolean;
   adFilter: boolean;
   doubanEnabled: boolean;
-  /** 首页推荐数据源：豆瓣热门 / Bangumi 每日新番 / 影视热榜 / 百度实时热播榜 / 豆瓣 Top250 */
-  recommendSource: 'douban' | 'bangumi' | 'hot-list' | 'baidu-top' | 'douban-top250';
+  /** 首页推荐数据源：豆瓣分类 / Bangumi 新番 / 影视周榜 / 百度实时榜 / 豆瓣 Top250 / 360热播榜 / 猫眼大盘 */
+  recommendSource: 'douban' | 'bangumi' | 'hot-list' | 'baidu-top' | 'douban-top250' | '360-hot' | 'maoyan';
   /** 用户是否在设置中主动选择过推荐数据源；为 false 时部署者的 DEFAULT_RECOMMEND_SOURCE 默认值可生效 */
   recommendSourceTouched: boolean;
   autoplayNext: boolean;

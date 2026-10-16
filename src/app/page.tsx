@@ -178,6 +178,14 @@ function HomeContent() {
     queryKey: ['hero-banner', recommendSource],
     queryFn: async ({ signal }) => {
       try {
+        if (recommendSource === '360-hot') {
+          const res = await api.hotList('360_teleplay', signal);
+          if (res?.items && res.items.length > 0) return res;
+          return await api.hotList('360_movie', signal);
+        }
+        if (recommendSource === 'maoyan') {
+          return await api.hotList('maoyan_movie', signal);
+        }
         if (recommendSource === 'baidu-top') {
           const res = await api.hotList('baidu_movie', signal);
           if (res?.items && res.items.length > 0) return res;
@@ -194,12 +202,12 @@ function HomeContent() {
         if (recommendSource === 'hot-list') {
           return await api.hotList('douban_movie_weekly', signal);
         }
-        // 默认豆瓣多维推荐，若遇网络慢/偶发异常则自动平滑回退百度热门
+        // 默认豆瓣多维推荐，若遇网络慢/偶发异常则自动平滑回退 360 热播
         const res = await api.douban('movie', '热门', 0, 8, signal);
         if (res?.items && res.items.length > 0) return res;
-        return await api.hotList('baidu_movie', signal);
+        return await api.hotList('360_movie', signal);
       } catch {
-        return await api.hotList('baidu_movie', signal);
+        return await api.hotList('360_movie', signal);
       }
     },
     staleTime: 600_000,

@@ -22,13 +22,15 @@ describe('getEnvRecommendSource', () => {
     }
   });
 
-  it('五个合法取值（大小写不敏感，自动去空白）', () => {
+  it('七个合法取值（大小写不敏感，自动去空白）', () => {
     for (const [raw, expected] of [
       ['douban', 'douban'],
       ['BANGUMI', 'bangumi'],
       [' hot-list ', 'hot-list'],
       ['baidu-top', 'baidu-top'],
       ['DOUBAN-TOP250', 'douban-top250'],
+      ['360-hot', '360-hot'],
+      [' MAOYAN ', 'maoyan'],
     ] as const) {
       process.env[KEY] = raw;
       expect(getEnvRecommendSource()).toBe(expected);
@@ -36,7 +38,7 @@ describe('getEnvRecommendSource', () => {
   });
 
   it('非法取值返回 undefined 而非抛错', () => {
-    process.env[KEY] = 'maoyan';
+    process.env[KEY] = 'unknown-source-xyz';
     expect(getEnvRecommendSource()).toBeUndefined();
   });
 });

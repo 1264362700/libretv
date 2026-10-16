@@ -264,9 +264,10 @@ export const api = {
   /** Bangumi 每日放送（免 key），首页推荐的另一数据源 */
   bangumiCalendar: (signal?: AbortSignal) => request<BangumiCalendarResponse>('/api/bangumi/calendar', { signal }),
 
-  /** 影视热榜（60s API 免 key）：豆瓣周榜五个类目 + 百度热播剧 */
-  hotList: (id: string, signal?: AbortSignal) => {
+  /** 影视热榜与全网实时大盘：豆瓣周榜/百度榜/Top250/360热榜/猫眼大盘 */
+  hotList: (id: string, signal?: AbortSignal, pageStart?: number) => {
     const sp = new URLSearchParams({ id });
+    if (typeof pageStart === 'number' && pageStart > 0) sp.set('pageStart', String(pageStart));
     return request<DoubanResponse>(`/api/hot-list?${sp.toString()}`, { signal });
   },
 

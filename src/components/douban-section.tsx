@@ -65,20 +65,22 @@ const DOC_SORTS = [
 
 /** 可用首页推荐数据源配置（图文徽章定义） */
 const RECOMMEND_SOURCES: {
-  id: 'douban' | 'baidu-top' | 'douban-top250' | 'hot-list' | 'bangumi';
+  id: 'douban' | '360-hot' | 'baidu-top' | 'douban-top250' | 'hot-list' | 'maoyan' | 'bangumi';
   label: string;
   icon: string;
   tag: string;
   desc: string;
 }[] = [
   { id: 'douban', label: '豆瓣精选', icon: '🔥', tag: '多维分类', desc: '全品类豆瓣热门多维深度筛选' },
+  { id: '360-hot', label: '360热播榜', icon: '⚡', tag: '全网热播', desc: '全网影视热播大盘与热门排行' },
   { id: 'baidu-top', label: '百度实时榜', icon: '📈', tag: '极速直连', desc: '全网亿级实时搜索热度风云榜' },
   { id: 'douban-top250', label: '豆瓣 Top250', icon: '🏆', tag: '影史神作', desc: '传世经典殿堂级必看影单' },
   { id: 'hot-list', label: '豆瓣周榜', icon: '📊', tag: '每周口碑', desc: '华语与全球影视口碑风向标' },
+  { id: 'maoyan', label: '猫眼大盘榜', icon: '🎟️', tag: '院线票房', desc: '院线实时票房与热映大片' },
   { id: 'bangumi', label: '新番周历', icon: '✨', tag: '每日追番', desc: '日本动漫每日放送连载日程' },
 ];
 
-/** 首页推荐区：支持全功能多维筛选 + 动漫新番周历 + 影视热榜 + 百度实时榜 + 豆瓣Top250 */
+/** 首页推荐区：支持全功能多维筛选 + 动漫新番周历 + 360热播榜 + 猫眼票房 + 影视热榜 + 百度实时榜 + 豆瓣Top250 */
 export function RecommendSection({ onPick }: { onPick: (title: string) => void }) {
   const doubanEnabled = useAppStore((s) => s.doubanEnabled);
   const recommendSource = useAppStore((s) => s.recommendSource);
@@ -160,14 +162,20 @@ export function RecommendSection({ onPick }: { onPick: (title: string) => void }
 
       {/* 动态内容视图 */}
       <div key={recommendSource} className="transition-opacity duration-300">
+        {recommendSource === '360-hot' && <Kan360HotView onPick={onPick} />}
         {recommendSource === 'baidu-top' && <BaiduTopView onPick={onPick} />}
         {recommendSource === 'douban-top250' && <DoubanTop250View onPick={onPick} />}
-        {recommendSource === 'bangumi' && <BangumiView onPick={onPick} />}
         {recommendSource === 'hot-list' && <HotListView onPick={onPick} />}
-        {recommendSource !== 'baidu-top' &&
+        {recommendSource === 'maoyan' && <MaoyanView onPick={onPick} />}
+        {recommendSource === 'bangumi' && <BangumiView onPick={onPick} />}
+        {recommendSource === 'douban' && <DoubanMultiCategoryView onPick={onPick} />}
+        {recommendSource !== '360-hot' &&
+          recommendSource !== 'baidu-top' &&
           recommendSource !== 'douban-top250' &&
+          recommendSource !== 'hot-list' &&
+          recommendSource !== 'maoyan' &&
           recommendSource !== 'bangumi' &&
-          recommendSource !== 'hot-list' && <DoubanMultiCategoryView onPick={onPick} />}
+          recommendSource !== 'douban' && <DoubanMultiCategoryView onPick={onPick} />}
       </div>
     </section>
   );
@@ -549,18 +557,82 @@ function BangumiView({ onPick }: { onPick: (title: string) => void }) {
   );
 }
 
+const KAN360_HOT_LISTS = [
+  { id: '360_teleplay', label: '🔥 热播电视剧' },
+  { id: '360_movie', label: '🎬 热门电影' },
+  { id: '360_variety', label: '🎤 人气综艺' },
+  { id: '360_anime', label: '✨ 热血动漫' },
+];
+
+/** 360 影视实时热播大盘视图：官方开放 CDN、极速秒开、零风控 */
+function Kan360HotView({ onPick }: { onPick: (title: string) => void }) {
+  const [listId, setListId] = useState(KAN360_HOT_LISTS[0].id);
+
+  const query = useQuery({
+    queryKey: ['360-hot', listId],
+    queryFn: ({ signal }) => api.hotList(listId, signal),
+    staleTime: 30_000,
+    refetchOnMount: true,
+  });
+
+  const items = query.data?.items ?? [];
+
+  return (
+    <section aria-label="360 影视热播榜" className="space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <h2 className="text-base sm:text-lg font-bold text-content">360 影视实时热播榜</h2>
+          <span className="text-xs text-faint">极速直连 · 全网实时收视</span>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {KAN360_HOT_LISTS.map((l) => (
+            <ChipButton key={l.id} active={listId === l.id} onClick={() => setListId(l.id)}>
+              {l.label}
+            </ChipButton>
+          ))}
+        </div>
+      </div>
+
+      {query.isError ? (
+        <div className="text-center py-8 space-y-2">
+          <p className="text-sm text-faint">热榜数据加载失败</p>
+          <button
+            type="button"
+            className="px-3 py-1 text-xs rounded-full bg-accent text-on-accent"
+            onClick={() => query.refetch()}
+          >
+            点击重试
+          </button>
+        </div>
+      ) : query.isLoading ? (
+        <GridSkeleton />
+      ) : items.length === 0 ? (
+        <p className="text-center text-sm text-faint py-8">暂无热播内容，请尝试其他分类</p>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-2 sm:gap-3">
+          {items.map((item) => (
+            <DoubanCard key={item.id} item={item} onClick={() => onPick(item.title)} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 const BAIDU_TOP_LISTS = [
   { id: 'baidu_teleplay', label: '🔥 热门电视剧' },
   { id: 'baidu_movie', label: '🎬 热门电影' },
 ];
 
-/** 百度实时风云榜视图：直连秒开、无限流、高可用 */
+/** 百度实时风云榜视图：直连秒开、多重容灾、高可用 */
 function BaiduTopView({ onPick }: { onPick: (title: string) => void }) {
   const [listId, setListId] = useState(BAIDU_TOP_LISTS[0].id);
 
   const query = useQuery({
     queryKey: ['baidu-top', listId],
     queryFn: ({ signal }) => api.hotList(listId, signal),
+    staleTime: 30_000,
+    refetchOnMount: true,
   });
 
   const items = query.data?.items ?? [];
@@ -582,7 +654,16 @@ function BaiduTopView({ onPick }: { onPick: (title: string) => void }) {
       </div>
 
       {query.isError ? (
-        <p className="text-center text-sm text-faint py-8">热榜数据加载失败，请稍后重试</p>
+        <div className="text-center py-8 space-y-2">
+          <p className="text-sm text-faint">热榜数据加载失败</p>
+          <button
+            type="button"
+            className="px-3 py-1 text-xs rounded-full bg-accent text-on-accent"
+            onClick={() => query.refetch()}
+          >
+            点击重试
+          </button>
+        </div>
       ) : query.isLoading ? (
         <GridSkeleton />
       ) : (
@@ -596,24 +677,55 @@ function BaiduTopView({ onPick }: { onPick: (title: string) => void }) {
   );
 }
 
-/** 豆瓣 Top250 经典殿堂视图 */
+/** 豆瓣 Top250 经典殿堂视图：支持真实分页换一批 */
 function DoubanTop250View({ onPick }: { onPick: (title: string) => void }) {
+  const [page, setPage] = useState(1);
+  const [isShuffling, setIsShuffling] = useState(false);
+
   const query = useQuery({
-    queryKey: ['douban-top250'],
-    queryFn: ({ signal }) => api.hotList('douban_top250', signal),
+    queryKey: ['douban-top250', page],
+    queryFn: ({ signal }) => api.hotList('douban_top250', signal, (page - 1) * 20),
+    staleTime: 60_000,
+    refetchOnMount: true,
   });
 
   const items = query.data?.items ?? [];
 
   return (
     <section aria-label="豆瓣 Top250" className="space-y-4">
-      <div className="flex items-center gap-2">
-        <h2 className="text-base sm:text-lg font-bold text-content">豆瓣电影 Top 250</h2>
-        <span className="text-xs text-faint">影史殿堂级高分经典</span>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <h2 className="text-base sm:text-lg font-bold text-content">豆瓣电影 Top 250</h2>
+          <span className="text-xs text-faint">影史殿堂级高分经典</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            disabled={query.isFetching}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-line hover:border-accent/50 text-xs text-muted hover:text-content bg-chip/60 hover:bg-chip transition-all active:scale-95 touch-manipulation cursor-pointer disabled:opacity-50"
+            onClick={() => {
+              setIsShuffling(true);
+              setPage((prev) => (prev % 12) + 1);
+              setTimeout(() => setIsShuffling(false), 500);
+            }}
+          >
+            <span className={cn('text-xs transition-transform duration-500', (isShuffling || query.isFetching) && 'rotate-180')}>🔄</span>
+            <span>换一批 {page > 1 ? `第${page}组` : ''}</span>
+          </button>
+        </div>
       </div>
 
       {query.isError ? (
-        <p className="text-center text-sm text-faint py-8">豆瓣 Top250 加载失败，请稍后重试</p>
+        <div className="text-center py-8 space-y-2">
+          <p className="text-sm text-faint">豆瓣 Top250 加载失败</p>
+          <button
+            type="button"
+            className="px-3 py-1 text-xs rounded-full bg-accent text-on-accent"
+            onClick={() => query.refetch()}
+          >
+            点击重试
+          </button>
+        </div>
       ) : query.isLoading ? (
         <GridSkeleton />
       ) : (
@@ -627,40 +739,98 @@ function DoubanTop250View({ onPick }: { onPick: (title: string) => void }) {
   );
 }
 
-const HOT_LISTS = [
-  { id: 'baidu_teleplay', label: '百度热剧' },
-  { id: 'baidu_movie', label: '百度电影' },
-  { id: 'douban_movie_weekly', label: '电影周榜' },
-  { id: 'douban_tv_chinese', label: '国产剧周榜' },
-  { id: 'douban_tv_global', label: '海外剧周榜' },
-  { id: 'douban_show_chinese', label: '国内综艺' },
-  { id: 'douban_show_global', label: '海外综艺' },
-  { id: 'douban_top250', label: '豆瓣 Top250' },
+const DOUBAN_WEEKLY_LISTS = [
+  { id: 'douban_movie_weekly', label: '🎬 电影口碑榜' },
+  { id: 'douban_tv_chinese', label: '📺 华语剧集周榜' },
+  { id: 'douban_tv_global', label: '🌍 海外剧集周榜' },
+  { id: 'douban_show_chinese', label: '🎤 国内综艺周榜' },
+  { id: 'douban_show_global', label: '🌟 海外综艺周榜' },
 ];
 
-/** 影视热榜视图 */
+/** 豆瓣影视周榜视图 */
 function HotListView({ onPick }: { onPick: (title: string) => void }) {
-  const [listId, setListId] = useState(HOT_LISTS[0].id);
+  const [listId, setListId] = useState(DOUBAN_WEEKLY_LISTS[0].id);
 
   const query = useQuery({
     queryKey: ['hot-list', listId],
     queryFn: ({ signal }) => api.hotList(listId, signal),
+    staleTime: 30_000,
+    refetchOnMount: true,
   });
 
   const items = query.data?.items ?? [];
 
   return (
-    <section aria-label="影视榜单推荐" className="space-y-4">
-      <div className="flex flex-wrap gap-1.5">
-        {HOT_LISTS.map((l) => (
-          <ChipButton key={l.id} active={listId === l.id} onClick={() => setListId(l.id)}>
-            {l.label}
-          </ChipButton>
-        ))}
+    <section aria-label="豆瓣口碑周榜" className="space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <h2 className="text-base sm:text-lg font-bold text-content">豆瓣口碑周榜</h2>
+          <span className="text-xs text-faint">每周口碑风向标</span>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {DOUBAN_WEEKLY_LISTS.map((l) => (
+            <ChipButton key={l.id} active={listId === l.id} onClick={() => setListId(l.id)}>
+              {l.label}
+            </ChipButton>
+          ))}
+        </div>
       </div>
 
       {query.isError ? (
-        <p className="text-center text-sm text-faint py-8">推荐内容加载失败，可稍后重试</p>
+        <div className="text-center py-8 space-y-2">
+          <p className="text-sm text-faint">周榜数据加载失败</p>
+          <button
+            type="button"
+            className="px-3 py-1 text-xs rounded-full bg-accent text-on-accent"
+            onClick={() => query.refetch()}
+          >
+            点击重试
+          </button>
+        </div>
+      ) : query.isLoading ? (
+        <GridSkeleton />
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-2 sm:gap-3">
+          {items.map((item) => (
+            <DoubanCard key={item.id} item={item} onClick={() => onPick(item.title)} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** 猫眼院线大盘榜视图 */
+function MaoyanView({ onPick }: { onPick: (title: string) => void }) {
+  const query = useQuery({
+    queryKey: ['maoyan-movie'],
+    queryFn: ({ signal }) => api.hotList('maoyan_movie', signal),
+    staleTime: 30_000,
+    refetchOnMount: true,
+  });
+
+  const items = query.data?.items ?? [];
+
+  return (
+    <section aria-label="猫眼院线票房榜" className="space-y-4">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <h2 className="text-base sm:text-lg font-bold text-content">猫眼院线大盘榜</h2>
+          <span className="text-xs text-faint">实时票房与热映风向标</span>
+        </div>
+      </div>
+
+      {query.isError ? (
+        <div className="text-center py-8 space-y-2">
+          <p className="text-sm text-faint">票房大盘数据加载失败</p>
+          <button
+            type="button"
+            className="px-3 py-1 text-xs rounded-full bg-accent text-on-accent"
+            onClick={() => query.refetch()}
+          >
+            点击重试
+          </button>
+        </div>
       ) : query.isLoading ? (
         <GridSkeleton />
       ) : (

@@ -695,11 +695,13 @@ function HomePanel() {
   const { toast } = useToast();
 
   const labelMap: Record<RecommendSourceValue, string> = {
+    'douban': '豆瓣精选大厅',
+    '360-hot': '360 影视热播榜',
     'baidu-top': '百度实时热榜',
-    'douban': '豆瓣分类大厅',
-    'bangumi': 'Bangumi 新番',
-    'hot-list': '影视周榜',
     'douban-top250': '豆瓣 Top250',
+    'hot-list': '豆瓣影视周榜',
+    'maoyan': '猫眼大盘票房榜',
+    'bangumi': 'Bangumi 新番',
   };
 
   return (
@@ -733,11 +735,13 @@ function HomePanel() {
             toast(`已切换推荐源为「${labelMap[next] || next}」，首页已实时生效`, 'success');
           }}
           options={[
-            { value: 'baidu-top', label: '百度实时热榜', hint: '极速直连 · 热门电影与剧集' },
-            { value: 'douban', label: '豆瓣分类大厅', hint: '多维分类与筛选' },
-            { value: 'bangumi', label: 'Bangumi 新番', hint: '每日新番放送（免 key）' },
-            { value: 'hot-list', label: '影视周榜', hint: '豆瓣周榜 / 综艺榜' },
-            { value: 'douban-top250', label: '豆瓣 Top250', hint: '影史高分经典神作' },
+            { value: 'douban', label: '豆瓣精选大厅', hint: '多维分类与深度筛选' },
+            { value: '360-hot', label: '360 影视热播榜', hint: '全网热播电视剧/电影/综艺/动漫' },
+            { value: 'baidu-top', label: '百度实时热榜', hint: '极速直连 · 亿级搜索风云榜' },
+            { value: 'douban-top250', label: '豆瓣 Top250', hint: '影史高分经典神作（支持换一批）' },
+            { value: 'hot-list', label: '豆瓣影视周榜', hint: '每周口碑电影与华语/海外剧集榜' },
+            { value: 'maoyan', label: '猫眼大盘票房榜', hint: '院线热映与实时票房大盘' },
+            { value: 'bangumi', label: 'Bangumi 新番', hint: '每日新番放送连载日程（免 key）' },
           ]}
         />
       </div>

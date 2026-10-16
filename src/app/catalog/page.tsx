@@ -13,7 +13,7 @@ import { useTranslation } from '@/lib/i18n';
 import { buildWatchUrl, cn } from '@/lib/utils';
 import { isShortDramaTitle } from '@/lib/short-drama';
 
-type ChannelType = 'movie' | 'tv' | 'short_drama' | 'anime' | 'variety' | 'documentary';
+type ChannelType = 'movie' | 'tv' | 'short_drama' | 'ai' | 'anime' | 'variety' | 'documentary';
 
 interface ChannelConfig {
   id: ChannelType;
@@ -46,8 +46,16 @@ const CHANNELS_CONFIG: ChannelConfig[] = [
     label: '短剧',
     icon: '📱',
     subTitle: '热门微短剧 · 爽文逆袭 · 全集秒播',
-    regions: ['全部', '都市', '古装', '战神', '甜宠', '逆袭', '重生'],
+    regions: ['全部', '都市', '古装', '战神', '甜宠', '逆袭', '重生', 'AI精选'],
     genres: ['全部', '战神', '总裁', '甜宠', '重生', '神医', '穿越', '豪门', '赘婿'],
+  },
+  {
+    id: 'ai',
+    label: 'AI专区',
+    icon: '🤖',
+    subTitle: 'AI短剧 · 脑洞神作 · 未来科幻 · 智能精选',
+    regions: ['全部', 'AI短剧', '科幻脑洞', '数字人生', '未来世界', '硬核科技'],
+    genres: ['全部', 'AI精选', '战神', '逆袭', '悬疑', '修仙', '重生', '异能'],
   },
   {
     id: 'anime',
@@ -185,10 +193,16 @@ function CatalogContent() {
   const catalogQuery = useQuery({
     queryKey: ['catalog', currentChannel, queryTag, currentRegion, currentGenre, currentYear, currentSort, currentPage],
     queryFn: async ({ signal }) => {
-      if (currentChannel === 'short_drama') {
+      if (currentChannel === 'short_drama' || currentChannel === 'ai') {
         const res = await api.hotList('short_drama', signal, pageStart);
+        const mapped = currentChannel === 'ai'
+          ? res.items.map((item) => ({
+              ...item,
+              rating: item.rating === '微短剧' ? 'AI精选' : item.rating,
+            }))
+          : res.items;
         return {
-          items: res.items,
+          items: mapped,
           total: 200,
         };
       }
@@ -203,7 +217,7 @@ function CatalogContent() {
   });
 
   const rawItems = catalogQuery.data?.items ?? [];
-  const items = currentChannel === 'short_drama'
+  const items = currentChannel === 'short_drama' || currentChannel === 'ai'
     ? rawItems
     : rawItems.filter((item) => !isShortDramaTitle(item.title));
   const total = catalogQuery.data?.total ?? (items.length > 0 ? items.length * 10 : 0);

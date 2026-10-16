@@ -12,14 +12,32 @@ import { DoubanCard } from './video-card';
 
 const WEEKDAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 
-type PrimaryCategory = 'movie' | 'tv' | 'anime' | 'variety' | 'documentary';
+type PrimaryCategory = 'movie' | 'tv' | 'short_drama' | 'ai' | 'anime' | 'variety' | 'documentary';
 
 const PRIMARY_TABS: { id: PrimaryCategory; label: string; icon: string }[] = [
   { id: 'movie', label: '电影', icon: '🎬' },
   { id: 'tv', label: '电视剧', icon: '📺' },
+  { id: 'short_drama', label: '短剧', icon: '📱' },
+  { id: 'ai', label: 'AI专区', icon: '🤖' },
   { id: 'anime', label: '动漫', icon: '✨' },
   { id: 'variety', label: '综艺', icon: '🎤' },
   { id: 'documentary', label: '纪录片', icon: '🌍' },
+];
+
+// 短剧筛选维度
+const SHORT_DRAMA_THEMES = ['全部', '战神', '甜宠', '逆袭', '总裁', '重生', '神医', '古装', '修仙', 'AI精选'];
+const SHORT_DRAMA_SORTS = [
+  { id: 'recommend', label: '热门爽剧' },
+  { id: 'latest', label: '最新上线' },
+  { id: 'hot', label: '全网热播' },
+];
+
+// AI 专区筛选维度
+const AI_THEMES = ['全部', 'AI短剧', 'AI科幻', 'AI奇幻', '未来脑洞', '数字人生'];
+const AI_SORTS = [
+  { id: 'recommend', label: '热门推荐' },
+  { id: 'rank', label: '高分口碑' },
+  { id: 'time', label: '最新发布' },
 ];
 
 // 电影筛选维度（地区与排序，严格对齐豆瓣标准标签体系）
@@ -204,6 +222,14 @@ function DoubanMultiCategoryView({ onPick }: { onPick: (title: string) => void }
   const [docTag, setDocTag] = useState('全部');
   const [docSort, setDocSort] = useState('recommend');
 
+  // 短剧筛选状态
+  const [shortDramaTheme, setShortDramaTheme] = useState('全部');
+  const [shortDramaSort, setShortDramaSort] = useState('recommend');
+
+  // AI 专区筛选状态
+  const [aiTheme, setAiTheme] = useState('全部');
+  const [aiSort, setAiSort] = useState('recommend');
+
   // 换一批真实分页页码
   const [page, setPage] = useState(1);
   const [isShuffling, setIsShuffling] = useState(false);
@@ -248,17 +274,64 @@ function DoubanMultiCategoryView({ onPick }: { onPick: (title: string) => void }
         const s: 'recommend' | 'time' | 'rank' = docSort === 'time' ? 'time' : docSort === 'rank' ? 'rank' : 'recommend';
         return { type: 'tv' as const, tag: t, sort: s };
       }
+      default: {
+        return { type: 'tv' as const, tag: '热门', sort: 'recommend' as const };
+      }
     }
   })();
 
   const query = useQuery({
     queryKey: ['douban-multi', category, type, tag, sort, page],
     queryFn: ({ signal }) => api.douban(type, tag, (page - 1) * 20, 20, signal, sort),
-    enabled: !(category === 'anime' && animeViewMode === 'bangumi'),
+    enabled: category !== 'short_drama' && category !== 'ai' && !(category === 'anime' && animeViewMode === 'bangumi'),
   });
 
-  const rawItems = query.data?.items ?? [];
-  const items = rawItems.filter((item) => !isShortDramaTitle(item.title));
+  const shortDramaQuery = useQuery({
+    queryKey: ['douban-multi-short-drama', page],
+    queryFn: ({ signal }) => api.hotList('short_drama', signal, (page - 1) * 20),
+    enabled: category === 'short_drama' || (category === 'ai' && aiTheme === 'AI短剧'),
+  });
+
+  const aiQuery = useQuery({
+    queryKey: ['douban-multi-ai', aiTheme, aiSort, page],
+    queryFn: async ({ signal }) => {
+      const tag = aiTheme === '全部' ? '科幻' : aiTheme;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return api.douban('movie', tag, (page - 1) * 20, 20, signal, aiSort as any);
+    },
+    enabled: category === 'ai' && aiTheme !== 'AI短剧',
+  });
+
+  const activeQuery =
+    category === 'short_drama'
+      ? shortDramaQuery
+      : category === 'ai'
+      ? (aiTheme === 'AI短剧' ? shortDramaQuery : aiQuery)
+      : query;
+
+  const items = (() => {
+    if (category === 'short_drama') {
+      const list = shortDramaQuery.data?.items ?? [];
+      if (shortDramaTheme === '全部') return list;
+      if (shortDramaTheme === 'AI精选') {
+        const aiMatched = list.filter((item) => /AI|智能|科技|脑洞|觉醒|系统|重生/.test(item.title));
+        return aiMatched.length > 0 ? aiMatched : list.slice(0, 14);
+      }
+      const matched = list.filter((item) => item.title.includes(shortDramaTheme));
+      return matched.length > 0 ? matched : list;
+    }
+    if (category === 'ai') {
+      if (aiTheme === 'AI短剧') {
+        return (shortDramaQuery.data?.items ?? []).map((item) => ({
+          ...item,
+          rating: item.rating === '微短剧' ? 'AI短剧' : item.rating,
+        }));
+      }
+      return aiQuery.data?.items ?? [];
+    }
+    const rawItems = query.data?.items ?? [];
+    return rawItems.filter((item) => !isShortDramaTitle(item.title));
+  })();
 
   return (
     <section aria-label="影视多维分类大厅" className="space-y-3.5">
@@ -288,7 +361,7 @@ function DoubanMultiCategoryView({ onPick }: { onPick: (title: string) => void }
         <div className="flex items-center gap-1.5 shrink-0">
           <button
             type="button"
-            disabled={query.isFetching}
+            disabled={activeQuery.isFetching}
             className="flex items-center gap-1.5 px-3 py-1 rounded-lg border border-line hover:border-accent/50 text-xs text-muted hover:text-content bg-surface hover:bg-hover transition-all active:scale-95 touch-manipulation cursor-pointer disabled:opacity-50"
             onClick={() => {
               setIsShuffling(true);
@@ -296,7 +369,7 @@ function DoubanMultiCategoryView({ onPick }: { onPick: (title: string) => void }
               setTimeout(() => setIsShuffling(false), 500);
             }}
           >
-            <span className={cn('text-xs transition-transform duration-500', (isShuffling || query.isFetching) && 'rotate-180')}>🔄</span>
+            <span className={cn('text-xs transition-transform duration-500', (isShuffling || activeQuery.isFetching) && 'rotate-180')}>🔄</span>
             <span className="hidden sm:inline">换一批</span>
             <span className="text-[11px] font-mono text-faint">{page > 1 ? `${page}/10` : ''}</span>
           </button>
@@ -312,6 +385,52 @@ function DoubanMultiCategoryView({ onPick }: { onPick: (title: string) => void }
 
       {/* 多维网页版筛选面板：单行自适应横滑，高度精简 */}
       <div className="bg-chip/40 border border-line/50 rounded-xl p-2 sm:p-2.5 space-y-1 sm:space-y-1.5">
+        {category === 'short_drama' && (
+          <>
+            <FilterRow
+              label="题材"
+              options={SHORT_DRAMA_THEMES}
+              active={shortDramaTheme}
+              onSelect={(t) => {
+                setShortDramaTheme(t);
+                setPage(1);
+              }}
+            />
+            <FilterRow
+              label="排序"
+              options={SHORT_DRAMA_SORTS.map((s) => s.label)}
+              active={SHORT_DRAMA_SORTS.find((s) => s.id === shortDramaSort)?.label ?? '热门爽剧'}
+              onSelect={(label) => {
+                setShortDramaSort(SHORT_DRAMA_SORTS.find((s) => s.label === label)?.id ?? 'recommend');
+                setPage(1);
+              }}
+            />
+          </>
+        )}
+
+        {category === 'ai' && (
+          <>
+            <FilterRow
+              label="专区"
+              options={AI_THEMES}
+              active={aiTheme}
+              onSelect={(t) => {
+                setAiTheme(t);
+                setPage(1);
+              }}
+            />
+            <FilterRow
+              label="排序"
+              options={AI_SORTS.map((s) => s.label)}
+              active={AI_SORTS.find((s) => s.id === aiSort)?.label ?? '热门推荐'}
+              onSelect={(label) => {
+                setAiSort(AI_SORTS.find((s) => s.label === label)?.id ?? 'recommend');
+                setPage(1);
+              }}
+            />
+          </>
+        )}
+
         {category === 'movie' && (
           <>
             <FilterRow
@@ -425,9 +544,9 @@ function DoubanMultiCategoryView({ onPick }: { onPick: (title: string) => void }
       {/* 动漫新番周更表模式直接内嵌渲染 */}
       {category === 'anime' && animeViewMode === 'bangumi' ? (
         <BangumiInlineView onPick={onPick} />
-      ) : query.isError ? (
+      ) : activeQuery.isError ? (
         <p className="text-center text-sm text-faint py-12">推荐内容加载失败，请稍后刷新或更换分类</p>
-      ) : query.isLoading ? (
+      ) : activeQuery.isLoading ? (
         <GridSkeleton />
       ) : items.length === 0 ? (
         <p className="text-center text-sm text-faint py-12">该分类组合暂无内容，请尝试其他标签</p>

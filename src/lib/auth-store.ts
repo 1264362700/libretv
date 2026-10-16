@@ -60,12 +60,26 @@ export function isStorageEphemeral(): boolean {
   return isEphemeralDir;
 }
 
-/** 原子安全写入 JSON 文件：写入临时文件后 rename，杜绝截断与损坏 */
+/** 原子安全写入 JSON 文件：写入临时文件后 rename，杜绝截断与损坏，并自动生成 .prev.json 世代快照容灾 */
 export function atomicWriteJsonSync(filePath: string, data: unknown): void {
   const dir = path.dirname(filePath);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
+
+  // 1. 世代滚动快照：在写入前，若目标文件存在且非空（> 10 字节），自动克隆为 .prev.json 备份
+  try {
+    if (fs.existsSync(filePath)) {
+      const stat = fs.statSync(filePath);
+      if (stat.size > 10) {
+        fs.copyFileSync(filePath, `${filePath}.prev.json`);
+      }
+    }
+  } catch (err) {
+    console.warn(`[LibreTV] 世代滚动快照备份提示 (${filePath}.prev.json):`, err);
+  }
+
+  // 2. 临时文件原子 rename 写入
   const tempFile = `${filePath}.tmp.${Date.now()}.${Math.random().toString(36).slice(2, 8)}`;
   fs.writeFileSync(tempFile, JSON.stringify(data, null, 2), 'utf-8');
   fs.renameSync(tempFile, filePath);
@@ -276,6 +290,16 @@ export function saveGlobalSourcesBackup(store: AuthDataStore): void {
   try {
     const backupFile = getGlobalSourcesBackupFilePath();
     const sourcesList = Object.values(store.globalSources || {});
+
+    // 空写防熔断：如果当前传入的源列表为空，但磁盘上已有数据，拒绝清空覆盖物理备份
+    if (sourcesList.length === 0) {
+      const existing = loadGlobalSourcesBackup();
+      if (existing.length > 0) {
+        console.warn('[LibreTV] 触发全局源防空写熔断：内存源为空，保留磁盘已有有效备份');
+        return;
+      }
+    }
+
     atomicWriteJsonSync(backupFile, {
       version: 1,
       updatedAt: Date.now(),
@@ -295,11 +319,23 @@ export function getUsersBackupFilePath(): string {
 export function saveUsersBackup(store: AuthDataStore): void {
   try {
     const backupFile = getUsersBackupFilePath();
+    const currentUsersCount = Object.keys(store.users || {}).length;
+    const currentInvitesCount = Object.keys(store.invites || {}).length;
+
+    // 空写防熔断：如果当前传入的 store 没有用户，但磁盘已有备份，拒绝清空覆盖物理备份
+    if (currentUsersCount === 0 && currentInvitesCount === 0) {
+      const existing = loadUsersBackup();
+      if (existing && (Object.keys(existing.users).length > 0 || Object.keys(existing.invites).length > 0)) {
+        console.warn('[LibreTV] 触发用户备份防空写熔断：内存用户数为0，保留磁盘已有有效备份');
+        return;
+      }
+    }
+
     atomicWriteJsonSync(backupFile, {
       version: 1,
       updatedAt: Date.now(),
-      usersCount: Object.keys(store.users || {}).length,
-      invitesCount: Object.keys(store.invites || {}).length,
+      usersCount: currentUsersCount,
+      invitesCount: currentInvitesCount,
       users: store.users || {},
       invites: store.invites || {},
     });
@@ -308,33 +344,39 @@ export function saveUsersBackup(store: AuthDataStore): void {
   }
 }
 
-/** 读取独立物理备份中的用户与邀请码数据 */
+/** 读取独立物理备份中的用户与邀请码数据（支持世代快照回退） */
 export function loadUsersBackup(): {
   users: Record<string, UserRecord>;
   invites: Record<string, InviteCodeRecord>;
 } | null {
-  try {
-    const backupFile = getUsersBackupFilePath();
-    if (!fs.existsSync(backupFile)) return null;
-    const content = fs.readFileSync(backupFile, 'utf-8');
-    const parsed = JSON.parse(content);
-    if (parsed && typeof parsed === 'object') {
-      return {
-        users:
+  const tryFiles = [
+    getUsersBackupFilePath(),
+    `${getUsersBackupFilePath()}.prev.json`,
+  ];
+  for (const backupFile of tryFiles) {
+    try {
+      if (!fs.existsSync(backupFile)) continue;
+      const content = fs.readFileSync(backupFile, 'utf-8');
+      if (!content || content.trim().length <= 5) continue;
+      const parsed = JSON.parse(content);
+      if (parsed && typeof parsed === 'object') {
+        const users =
           parsed.users && typeof parsed.users === 'object' && !Array.isArray(parsed.users)
             ? parsed.users
-            : {},
-        invites:
+            : {};
+        const invites =
           parsed.invites && typeof parsed.invites === 'object' && !Array.isArray(parsed.invites)
             ? parsed.invites
-            : {},
-      };
+            : {};
+        if (Object.keys(users).length > 0 || Object.keys(invites).length > 0) {
+          return { users, invites };
+        }
+      }
+    } catch (err) {
+      console.warn(`[LibreTV] 用户数据独立物理备份读取异常 (${backupFile}):`, err);
     }
-    return null;
-  } catch (err) {
-    console.warn('[LibreTV] 用户数据独立物理备份读取异常:', err);
-    return null;
   }
+  return null;
 }
 
 /**
@@ -433,20 +475,27 @@ export function bootstrapAndMergeUsers(store: AuthDataStore): void {
   saveUsersBackup(store);
 }
 
-/** 读取物理备份文件中的全局源列表 */
+/** 读取物理备份文件中的全局源列表（支持世代快照回退） */
 export function loadGlobalSourcesBackup(): GlobalSourceRecord[] {
-  try {
-    const backupFile = getGlobalSourcesBackupFilePath();
-    if (!fs.existsSync(backupFile)) return [];
-    const content = fs.readFileSync(backupFile, 'utf-8');
-    const parsed = JSON.parse(content);
-    if (Array.isArray(parsed)) return parsed as GlobalSourceRecord[];
-    if (parsed && Array.isArray(parsed.sources)) return parsed.sources as GlobalSourceRecord[];
-    return [];
-  } catch (err) {
-    console.warn('[LibreTV] 全局源管理备份读取异常:', err);
-    return [];
+  const tryFiles = [
+    getGlobalSourcesBackupFilePath(),
+    `${getGlobalSourcesBackupFilePath()}.prev.json`,
+  ];
+  for (const backupFile of tryFiles) {
+    try {
+      if (!fs.existsSync(backupFile)) continue;
+      const content = fs.readFileSync(backupFile, 'utf-8');
+      if (!content || content.trim().length <= 2) continue;
+      const parsed = JSON.parse(content);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed as GlobalSourceRecord[];
+      if (parsed && Array.isArray(parsed.sources) && parsed.sources.length > 0) {
+        return parsed.sources as GlobalSourceRecord[];
+      }
+    } catch (err) {
+      console.warn(`[LibreTV] 全局源管理备份读取异常 (${backupFile}):`, err);
+    }
   }
+  return [];
 }
 
 /**
@@ -607,25 +656,44 @@ function loadStore(): AuthDataStore {
   if (inMemoryStore) return inMemoryStore;
 
   const storeFile = getStoreFilePath();
+  const prevStoreFile = `${storeFile}.prev.json`;
+
+  let loaded: AuthDataStore | null = null;
+
+  // 1. 优先尝试从主存储 auth-store.json 读取
   if (fs.existsSync(storeFile)) {
     try {
       const content = fs.readFileSync(storeFile, 'utf-8');
-      inMemoryStore = JSON.parse(content) as AuthDataStore;
+      if (content && content.trim().length > 10) {
+        loaded = JSON.parse(content) as AuthDataStore;
+      }
     } catch (err) {
-      console.warn('[LibreTV] auth-store.json 解析异常，触发多层容灾自愈:', err);
-      inMemoryStore = { users: {}, invites: {}, globalSources: {} };
+      console.warn('[LibreTV] auth-store.json 解析异常，触发世代滚动快照自愈:', err);
     }
-  } else {
-    inMemoryStore = { users: {}, invites: {}, globalSources: {} };
   }
+
+  // 2. 若主存储损坏或不存在，自动从 auth-store.json.prev.json 世代物理快照恢复
+  if (!loaded && fs.existsSync(prevStoreFile)) {
+    try {
+      const prevContent = fs.readFileSync(prevStoreFile, 'utf-8');
+      if (prevContent && prevContent.trim().length > 10) {
+        loaded = JSON.parse(prevContent) as AuthDataStore;
+        console.log('[LibreTV] 成功从 auth-store.json.prev.json 世代快照还原数据');
+      }
+    } catch (err) {
+      console.warn('[LibreTV] auth-store.json.prev.json 解析异常:', err);
+    }
+  }
+
+  inMemoryStore = loaded || { users: {}, invites: {}, globalSources: {} };
 
   if (!inMemoryStore.globalSources) inMemoryStore.globalSources = {};
   if (!inMemoryStore.invites) inMemoryStore.invites = {};
   if (!inMemoryStore.users) inMemoryStore.users = {};
 
-  // 1. 确保用户与邀请码合并恢复（主文件 + users-backup.json + PRESET_USERS）
+  // 3. 确保用户与邀请码启动合并恢复（主文件 + users-backup.json + PRESET_USERS + 种子邀请码）
   bootstrapAndMergeUsers(inMemoryStore);
-  // 2. 同时读取物理备份 + 环境变量（DEFAULT_SOURCES / DEFAULT_LIVE_SOURCES）并智能合并与持久化备份
+  // 4. 同时读取物理备份(global-sources-backup.json) + 环境变量并智能合并与持久化备份
   bootstrapAndMergeGlobalSources(inMemoryStore);
 
   saveStore(inMemoryStore);
@@ -634,6 +702,21 @@ function loadStore(): AuthDataStore {
 
 function saveStore(store: AuthDataStore): void {
   try {
+    // 关键防丢保全：如果内存中当前用户数少于已有的独立备份（可能由于并发或初始化瞬态），优先并入备份
+    const existingBackup = loadUsersBackup();
+    if (existingBackup) {
+      for (const [uname, u] of Object.entries(existingBackup.users)) {
+        if (!store.users[uname] && u && u.username) {
+          store.users[uname] = u;
+        }
+      }
+      for (const [code, inv] of Object.entries(existingBackup.invites)) {
+        if (!store.invites[code] && inv && inv.code) {
+          store.invites[code] = inv;
+        }
+      }
+    }
+
     const storeFile = getStoreFilePath();
     atomicWriteJsonSync(storeFile, store);
     // 独立物理双备份：用户账号 + 全局源

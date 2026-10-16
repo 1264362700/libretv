@@ -74,29 +74,36 @@ function mapGenre(tag: string): string {
   return '';
 }
 
+export interface DoubanRecommendResult {
+  items: DoubanItem[];
+  total: number;
+}
+
 export async function fetchDoubanRecommend(
   type: 'movie' | 'tv' | string,
   rawTag: string,
   pageStart: number,
   pageSize: number,
-  sort: 'recommend' | 'time' | 'rank' = 'recommend'
-): Promise<DoubanItem[]> {
+  sort: 'recommend' | 'time' | 'rank' = 'recommend',
+  options?: { area?: string; genre?: string; year?: string }
+): Promise<DoubanRecommendResult> {
   const catId = mapCatId(type, rawTag);
-  const area = mapArea(rawTag);
-  const genre = mapGenre(rawTag);
+  const area = options?.area && options.area !== '全部' ? options.area : mapArea(rawTag);
+  const genre = options?.genre && options.genre !== '全部' ? options.genre : mapGenre(rawTag);
+  const year = options?.year && options.year !== '全部' ? options.year : '';
   const rank = mapRank(sort);
-  const size = Math.min(50, Math.max(14, pageSize));
+  const size = Math.min(50, Math.max(12, pageSize));
   const pageno = Math.max(1, Math.floor(pageStart / size) + 1);
 
-  const cacheKey = `kan360:v2:${catId}:${area}:${genre}:${rank}:${pageno}:${size}`;
-  const cached = getCache<DoubanItem[]>(cacheKey);
+  const cacheKey = `kan360:v3:${catId}:${area}:${genre}:${year}:${rank}:${pageno}:${size}`;
+  const cached = getCache<DoubanRecommendResult>(cacheKey);
   if (cached) return cached;
 
   // 1. 优先调用 360 影视官方开放分类接口（全球畅通，无封禁，直连海外机房）
   try {
-    const apiUrl = `https://api.web.360kan.com/v1/filter/list?catid=${catId}&rank=${rank}&area=${encodeURIComponent(area)}&cat=${encodeURIComponent(genre)}&act=&year=&pageno=${pageno}&size=${size}`;
+    const apiUrl = `https://api.web.360kan.com/v1/filter/list?catid=${catId}&rank=${rank}&area=${encodeURIComponent(area)}&cat=${encodeURIComponent(genre)}&act=&year=${encodeURIComponent(year)}&pageno=${pageno}&size=${size}`;
     const res = await fetchUpstream(apiUrl, {
-      timeoutMs: 4000,
+      timeoutMs: 4500,
       headers: {
         Accept: 'application/json',
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
@@ -106,6 +113,7 @@ export async function fetchDoubanRecommend(
     if (res.ok) {
       const data = (await res.json()) as FilterResponse360;
       const movies = data.data?.movies;
+      const total = typeof data.data?.total === 'number' ? data.data.total : 0;
       if (Array.isArray(movies) && movies.length > 0) {
         const items: DoubanItem[] = movies
           .map((m) => {
@@ -132,8 +140,9 @@ export async function fetchDoubanRecommend(
           .filter((item) => item.title && item.cover);
 
         if (items.length > 0) {
-          setCache(cacheKey, items, CACHE_TTL);
-          return items;
+          const result: DoubanRecommendResult = { items, total: total || items.length };
+          setCache(cacheKey, result, CACHE_TTL);
+          return result;
         }
       }
     }
@@ -146,12 +155,13 @@ export async function fetchDoubanRecommend(
     const hotId = catId === 1 ? 'douban_movie_weekly' : 'baidu_teleplay';
     const fallbackList = await fetchHotList(hotId);
     if (fallbackList && fallbackList.length > 0) {
-      setCache(cacheKey, fallbackList, CACHE_TTL);
-      return fallbackList;
+      const result: DoubanRecommendResult = { items: fallbackList, total: fallbackList.length };
+      setCache(cacheKey, result, CACHE_TTL);
+      return result;
     }
   } catch {
     // 忽略兜底失败
   }
 
-  return [];
+  return { items: [], total: 0 };
 }

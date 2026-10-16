@@ -193,7 +193,7 @@ function HomeContent() {
         {!urlQuery && (
           <HeroBanner
             items={heroQuery.data?.items ?? []}
-            onPick={runSearch}
+            onPick={(title) => router.push(buildWatchUrl({ title }))}
           />
         )}
 
@@ -394,10 +394,7 @@ function HomeContent() {
         {/* 首页推荐（有搜索时隐藏） */}
         {!urlQuery && (
           <RecommendSection
-            onPick={(title) => {
-              setInput(title);
-              runSearch(title);
-            }}
+            onPick={(title) => router.push(buildWatchUrl({ title }))}
           />
         )}
       </main>

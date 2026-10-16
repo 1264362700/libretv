@@ -331,6 +331,23 @@ function WatchContent() {
 
   const orderedEpisodes = reversed ? [...episodes].map((_, i) => episodes.length - 1 - i) : episodes.map((_, i) => i);
 
+  // 当从片库/首页推荐通过标题直接点播进入（无 sourceKey 时），自动挑选第一条匹配的线路起播
+  useEffect(() => {
+    if (!sourceKey && videoTitle && videoTitle !== '未知视频' && candidatesQuery.data && candidatesQuery.data.length > 0) {
+      const best = candidatesQuery.data[0];
+      router.replace(
+        buildWatchUrl({
+          sourceKey: best.source.key,
+          vodId: best.result.vodId,
+          index: 0,
+          title: videoTitle,
+          sourceUrl: best.source.url,
+          detail: best.source.detail,
+        })
+      );
+    }
+  }, [sourceKey, videoTitle, candidatesQuery.data, router]);
+
   if (!verified) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -340,12 +357,39 @@ function WatchContent() {
   }
 
   if (!source) {
+    if (titleParam && candidatesQuery.isLoading) {
+      return (
+        <div className="min-h-screen flex flex-col items-center justify-center gap-3 px-4">
+          <Spinner size="lg" />
+          <p className="text-sm text-content font-medium">正在全网匹配「{titleParam}」最佳线路并起播...</p>
+          <p className="text-xs text-faint">已搜寻 {allCandidateSources.length} 个启用数据源</p>
+        </div>
+      );
+    }
+
+    if (titleParam && candidatesQuery.isSuccess && (!candidatesQuery.data || candidatesQuery.data.length === 0)) {
+      return (
+        <div className="min-h-screen flex items-center justify-center px-4">
+          <div className="text-center max-w-md">
+            <h1 className="text-content font-semibold text-lg mb-2">未找到该片源</h1>
+            <p className="text-sm text-muted mb-5 leading-relaxed">
+              当前启用的点播源中暂未匹配到「{titleParam}」。建议在右上角「设置」中开启更多点播源，或返回片库选择其他精彩影片。
+            </p>
+            <div className="flex justify-center gap-3">
+              <Link href="/catalog" className="btn-primary">进入片库大厅</Link>
+              <Link href="/" className="btn-ghost">返回首页</Link>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="min-h-screen flex items-center justify-center px-4">
         <div className="text-center max-w-md">
           <h1 className="text-content font-medium mb-2">点播源不存在</h1>
           <p className="text-sm text-muted mb-4">
-            该视频来自点播源「{sourceKey}」，但它可能已被删除。请在设置中重新添加后重试。
+            该视频来自点播源「{sourceKey || '未知'}」，但它可能已被删除。请在设置中重新添加后重试。
           </p>
           <Link href="/" className="btn-primary">返回首页</Link>
         </div>

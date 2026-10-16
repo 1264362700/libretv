@@ -215,9 +215,20 @@ export const api = {
     return request<VideoDetail>(`/api/detail?${sp.toString()}`, { signal });
   },
 
-  douban: (type: 'movie' | 'tv', tag: string, pageStart: number, pageSize: number, signal?: AbortSignal, sort?: 'recommend' | 'time' | 'rank') => {
+  douban: (
+    type: 'movie' | 'tv' | 'anime' | 'variety' | 'documentary' | string,
+    tag: string,
+    pageStart: number,
+    pageSize: number,
+    signal?: AbortSignal,
+    sort?: 'recommend' | 'time' | 'rank',
+    options?: { area?: string; genre?: string; year?: string }
+  ) => {
     const sp = new URLSearchParams({ type, tag, pageStart: String(pageStart), pageSize: String(pageSize) });
     if (sort) sp.set('sort', sort);
+    if (options?.area) sp.set('area', options.area);
+    if (options?.genre) sp.set('genre', options.genre);
+    if (options?.year) sp.set('year', options.year);
     return request<DoubanResponse>(`/api/douban?${sp.toString()}`, { signal });
   },
 

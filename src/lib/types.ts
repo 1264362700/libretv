@@ -78,6 +78,7 @@ export type SearchStreamEvent =
 
 export interface DoubanResponse {
   items: DoubanItem[];
+  total?: number;
 }
 
 export interface BangumiCalendarDay {

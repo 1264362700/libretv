@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/client-api';
 import { useAppStore } from '@/lib/store';
@@ -295,13 +296,17 @@ function DoubanMultiCategoryView({ onPick }: { onPick: (title: string) => void }
         )}
       </div>
 
-      {/* 9zhoukj 楼层头部：大号分类标题 + 悬停小箭头 + 换一批胶囊 */}
+      {/* 9zhoukj 楼层头部：大号分类标题 + 悬停小箭头 + 换一批胶囊 + 完整片库入口 */}
       <div className="flex items-center justify-between pt-1 pb-1">
         <div className="flex items-center gap-2 sm:gap-3">
-          <h3 className="text-xl sm:text-2xl font-bold text-content flex items-center gap-1 group cursor-pointer">
+          <Link
+            href={`/catalog?type=${category}`}
+            className="text-xl sm:text-2xl font-bold text-content flex items-center gap-1 group cursor-pointer hover:text-accent transition-colors"
+            title="进入该分类完整片库大厅"
+          >
             <span>{PRIMARY_TABS.find((t) => t.id === category)?.label}热播大厅</span>
             <span className="text-muted group-hover:translate-x-1 group-hover:text-accent transition-transform text-base sm:text-lg">→</span>
-          </h3>
+          </Link>
           <span className="text-xs text-muted hidden sm:inline-block">
             {category === 'movie' ? '精选高分院线大片' : category === 'tv' ? '当下最火爆连续剧' : category === 'anime' ? '人气新番连载' : '爆笑娱乐综艺'}
           </span>
@@ -320,6 +325,13 @@ function DoubanMultiCategoryView({ onPick }: { onPick: (title: string) => void }
             <span className={cn('text-xs transition-transform duration-500', (isShuffling || query.isFetching) && 'rotate-180')}>🔄</span>
             <span>换一批 {page > 1 ? `第${page}组` : ''}</span>
           </button>
+          <Link
+            href={`/catalog?type=${category}`}
+            className="hidden sm:inline-flex items-center gap-1 px-3 py-1.5 rounded-full border border-line hover:border-accent text-xs text-accent hover:bg-accent/10 transition-all font-medium"
+          >
+            <span>完整片库</span>
+            <span>›</span>
+          </Link>
         </div>
       </div>
 

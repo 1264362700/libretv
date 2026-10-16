@@ -696,6 +696,16 @@ function CustomProxyInput() {
 
 function HomePanel() {
   const store = useAppStore();
+  const { toast } = useToast();
+
+  const labelMap: Record<RecommendSourceValue, string> = {
+    'baidu-top': '百度实时热榜',
+    'douban': '豆瓣分类大厅',
+    'bangumi': 'Bangumi 新番',
+    'hot-list': '影视周榜',
+    'douban-top250': '豆瓣 Top250',
+  };
+
   return (
     <section>
       <SectionTitle title="首页与内容过滤" />
@@ -704,18 +714,28 @@ function HomePanel() {
           label="成人内容过滤"
           description="过滤“伦理片”等分类的结果"
           checked={store.yellowFilter}
-          onChange={(v) => store.updateSettings({ yellowFilter: v })}
+          onChange={(v) => {
+            store.updateSettings({ yellowFilter: v });
+            toast(v ? '已开启成人内容过滤' : '已关闭成人内容过滤', 'info');
+          }}
         />
         <ToggleRow
           label="首页推荐"
           description="在首页展示推荐内容"
           checked={store.doubanEnabled}
-          onChange={(v) => store.updateSettings({ doubanEnabled: v })}
+          onChange={(v) => {
+            store.updateSettings({ doubanEnabled: v });
+            toast(v ? '已开启首页推荐展示' : '已关闭首页推荐展示', 'info');
+          }}
         />
         <SelectRow
           label="推荐数据源"
           value={store.recommendSource}
-          onChange={(v) => store.updateSettings({ recommendSource: v as RecommendSourceValue })}
+          onChange={(v) => {
+            const next = v as RecommendSourceValue;
+            store.updateSettings({ recommendSource: next });
+            toast(`已切换推荐源为「${labelMap[next] || next}」，首页已实时更新`, 'success');
+          }}
           options={[
             { value: 'baidu-top', label: '百度实时热榜', hint: '极速直连 · 热门电影与剧集' },
             { value: 'douban', label: '豆瓣分类大厅', hint: '多维分类与筛选' },

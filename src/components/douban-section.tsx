@@ -7,6 +7,7 @@ import { api } from '@/lib/client-api';
 import { useAppStore } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import type { DoubanItem } from '@/lib/types';
+import { isShortDramaTitle } from '@/lib/short-drama';
 import { DoubanCard } from './video-card';
 
 const WEEKDAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
@@ -65,12 +66,14 @@ const DOC_SORTS = [
 
 /** 可用首页推荐数据源配置（图文定义，去除臃肿内部 tag） */
 const RECOMMEND_SOURCES: {
-  id: 'douban' | '360-hot' | 'baidu-top' | 'douban-top250' | 'hot-list' | 'maoyan' | 'bangumi';
+  id: 'douban' | 'short-drama' | 'iqiyi-hot' | '360-hot' | 'baidu-top' | 'douban-top250' | 'hot-list' | 'maoyan' | 'bangumi';
   label: string;
   icon: string;
   desc: string;
 }[] = [
   { id: 'douban', label: '豆瓣精选', icon: '🔥', desc: '全品类多维筛选' },
+  { id: 'short-drama', label: '热门短剧', icon: '📱', desc: '微短剧爽文合集' },
+  { id: 'iqiyi-hot', label: '爱奇艺榜', icon: '💚', desc: '官方全端热播榜' },
   { id: '360-hot', label: '360热播', icon: '⚡', desc: '全网影视热播榜' },
   { id: 'baidu-top', label: '百度风云', icon: '📈', desc: '全网实时搜索榜' },
   { id: 'douban-top250', label: '豆瓣250', icon: '🏆', desc: '影史高分神作' },
@@ -79,7 +82,7 @@ const RECOMMEND_SOURCES: {
   { id: 'bangumi', label: '新番周历', icon: '✨', desc: '日漫每日放送日程' },
 ];
 
-/** 首页推荐区：支持全功能多维筛选 + 动漫新番周历 + 360热播榜 + 猫眼票房 + 影视热榜 + 百度实时榜 + 豆瓣Top250 */
+/** 首页推荐区：支持全功能多维筛选 + 微短剧专区 + 爱奇艺官方榜 + 动漫新番周历 + 360热播榜 + 猫眼票房 + 影视热榜 + 百度实时榜 + 豆瓣Top250 */
 export function RecommendSection({ onPick }: { onPick: (title: string) => void }) {
   const doubanEnabled = useAppStore((s) => s.doubanEnabled);
   const recommendSource = useAppStore((s) => s.recommendSource);
@@ -150,6 +153,8 @@ export function RecommendSection({ onPick }: { onPick: (title: string) => void }
 
       {/* 动态内容视图 */}
       <div key={recommendSource} className="transition-opacity duration-300">
+        {recommendSource === 'short-drama' && <ShortDramaView onPick={onPick} />}
+        {recommendSource === 'iqiyi-hot' && <IqiyiHotView onPick={onPick} />}
         {recommendSource === '360-hot' && <Kan360HotView onPick={onPick} />}
         {recommendSource === 'baidu-top' && <BaiduTopView onPick={onPick} />}
         {recommendSource === 'douban-top250' && <DoubanTop250View onPick={onPick} />}
@@ -157,7 +162,9 @@ export function RecommendSection({ onPick }: { onPick: (title: string) => void }
         {recommendSource === 'maoyan' && <MaoyanView onPick={onPick} />}
         {recommendSource === 'bangumi' && <BangumiView onPick={onPick} />}
         {recommendSource === 'douban' && <DoubanMultiCategoryView onPick={onPick} />}
-        {recommendSource !== '360-hot' &&
+        {recommendSource !== 'short-drama' &&
+          recommendSource !== 'iqiyi-hot' &&
+          recommendSource !== '360-hot' &&
           recommendSource !== 'baidu-top' &&
           recommendSource !== 'douban-top250' &&
           recommendSource !== 'hot-list' &&
@@ -250,7 +257,8 @@ function DoubanMultiCategoryView({ onPick }: { onPick: (title: string) => void }
     enabled: !(category === 'anime' && animeViewMode === 'bangumi'),
   });
 
-  const items = query.data?.items ?? [];
+  const rawItems = query.data?.items ?? [];
+  const items = rawItems.filter((item) => !isShortDramaTitle(item.title));
 
   return (
     <section aria-label="影视多维分类大厅" className="space-y-3.5">
@@ -866,6 +874,139 @@ function MaoyanView({ onPick }: { onPick: (title: string) => void }) {
         <GridSkeleton />
       ) : items.length === 0 ? (
         <p className="text-center text-sm text-faint py-12">暂无票房内容</p>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-2.5 sm:gap-3.5">
+          {items.slice(0, 14).map((item) => (
+            <DoubanCard key={item.id} item={item} onClick={() => onPick(item.title)} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+const IQIYI_HOT_LISTS = [
+  { id: 'iqiyi_tv', label: '🔥 热门电视剧' },
+  { id: 'iqiyi_movie', label: '🎬 热门电影' },
+  { id: 'iqiyi_variety', label: '🎤 热门综艺' },
+  { id: 'iqiyi_anime', label: '✨ 热门动漫' },
+];
+
+/** 爱奇艺官方实时热播榜视图：高清真图、官方热度、秒播体验 */
+function IqiyiHotView({ onPick }: { onPick: (title: string) => void }) {
+  const [listId, setListId] = useState(IQIYI_HOT_LISTS[0].id);
+
+  const query = useQuery({
+    queryKey: ['iqiyi-hot', listId],
+    queryFn: ({ signal }) => api.hotList(listId, signal),
+    staleTime: 30_000,
+    refetchOnMount: true,
+  });
+
+  const items = query.data?.items ?? [];
+
+  return (
+    <section aria-label="爱奇艺实时热播榜" className="space-y-3.5">
+      <div className="flex items-center justify-between gap-2 p-1.5 sm:p-2 bg-chip/30 border border-line/40 rounded-xl">
+        <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+          {IQIYI_HOT_LISTS.map((l) => (
+            <button
+              key={l.id}
+              type="button"
+              onClick={() => setListId(l.id)}
+              className={cn(
+                'px-3 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-all duration-150 active:scale-95 shrink-0',
+                listId === l.id
+                  ? 'bg-accent text-on-accent shadow-xs font-semibold'
+                  : 'text-muted hover:text-content hover:bg-hover'
+              )}
+            >
+              {l.label}
+            </button>
+          ))}
+        </div>
+        <span className="text-[11px] text-faint shrink-0 hidden sm:inline-block px-2">
+          💚 爱奇艺全网主流热播榜单
+        </span>
+      </div>
+
+      {query.isError ? (
+        <div className="text-center py-12 space-y-2">
+          <p className="text-sm text-faint">热榜数据加载失败</p>
+          <button
+            type="button"
+            className="px-3 py-1 text-xs rounded-full bg-accent text-on-accent"
+            onClick={() => query.refetch()}
+          >
+            点击重试
+          </button>
+        </div>
+      ) : query.isLoading ? (
+        <GridSkeleton />
+      ) : items.length === 0 ? (
+        <p className="text-center text-sm text-faint py-12">暂无热播内容，请尝试其他分类</p>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-2.5 sm:gap-3.5">
+          {items.slice(0, 14).map((item) => (
+            <DoubanCard key={item.id} item={item} onClick={() => onPick(item.title)} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** 热门微短剧/爽文专区视图：直连 CMS 短剧分类真流，支持真实分页换一批 */
+function ShortDramaView({ onPick }: { onPick: (title: string) => void }) {
+  const [page, setPage] = useState(1);
+  const [isShuffling, setIsShuffling] = useState(false);
+
+  const query = useQuery({
+    queryKey: ['short-drama', page],
+    queryFn: ({ signal }) => api.hotList('short_drama', signal, (page - 1) * 20),
+    staleTime: 30_000,
+    refetchOnMount: true,
+  });
+
+  const items = query.data?.items ?? [];
+
+  return (
+    <section aria-label="热门微短剧专区" className="space-y-3.5">
+      <div className="flex items-center justify-between gap-2 p-1.5 sm:p-2 bg-chip/30 border border-line/40 rounded-xl">
+        <div className="flex items-center gap-2 px-1">
+          <span className="text-xs font-semibold text-content">📱 热门微短剧 / 爽文精选</span>
+          <span className="text-[11px] text-faint hidden sm:inline">全集直连 · 超爽连播 · 极速秒看</span>
+        </div>
+        <button
+          type="button"
+          disabled={query.isFetching}
+          className="flex items-center gap-1.5 px-3 py-1 rounded-lg border border-line hover:border-accent/50 text-xs text-muted hover:text-content bg-surface hover:bg-hover transition-all active:scale-95 shrink-0 cursor-pointer disabled:opacity-50"
+          onClick={() => {
+            setIsShuffling(true);
+            setPage((prev) => (prev % 10) + 1);
+            setTimeout(() => setIsShuffling(false), 500);
+          }}
+        >
+          <span className={cn('text-xs transition-transform duration-500', (isShuffling || query.isFetching) && 'rotate-180')}>🔄</span>
+          <span>换一批 {page > 1 ? `(第${page}/10组)` : ''}</span>
+        </button>
+      </div>
+
+      {query.isError ? (
+        <div className="text-center py-12 space-y-2">
+          <p className="text-sm text-faint">短剧数据加载失败</p>
+          <button
+            type="button"
+            className="px-3 py-1 text-xs rounded-full bg-accent text-on-accent"
+            onClick={() => query.refetch()}
+          >
+            点击重试
+          </button>
+        </div>
+      ) : query.isLoading ? (
+        <GridSkeleton />
+      ) : items.length === 0 ? (
+        <p className="text-center text-sm text-faint py-12">暂无短剧数据</p>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-2.5 sm:gap-3.5">
           {items.slice(0, 14).map((item) => (

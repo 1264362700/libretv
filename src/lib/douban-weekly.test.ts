@@ -1,12 +1,35 @@
 import { describe, expect, it } from 'vitest';
-import { baiduTeleplayToItem, doubanWeeklyToItem, isHotListId } from './douban-weekly';
+import { baiduTeleplayToItem, doubanWeeklyToItem, isHotListId, isShortDramaTitle } from './douban-weekly';
 
 describe('isHotListId', () => {
   it('白名单校验', () => {
     expect(isHotListId('douban_movie_weekly')).toBe(true);
     expect(isHotListId('baidu_teleplay')).toBe(true);
+    expect(isHotListId('iqiyi_tv')).toBe(true);
+    expect(isHotListId('iqiyi_movie')).toBe(true);
+    expect(isHotListId('short_drama')).toBe(true);
     expect(isHotListId('maoyan')).toBe(false);
     expect(isHotListId('')).toBe(false);
+  });
+});
+
+describe('isShortDramaTitle', () => {
+  it('准确识别微短剧并放行常规正剧', () => {
+    // 典型短剧
+    expect(isShortDramaTitle('战神归来：龙王殿下请自重')).toBe(true);
+    expect(isShortDramaTitle('闪婚总裁的替嫁娇妻')).toBe(true);
+    expect(isShortDramaTitle('重生之真假千金微短剧')).toBe(true);
+    expect(isShortDramaTitle('无双神医下山（全80集）')).toBe(true);
+    expect(isShortDramaTitle('开局觉醒至尊修罗令')).toBe(true);
+    expect(isShortDramaTitle('顾总的掌心宝')).toBe(true);
+
+    // 常规电影与电视剧应放行
+    expect(isShortDramaTitle('流浪地球2')).toBe(false);
+    expect(isShortDramaTitle('狂飙')).toBe(false);
+    expect(isShortDramaTitle('漫长的季节')).toBe(false);
+    expect(isShortDramaTitle('肖申克的救赎')).toBe(false);
+    expect(isShortDramaTitle('庆余年 第二季')).toBe(false);
+    expect(isShortDramaTitle('凡人修仙传')).toBe(false);
   });
 });
 

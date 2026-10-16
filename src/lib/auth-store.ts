@@ -53,6 +53,24 @@ interface AuthDataStore {
   globalSources: Record<string, GlobalSourceRecord>;
 }
 
+let hasWarnedEphemeral = false;
+let isEphemeralDir = false;
+
+export function isStorageEphemeral(): boolean {
+  return isEphemeralDir;
+}
+
+/** 原子安全写入 JSON 文件：写入临时文件后 rename，杜绝截断与损坏 */
+export function atomicWriteJsonSync(filePath: string, data: unknown): void {
+  const dir = path.dirname(filePath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  const tempFile = `${filePath}.tmp.${Date.now()}.${Math.random().toString(36).slice(2, 8)}`;
+  fs.writeFileSync(tempFile, JSON.stringify(data, null, 2), 'utf-8');
+  fs.renameSync(tempFile, filePath);
+}
+
 // 支持 DATA_DIR 环境变量并针对容器环境做权限容灾兜底
 function getDataDir(): string {
   // 1. 优先使用自定义环境变量 DATA_DIR
@@ -63,6 +81,7 @@ function getDataDir(): string {
         fs.mkdirSync(envDir, { recursive: true });
       }
       fs.accessSync(envDir, fs.constants.W_OK);
+      isEphemeralDir = false;
       return envDir;
     } catch (e) {
       console.warn(`[LibreTV] DATA_DIR '${envDir}' 不可写，尝试工作区目录:`, e);
@@ -76,11 +95,23 @@ function getDataDir(): string {
       fs.mkdirSync(defaultDir, { recursive: true });
     }
     fs.accessSync(defaultDir, fs.constants.W_OK);
+    isEphemeralDir = false;
     return defaultDir;
-  } catch (err) {
+  } catch {
     // 3. 容灾降级：容器非 Root 用户在 /app 无权限时，平滑降级至 /tmp/libretv-data 避免 500 崩溃
-    console.warn(`[LibreTV] 默认数据目录 '${defaultDir}' 权限不足 (EACCES)，平滑降级至临时可写目录:`, err);
+    isEphemeralDir = true;
     const tmpDir = path.join(os.tmpdir(), 'libretv-data');
+    if (!hasWarnedEphemeral) {
+      hasWarnedEphemeral = true;
+      console.error(
+        `\n================================================================================\n` +
+        `[CRITICAL ALERT] 默认数据目录 '${defaultDir}' 权限不足 (EACCES)！\n` +
+        `已平滑降级至临时易失目录: '${tmpDir}'\n` +
+        `警告：容器重启或镜像更新后，临时目录中的账号、邀请码等数据将会丢失！\n` +
+        `解决方案：请在宿主机执行 'chown -R 10001:10001 ./data' 或 'chmod -R 777 ./data' 以赋予写权限！\n` +
+        `================================================================================\n`
+      );
+    }
     try {
       if (!fs.existsSync(tmpDir)) {
         fs.mkdirSync(tmpDir, { recursive: true });
@@ -240,32 +271,166 @@ export function getGlobalSourcesBackupFilePath(): string {
   return path.join(getDataDir(), 'global-sources-backup.json');
 }
 
-/** 将当前全局源持久化保存至独立物理备份文件 */
+/** 将当前全局源持久化保存至独立物理备份文件（原子写入） */
 export function saveGlobalSourcesBackup(store: AuthDataStore): void {
   try {
-    const dataDir = getDataDir();
-    if (!fs.existsSync(dataDir)) {
-      fs.mkdirSync(dataDir, { recursive: true });
-    }
     const backupFile = getGlobalSourcesBackupFilePath();
     const sourcesList = Object.values(store.globalSources || {});
-    fs.writeFileSync(
-      backupFile,
-      JSON.stringify(
-        {
-          version: 1,
-          updatedAt: Date.now(),
-          count: sourcesList.length,
-          sources: sourcesList,
-        },
-        null,
-        2
-      ),
-      'utf-8'
-    );
+    atomicWriteJsonSync(backupFile, {
+      version: 1,
+      updatedAt: Date.now(),
+      count: sourcesList.length,
+      sources: sourcesList,
+    });
   } catch (err) {
     console.warn('[LibreTV] 全局源管理备份写入异常:', err);
   }
+}
+
+export function getUsersBackupFilePath(): string {
+  return path.join(getDataDir(), 'users-backup.json');
+}
+
+/** 将用户与邀请码持久化保存至独立物理备份文件（原子写入） */
+export function saveUsersBackup(store: AuthDataStore): void {
+  try {
+    const backupFile = getUsersBackupFilePath();
+    atomicWriteJsonSync(backupFile, {
+      version: 1,
+      updatedAt: Date.now(),
+      usersCount: Object.keys(store.users || {}).length,
+      invitesCount: Object.keys(store.invites || {}).length,
+      users: store.users || {},
+      invites: store.invites || {},
+    });
+  } catch (err) {
+    console.warn('[LibreTV] 用户数据独立物理备份写入异常:', err);
+  }
+}
+
+/** 读取独立物理备份中的用户与邀请码数据 */
+export function loadUsersBackup(): {
+  users: Record<string, UserRecord>;
+  invites: Record<string, InviteCodeRecord>;
+} | null {
+  try {
+    const backupFile = getUsersBackupFilePath();
+    if (!fs.existsSync(backupFile)) return null;
+    const content = fs.readFileSync(backupFile, 'utf-8');
+    const parsed = JSON.parse(content);
+    if (parsed && typeof parsed === 'object') {
+      return {
+        users:
+          parsed.users && typeof parsed.users === 'object' && !Array.isArray(parsed.users)
+            ? parsed.users
+            : {},
+        invites:
+          parsed.invites && typeof parsed.invites === 'object' && !Array.isArray(parsed.invites)
+            ? parsed.invites
+            : {},
+      };
+    }
+    return null;
+  } catch (err) {
+    console.warn('[LibreTV] 用户数据独立物理备份读取异常:', err);
+    return null;
+  }
+}
+
+/**
+ * 环境变量预置账号注入支持：
+ * PRESET_USERS 格式支持:
+ * 1. "user1:pass1,user2:pass2"
+ * 2. JSON 数组: [{"username":"u1","password":"p1","role":"admin"}]
+ */
+function bootstrapPresetUsers(store: AuthDataStore): void {
+  const envPreset = process.env.PRESET_USERS?.trim();
+  if (!envPreset) return;
+
+  try {
+    if (envPreset.startsWith('[') || envPreset.startsWith('{')) {
+      const parsed = JSON.parse(envPreset);
+      const list = Array.isArray(parsed) ? parsed : [parsed];
+      for (const item of list) {
+        if (!item.username || !item.password) continue;
+        const uname = String(item.username).toLowerCase().trim();
+        if (!store.users[uname]) {
+          const salt = crypto.randomBytes(32).toString('hex');
+          store.users[uname] = {
+            id: crypto.randomUUID(),
+            username: uname,
+            passwordHash: hashPassword(String(item.password), salt),
+            salt,
+            role: item.role === 'admin' ? 'admin' : 'user',
+            status: 'active',
+            sessionVersion: 1,
+            createdAt: Date.now(),
+          };
+        }
+      }
+      return;
+    }
+
+    // 格式: user1:pass1,user2:pass2
+    const pairs = envPreset.split(',').map((p) => p.trim()).filter(Boolean);
+    for (const pair of pairs) {
+      const idx = pair.indexOf(':');
+      if (idx <= 0) continue;
+      const uname = pair.slice(0, idx).toLowerCase().trim();
+      const pwd = pair.slice(idx + 1).trim();
+      if (!store.users[uname]) {
+        const salt = crypto.randomBytes(32).toString('hex');
+        store.users[uname] = {
+          id: crypto.randomUUID(),
+          username: uname,
+          passwordHash: hashPassword(pwd, salt),
+          salt,
+          role: 'user',
+          status: 'active',
+          sessionVersion: 1,
+          createdAt: Date.now(),
+        };
+      }
+    }
+  } catch (err) {
+    console.warn('[LibreTV] PRESET_USERS 环境变量解析异常:', err);
+  }
+}
+
+/**
+ * 启动时智能合并用户与邀请码：
+ * 融合主存储、独立物理备份与环境变量预置账号，杜绝因文件损坏或容器更新导致的账号蒸发
+ */
+export function bootstrapAndMergeUsers(store: AuthDataStore): void {
+  if (!store.users) store.users = {};
+  if (!store.invites) store.invites = {};
+
+  // 1. 从独立物理备份中找回可能丢失的存量用户与邀请码
+  const backup = loadUsersBackup();
+  if (backup) {
+    for (const [uname, u] of Object.entries(backup.users)) {
+      if (!store.users[uname] && u && u.username && u.passwordHash) {
+        store.users[uname] = u;
+      }
+    }
+    for (const [code, inv] of Object.entries(backup.invites)) {
+      if (!store.invites[code] && inv && inv.code) {
+        store.invites[code] = inv;
+      }
+    }
+  }
+
+  // 2. 注入环境变量配置的预设用户
+  bootstrapPresetUsers(store);
+
+  // 3. 确保初始管理员初始化
+  bootstrapAdmin(store);
+
+  // 4. 确保种子邀请码初始化
+  bootstrapSeedInvites(store);
+
+  // 5. 立即双写同步物理备份
+  saveUsersBackup(store);
 }
 
 /** 读取物理备份文件中的全局源列表 */
@@ -396,16 +561,13 @@ export async function ensureGistLoaded(): Promise<void> {
         if (cd.users) inMemoryStore.users = { ...inMemoryStore.users, ...cd.users };
         if (cd.invites) inMemoryStore.invites = { ...inMemoryStore.invites, ...cd.invites };
         if (cd.globalSources) inMemoryStore.globalSources = { ...inMemoryStore.globalSources, ...cd.globalSources };
-        bootstrapAdmin(inMemoryStore);
-        bootstrapSeedInvites(inMemoryStore);
+        bootstrapAndMergeUsers(inMemoryStore);
         bootstrapAndMergeGlobalSources(inMemoryStore);
 
-        const dataDir = getDataDir();
-        if (!fs.existsSync(dataDir)) {
-          fs.mkdirSync(dataDir, { recursive: true });
-        }
-        const storeFile = path.join(dataDir, 'auth-store.json');
-        fs.writeFileSync(storeFile, JSON.stringify(inMemoryStore, null, 2), 'utf-8');
+        const storeFile = getStoreFilePath();
+        atomicWriteJsonSync(storeFile, inMemoryStore);
+        saveUsersBackup(inMemoryStore);
+        saveGlobalSourcesBackup(inMemoryStore);
       }
     } catch (e) {
       console.error('[LibreTV] 加载 Gist 云端数据异常:', e);
@@ -449,7 +611,8 @@ function loadStore(): AuthDataStore {
     try {
       const content = fs.readFileSync(storeFile, 'utf-8');
       inMemoryStore = JSON.parse(content) as AuthDataStore;
-    } catch {
+    } catch (err) {
+      console.warn('[LibreTV] auth-store.json 解析异常，触发多层容灾自愈:', err);
       inMemoryStore = { users: {}, invites: {}, globalSources: {} };
     }
   } else {
@@ -460,11 +623,9 @@ function loadStore(): AuthDataStore {
   if (!inMemoryStore.invites) inMemoryStore.invites = {};
   if (!inMemoryStore.users) inMemoryStore.users = {};
 
-  // 确保管理员账号初始化
-  bootstrapAdmin(inMemoryStore);
-  // 确保初始种子邀请码
-  bootstrapSeedInvites(inMemoryStore);
-  // 同时读取物理备份 + 环境变量（DEFAULT_SOURCES / DEFAULT_LIVE_SOURCES）并智能合并与持久化备份
+  // 1. 确保用户与邀请码合并恢复（主文件 + users-backup.json + PRESET_USERS）
+  bootstrapAndMergeUsers(inMemoryStore);
+  // 2. 同时读取物理备份 + 环境变量（DEFAULT_SOURCES / DEFAULT_LIVE_SOURCES）并智能合并与持久化备份
   bootstrapAndMergeGlobalSources(inMemoryStore);
 
   saveStore(inMemoryStore);
@@ -473,12 +634,11 @@ function loadStore(): AuthDataStore {
 
 function saveStore(store: AuthDataStore): void {
   try {
-    const dataDir = getDataDir();
-    if (!fs.existsSync(dataDir)) {
-      fs.mkdirSync(dataDir, { recursive: true });
-    }
-    const storeFile = path.join(dataDir, 'auth-store.json');
-    fs.writeFileSync(storeFile, JSON.stringify(store, null, 2), 'utf-8');
+    const storeFile = getStoreFilePath();
+    atomicWriteJsonSync(storeFile, store);
+    // 独立物理双备份：用户账号 + 全局源
+    saveUsersBackup(store);
+    saveGlobalSourcesBackup(store);
     // 自动异步回写至 GitHub Gist 云存储
     schedulePushToGist(store);
   } catch (err) {

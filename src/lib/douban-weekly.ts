@@ -19,7 +19,7 @@ function apiBase(): string {
   return (process.env['60S_API_BASE'] || 'https://60s.viki.moe').replace(/\/+$/, '');
 }
 
-/** 榜单标识：豆瓣周榜 + 百度实时榜 + 豆瓣 Top250 + 360 实时热播榜 + 猫眼大盘 */
+/** 榜单标识：豆瓣周榜 + 百度实时榜 + 豆瓣 Top250 + 360 实时热播榜 + 猫眼大盘 + 爱奇艺热播榜 + 热门微短剧专区 */
 export const HOT_LIST_IDS = [
   'douban_movie_weekly',
   'douban_tv_chinese',
@@ -34,6 +34,11 @@ export const HOT_LIST_IDS = [
   '360_variety',
   '360_anime',
   'maoyan_movie',
+  'iqiyi_tv',
+  'iqiyi_movie',
+  'iqiyi_variety',
+  'iqiyi_anime',
+  'short_drama',
 ] as const;
 
 export type HotListId = (typeof HOT_LIST_IDS)[number];
@@ -41,6 +46,9 @@ export type HotListId = (typeof HOT_LIST_IDS)[number];
 export function isHotListId(id: string): id is HotListId {
   return (HOT_LIST_IDS as readonly string[]).includes(id);
 }
+
+export { isShortDramaTitle } from './short-drama';
+import { isShortDramaTitle } from './short-drama';
 
 const DOUBAN_WEEKLY_CATEGORY: Partial<Record<HotListId, string>> = {
   douban_movie_weekly: 'movie',
@@ -145,7 +153,8 @@ export async function fetch360Rank(type: 'teleplay' | 'movie' | 'variety' | 'ani
               isTv: type === 'teleplay',
             } as DoubanItem;
           })
-          .filter((item) => Boolean(item.title && item.cover));
+          // 严格剔除微短剧，保证常规影视纯净
+          .filter((item) => Boolean(item.title && item.cover) && !isShortDramaTitle(item.title));
 
         if (items.length > 0) {
           setCache(cacheKey, items, CACHE_TTL);
@@ -160,8 +169,148 @@ export async function fetch360Rank(type: 'teleplay' | 'movie' | 'variety' | 'ani
 }
 
 /**
+ * 爱奇艺官方实时热播榜（官方开放免 Key 接口，超高热度、真实官方海报）：
+ * channel_id: 2=电视剧, 1=电影, 6=综艺, 4=动漫
+ */
+export async function fetchIqiyiRank(type: 'tv' | 'movie' | 'variety' | 'anime'): Promise<DoubanItem[]> {
+  const channelMap = { movie: 1, tv: 2, variety: 6, anime: 4 };
+  const channelId = channelMap[type] || 2;
+  const cacheKey = `iqiyi_rank:${type}`;
+  const cached = getCache<DoubanItem[]>(cacheKey);
+  if (cached && cached.length > 0) return cached;
+
+  try {
+    const res = await fetchUpstream(
+      `https://pcw-api.iqiyi.com/search/recommend/list?channel_id=${channelId}&data_type=1&mode=11&page_id=1&ret_num=30`,
+      {
+        timeoutMs: 6000,
+        headers: { Accept: 'application/json', 'User-Agent': UA },
+      }
+    );
+    if (res.ok) {
+      const data = (await res.json()) as {
+        data?: {
+          list?: Array<{
+            name?: string;
+            title?: string;
+            imageUrl?: string;
+            score?: number | string;
+            description?: string;
+          }>;
+        };
+      };
+      const list = data.data?.list;
+      if (Array.isArray(list) && list.length > 0) {
+        const items: DoubanItem[] = list
+          .map((item, idx) => {
+            const title = (item.title || item.name || '').trim();
+            let cover = (item.imageUrl || '').trim();
+            if (cover.startsWith('http://')) {
+              cover = cover.replace('http://', 'https://');
+            }
+            let score: string | undefined;
+            if (item.score) {
+              const num = parseFloat(String(item.score));
+              if (!Number.isNaN(num) && num > 0 && num <= 10) score = num.toFixed(1);
+            }
+            return {
+              id: `iqiyi_${type}_${idx}_${title.slice(0, 10)}`,
+              title,
+              cover,
+              rating: score,
+              isTv: type !== 'movie',
+            } as DoubanItem;
+          })
+          // 严格剔除微短剧
+          .filter((item) => Boolean(item.title && item.cover) && !isShortDramaTitle(item.title));
+
+        if (items.length > 0) {
+          setCache(cacheKey, items, CACHE_TTL);
+          return items;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn(`[HotList] 爱奇艺热榜(${type})异常，准备降级:`, err);
+  }
+
+  // 平滑容灾兜底：降级至 360 榜对应的分类
+  const fallback360Type = type === 'tv' ? 'teleplay' : type;
+  return fetch360Rank(fallback360Type);
+}
+
+/**
+ * 热门微短剧/爽文短剧专属独立栏目（直连 CMS 短剧分类，真流 m3u8 秒播）
+ * 非凡 CMS (t=36) + 暴风 CMS (t=58) 双源聚合，带集数与完结状态
+ */
+export async function fetchShortDramaList(pageStart = 0): Promise<DoubanItem[]> {
+  const page = Math.floor(pageStart / 20) + 1;
+  const cacheKey = `short_drama_list:${page}`;
+  const cached = getCache<DoubanItem[]>(cacheKey);
+  if (cached && cached.length > 0) return cached;
+
+  const endpoints = [
+    `https://cj.ffzyapi.com/api.php/provide/vod/?ac=detail&t=36&pg=${page}`,
+    `https://bfzyapi.com/api.php/provide/vod/?ac=detail&t=58&pg=${page}`,
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetchUpstream(url, {
+        timeoutMs: 6000,
+        headers: { Accept: 'application/json', 'User-Agent': UA },
+      });
+      if (res.ok) {
+        const json = (await res.json()) as {
+          list?: Array<{
+            vod_id?: number | string;
+            vod_name?: string;
+            vod_pic?: string;
+            vod_remarks?: string;
+            vod_score?: string | number;
+          }>;
+        };
+        const list = json.list;
+        if (Array.isArray(list) && list.length > 0) {
+          const items: DoubanItem[] = list
+            .map((v) => {
+              const title = (v.vod_name || '').trim();
+              let cover = (v.vod_pic || '').trim();
+              if (cover.startsWith('http://')) {
+                cover = cover.replace('http://', 'https://');
+              }
+              const remarks = (v.vod_remarks || '').trim();
+              let rating: string | undefined = undefined;
+              if (remarks) {
+                rating = remarks.length <= 8 ? remarks : remarks.slice(0, 8);
+              }
+              return {
+                id: `short_drama_${v.vod_id || Math.random().toString(36).slice(2)}`,
+                title,
+                cover,
+                rating: rating || '微短剧',
+                isTv: true,
+              } as DoubanItem;
+            })
+            .filter((x) => Boolean(x.title && x.cover));
+
+          if (items.length > 0) {
+            setCache(cacheKey, items, CACHE_TTL);
+            return items;
+          }
+        }
+      }
+    } catch (err) {
+      console.warn(`[HotList] 短剧源获取异常 (${url}):`, err);
+    }
+  }
+
+  return [];
+}
+
+/**
  * 猫眼/院线热映票房大盘榜：
- * 聚合最新上映与热播院线大片
+ * 聚合最新上映与热播院线大片（剔除短剧）
  */
 export async function fetchMaoyanRank(): Promise<DoubanItem[]> {
   const cacheKey = 'maoyan_rank:movie';
@@ -200,7 +349,7 @@ export async function fetchMaoyanRank(): Promise<DoubanItem[]> {
               isTv: false,
             } as DoubanItem;
           })
-          .filter((item) => Boolean(item.title && item.cover));
+          .filter((item) => Boolean(item.title && item.cover) && !isShortDramaTitle(item.title));
 
         if (items.length > 0) {
           setCache(cacheKey, items, CACHE_TTL);
@@ -213,12 +362,12 @@ export async function fetchMaoyanRank(): Promise<DoubanItem[]> {
   }
 
   // 兜底返回经典大片
-  return DOUBAN_TOP_250_ITEMS.slice(0, 24);
+  return DOUBAN_TOP_250_ITEMS.filter((i) => !isShortDramaTitle(i.title)).slice(0, 24);
 }
 
 /**
  * 百度风云榜直连抓取：
- * 修复跨行正则匹配（[\s\S]*?），支持 <!--s-data:...--> 与 san-state 双重解析
+ * 修复跨行正则匹配（[\s\S]*?），支持 <!--s-data:...--> 与 san-state 双重解析（严格过滤短剧）
  */
 export async function fetchBaiduBoard(tab: 'movie' | 'teleplay'): Promise<DoubanItem[]> {
   const cacheKey = `baidu_board:${tab}`;
@@ -281,7 +430,7 @@ export async function fetchBaiduBoard(tab: 'movie' | 'teleplay'): Promise<Douban
               isTv: tab === 'teleplay',
             } as DoubanItem;
           })
-          .filter((x): x is DoubanItem => Boolean(x));
+          .filter((x): x is DoubanItem => Boolean(x && !isShortDramaTitle(x.title)));
 
         if (items.length > 0) {
           setCache(cacheKey, items, CACHE_TTL);
@@ -301,7 +450,7 @@ export async function fetchBaiduBoard(tab: 'movie' | 'teleplay'): Promise<Douban
   }
 
   // 终极安全兜底：精选经典影单
-  return DOUBAN_TOP_250_ITEMS.slice(0, 24);
+  return DOUBAN_TOP_250_ITEMS.filter((i) => !isShortDramaTitle(i.title)).slice(0, 24);
 }
 
 /**
@@ -328,13 +477,16 @@ export async function fetchDoubanTop250(start = 0, count = 20): Promise<DoubanIt
       const items: DoubanItem[] = [];
       let m: RegExpExecArray | null;
       while ((m = regex.exec(html)) !== null) {
-        items.push({
-          id: `top250_${start + items.length}`,
-          cover: m[1],
-          title: m[2].trim(),
-          rating: m[3].trim(),
-          isTv: false,
-        });
+        const title = m[2].trim();
+        if (!isShortDramaTitle(title)) {
+          items.push({
+            id: `top250_${start + items.length}`,
+            cover: m[1],
+            title,
+            rating: m[3].trim(),
+            isTv: false,
+          });
+        }
       }
       if (items.length > 0) {
         setCache(cacheKey, items, CACHE_TTL);
@@ -346,11 +498,12 @@ export async function fetchDoubanTop250(start = 0, count = 20): Promise<DoubanIt
   }
 
   // 内置权威经典神作数据集切片输出（支持 1~12 组全量循环翻页浏览）
-  const total = DOUBAN_TOP_250_ITEMS.length;
+  const cleanTop250 = DOUBAN_TOP_250_ITEMS.filter((i) => !isShortDramaTitle(i.title));
+  const total = cleanTop250.length;
   const normalizedStart = start % total;
-  let items = DOUBAN_TOP_250_ITEMS.slice(normalizedStart, normalizedStart + count);
+  let items = cleanTop250.slice(normalizedStart, normalizedStart + count);
   if (items.length < count && total > 0) {
-    items = items.concat(DOUBAN_TOP_250_ITEMS.slice(0, count - items.length));
+    items = items.concat(cleanTop250.slice(0, count - items.length));
   }
   setCache(cacheKey, items, CACHE_TTL);
   return items;
@@ -384,8 +537,24 @@ export async function fetchHotList(id: HotListId, pageStart = 0): Promise<Douban
 
   let items: DoubanItem[] = [];
 
-  // 1. 360 影视实时热播大盘（极速官方 CDN，零风控）
-  if (id === '360_teleplay') {
+  // 1. 爱奇艺官方热播榜（电视剧/电影/综艺/动漫）
+  if (id === 'iqiyi_tv') {
+    items = await fetchIqiyiRank('tv');
+  } else if (id === 'iqiyi_movie') {
+    items = await fetchIqiyiRank('movie');
+  } else if (id === 'iqiyi_variety') {
+    items = await fetchIqiyiRank('variety');
+  } else if (id === 'iqiyi_anime') {
+    items = await fetchIqiyiRank('anime');
+  }
+
+  // 2. 热门微短剧/爽文独立专区
+  else if (id === 'short_drama') {
+    items = await fetchShortDramaList(pageStart);
+  }
+
+  // 3. 360 影视实时热播大盘（极速官方 CDN，零风控）
+  else if (id === '360_teleplay') {
     items = await fetch360Rank('teleplay');
   } else if (id === '360_movie') {
     items = await fetch360Rank('movie');
@@ -397,19 +566,19 @@ export async function fetchHotList(id: HotListId, pageStart = 0): Promise<Douban
     items = await fetchMaoyanRank();
   }
 
-  // 2. 百度风云榜直连
+  // 4. 百度风云榜直连
   else if (id === 'baidu_movie') {
     items = await fetchBaiduBoard('movie');
   } else if (id === 'baidu_teleplay') {
     items = await fetchBaiduBoard('teleplay');
   }
 
-  // 3. 豆瓣 Top250 经典殿堂
+  // 5. 豆瓣 Top250 经典殿堂
   else if (id === 'douban_top250') {
     items = await fetchDoubanTop250(pageStart, 24);
   }
 
-  // 4. 豆瓣周榜类目（带自动镜像容灾回退）
+  // 6. 豆瓣周榜类目（带自动镜像容灾回退与微短剧剔除）
   else {
     const category = DOUBAN_WEEKLY_CATEGORY[id];
     if (category) {
@@ -418,7 +587,7 @@ export async function fetchHotList(id: HotListId, pageStart = 0): Promise<Douban
         const isTv = id !== 'douban_movie_weekly';
         items = assertArray<DoubanWeeklyRaw>(raw.data, '豆瓣周榜')
           .map((entry) => doubanWeeklyToItem(entry, isTv))
-          .filter((item): item is DoubanItem => item !== undefined);
+          .filter((item): item is DoubanItem => item !== undefined && !isShortDramaTitle(item.title));
       } catch (err) {
         console.warn(`[HotList] 60s 周榜(${category})获取异常，触发智能保底:`, err);
         if (id === 'douban_movie_weekly') {
@@ -432,9 +601,11 @@ export async function fetchHotList(id: HotListId, pageStart = 0): Promise<Douban
     }
   }
 
-  // 5. 终极自愈：若网络极端异常导致当前项仍然为空，根据类型平滑自愈
+  // 7. 终极自愈：若网络极端异常导致当前项仍然为空，根据类型平滑自愈
   if (items.length === 0) {
-    if (id.includes('movie')) {
+    if (id === 'short_drama') {
+      items = await fetchShortDramaList(pageStart);
+    } else if (id.includes('movie')) {
       items = await fetch360Rank('movie');
     } else if (id.includes('anime')) {
       items = await fetch360Rank('anime');
@@ -446,7 +617,7 @@ export async function fetchHotList(id: HotListId, pageStart = 0): Promise<Douban
   }
 
   if (items.length === 0) {
-    items = DOUBAN_TOP_250_ITEMS.slice(0, 24);
+    items = DOUBAN_TOP_250_ITEMS.filter((i) => !isShortDramaTitle(i.title)).slice(0, 24);
   }
 
   setCache(cacheKey, items, CACHE_TTL);

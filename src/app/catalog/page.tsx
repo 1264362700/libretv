@@ -11,8 +11,9 @@ import { api } from '@/lib/client-api';
 import { useAuth } from '@/components/auth';
 import { useTranslation } from '@/lib/i18n';
 import { buildWatchUrl, cn } from '@/lib/utils';
+import { isShortDramaTitle } from '@/lib/short-drama';
 
-type ChannelType = 'movie' | 'tv' | 'anime' | 'variety' | 'documentary';
+type ChannelType = 'movie' | 'tv' | 'short_drama' | 'anime' | 'variety' | 'documentary';
 
 interface ChannelConfig {
   id: ChannelType;
@@ -39,6 +40,14 @@ const CHANNELS_CONFIG: ChannelConfig[] = [
     subTitle: '热门华语剧 · 经典美剧 · 精彩韩剧日剧',
     regions: ['全部', '大陆', '美国', '韩国', '日本', '香港', '台湾', '英国', '泰国'],
     genres: ['全部', '言情', '古装', '都市', '剧情', '悬疑', '喜剧', '科幻', '武侠', '谍战', '历史', '伦理', '偶像'],
+  },
+  {
+    id: 'short_drama',
+    label: '短剧',
+    icon: '📱',
+    subTitle: '热门微短剧 · 爽文逆袭 · 全集秒播',
+    regions: ['全部', '都市', '古装', '战神', '甜宠', '逆袭', '重生'],
+    genres: ['全部', '战神', '总裁', '甜宠', '重生', '神医', '穿越', '豪门', '赘婿'],
   },
   {
     id: 'anime',
@@ -175,16 +184,28 @@ function CatalogContent() {
 
   const catalogQuery = useQuery({
     queryKey: ['catalog', currentChannel, queryTag, currentRegion, currentGenre, currentYear, currentSort, currentPage],
-    queryFn: ({ signal }) =>
-      api.douban(currentChannel, queryTag, pageStart, PAGE_SIZE, signal, currentSort, {
+    queryFn: async ({ signal }) => {
+      if (currentChannel === 'short_drama') {
+        const res = await api.hotList('short_drama', signal, pageStart);
+        return {
+          items: res.items,
+          total: 200,
+        };
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return api.douban(currentChannel as any, queryTag, pageStart, PAGE_SIZE, signal, currentSort, {
         area: currentRegion,
         genre: currentGenre,
         year: currentYear,
-      }),
+      });
+    },
     staleTime: 5 * 60_000,
   });
 
-  const items = catalogQuery.data?.items ?? [];
+  const rawItems = catalogQuery.data?.items ?? [];
+  const items = currentChannel === 'short_drama'
+    ? rawItems
+    : rawItems.filter((item) => !isShortDramaTitle(item.title));
   const total = catalogQuery.data?.total ?? (items.length > 0 ? items.length * 10 : 0);
   const totalPages = Math.max(1, Math.min(500, Math.ceil(total / PAGE_SIZE)));
 

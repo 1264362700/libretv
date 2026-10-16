@@ -14,6 +14,8 @@ RUN npm run build
 FROM node:22-alpine AS runner
 WORKDIR /app
 
+RUN apk add --no-cache su-exec
+
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=8080
@@ -28,12 +30,12 @@ RUN mkdir -p /app/data && chown -R nextjs:nodejs /app
 COPY --chown=nextjs:nodejs --from=builder /app/.next/standalone ./
 COPY --chown=nextjs:nodejs --from=builder /app/.next/static ./.next/static
 COPY --chown=nextjs:nodejs --from=builder /app/public ./public
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 
 # 确保运行时数据目录权限与持久化卷
 RUN mkdir -p /app/data && chown -R nextjs:nodejs /app/data
 VOLUME ["/app/data"]
 
-USER nextjs
-
 EXPOSE 8080
-CMD ["node", "server.js"]
+ENTRYPOINT ["/app/entrypoint.sh"]

@@ -22,10 +22,14 @@ export function getEnvSources(): SourceConfig[] {
       if (typeof url !== 'string' || !/^https?:\/\//.test(url.trim())) {
         throw new Error(`第 ${i + 1} 项的 url 必须以 http:// 或 https:// 开头`);
       }
+      let safeUrl = url.trim().replace(/\/+$/, '');
+      if (safeUrl.startsWith('http://') && (safeUrl.includes('lziapi.com') || safeUrl.includes('guangsuapi.com') || safeUrl.includes('ffzyapi.com'))) {
+        safeUrl = safeUrl.replace('http://', 'https://');
+      }
       return {
         key: `env_${i}`,
         name: name.trim(),
-        url: url.trim().replace(/\/+$/, ''),
+        url: safeUrl,
         detail: typeof detail === 'string' && detail.trim() ? detail.trim() : undefined,
         isAdult: isAdult === true,
       };

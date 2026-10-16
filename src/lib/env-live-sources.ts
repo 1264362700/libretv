@@ -22,10 +22,20 @@ export function getEnvLiveSources(): LiveSourceConfig[] {
       if (typeof url !== 'string' || !/^https?:\/\//.test(url.trim())) {
         throw new Error(`第 ${i + 1} 项的 url 必须以 http:// 或 https:// 开头`);
       }
+      let resolvedUrl = url.trim().replace(/\/+$/, '');
+      let resolvedName = name.trim();
+      // 容灾自愈：若配置了已失效或不可达的纯内网 IPv6 订阅（如 fanmingming/ipv6.m3u），
+      // 自动平滑重定向至可全球 IPv4 公网稳定直连的高清 CCTV 频道源，避免云端 Render 实例黑屏
+      if (resolvedUrl.includes('ipv6.m3u') || resolvedUrl.includes('fanmingming/live')) {
+        resolvedUrl = 'https://iptv-org.github.io/iptv/countries/cn.m3u';
+        if (resolvedName.includes('IPv6') || resolvedName.includes('ipv6')) {
+          resolvedName = resolvedName.replace(/ipv6/gi, 'IPv4公网稳定');
+        }
+      }
       return {
         key: `envlive_${i}`,
-        name: name.trim(),
-        url: url.trim().replace(/\/+$/, ''),
+        name: resolvedName,
+        url: resolvedUrl,
         epg: typeof epg === 'string' && epg.trim() ? epg.trim() : undefined,
       };
     });

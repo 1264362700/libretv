@@ -200,7 +200,7 @@ function CatalogContent() {
     <div className="min-h-screen flex flex-col bg-bg text-content">
       <Header showSearch />
 
-      <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-5 space-y-5 pb-28 md:pb-8">
+      <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-5 space-y-5 pb-28 md:pb-8 overflow-x-hidden">
         {/* 频道大横幅与引导标语 */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-line/60">
           <div>
@@ -239,8 +239,8 @@ function CatalogContent() {
           ))}
         </div>
 
-        {/* 网页版多维聚合筛选器面板 (桌面端) */}
-        <div className="hidden md:block bg-chip/35 border border-line/50 rounded-2xl p-3 sm:p-4 space-y-2.5 sm:space-y-3">
+        {/* 网页版多维聚合筛选器面板 (桌面端 >= 1024px) */}
+        <div className="hidden lg:block bg-chip/35 border border-line/50 rounded-2xl p-3 sm:p-4 space-y-2.5 sm:space-y-3">
           {/* 地区行 */}
           <FilterRow
             label="地区"
@@ -300,6 +300,20 @@ function CatalogContent() {
             )}
           </div>
         </div>
+
+        {/* iPad 平板端专属流式触控筛选卡片 (768px ~ 1024px) */}
+        <TabletFilterPanel
+          regions={activeChannelConfig.regions}
+          genres={activeChannelConfig.genres}
+          years={YEARS}
+          activeRegion={currentRegion}
+          activeGenre={currentGenre}
+          activeYear={currentYear}
+          activeSort={currentSort}
+          onUpdateFilters={updateFilters}
+          onReset={() => router.push(`/catalog?type=${currentChannel}`, { scroll: false })}
+          hasActiveFilters={hasActiveFilters}
+        />
 
         {/* 移动端专属精炼筛选栏 (手机端) */}
         <div className="md:hidden space-y-2">
@@ -436,7 +450,7 @@ function CatalogContent() {
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3 sm:gap-4 md:gap-4.5">
             {items.map((item) => (
               <DoubanCard
                 key={item.id}
@@ -577,6 +591,189 @@ function CatalogContent() {
   );
 }
 
+function TabletFilterPanel({
+  regions,
+  genres,
+  years,
+  activeRegion,
+  activeGenre,
+  activeYear,
+  activeSort,
+  onUpdateFilters,
+  onReset,
+  hasActiveFilters,
+}: {
+  regions: string[];
+  genres: string[];
+  years: string[];
+  activeRegion: string;
+  activeGenre: string;
+  activeYear: string;
+  activeSort: string;
+  onUpdateFilters: (changes: { region?: string; genre?: string; year?: string; sort?: string }) => void;
+  onReset: () => void;
+  hasActiveFilters: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="hidden md:block lg:hidden bg-chip/35 border border-line/60 rounded-2xl p-4 space-y-3 shadow-xs">
+      {/* 顶栏控制：排序 + 重置 + 展开切换 */}
+      <div className="flex items-center justify-between pb-2.5 border-b border-line/50 gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-content shrink-0">排序:</span>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {SORTS.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => onUpdateFilters({ sort: s.id })}
+                className={cn(
+                  'px-3 py-1.5 rounded-xl text-xs font-medium transition-all active:scale-95 touch-manipulation cursor-pointer',
+                  activeSort === s.id
+                    ? 'bg-accent text-on-accent font-semibold shadow-xs'
+                    : 'bg-surface hover:bg-hover text-muted hover:text-content border border-line/60'
+                )}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0 ml-auto">
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={onReset}
+              className="text-xs text-accent hover:underline flex items-center gap-1 cursor-pointer mr-1"
+            >
+              <span>重置条件</span>
+              <span>✕</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setExpanded((prev) => !prev)}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-muted hover:text-content bg-surface border border-line active:scale-95 touch-manipulation cursor-pointer"
+          >
+            <span>{expanded ? '收起选项' : '展开多维筛选'}</span>
+            <svg
+              className={cn('w-3.5 h-3.5 transition-transform duration-200', expanded && 'rotate-180')}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <polyline points="6 9 12 15 18 9" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      {/* 地区流式药丸：自动换行 flex-wrap，彻底消除横向滚动条 */}
+      <div>
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-xs font-semibold text-faint">地区:</span>
+          {activeRegion !== '全部' && (
+            <span className="text-[11px] text-accent font-medium">已选: {activeRegion}</span>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {regions.map((r) => {
+            const isSelected = activeRegion === r;
+            return (
+              <button
+                key={r}
+                type="button"
+                onClick={() => onUpdateFilters({ region: r })}
+                className={cn(
+                  'px-3 py-1.5 text-xs rounded-xl font-medium transition-all active:scale-95 touch-manipulation cursor-pointer',
+                  isSelected
+                    ? 'bg-accent text-on-accent font-semibold shadow-xs'
+                    : 'bg-surface hover:bg-hover text-muted hover:text-content border border-line/50'
+                )}
+              >
+                {r}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 类型题材流式药丸：自动换行 */}
+      <div>
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-xs font-semibold text-faint">类型题材:</span>
+          {activeGenre !== '全部' && (
+            <span className="text-[11px] text-accent font-medium">已选: {activeGenre}</span>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {(expanded ? genres : genres.slice(0, 10)).map((g) => {
+            const isSelected = activeGenre === g;
+            return (
+              <button
+                key={g}
+                type="button"
+                onClick={() => onUpdateFilters({ genre: g })}
+                className={cn(
+                  'px-3 py-1.5 text-xs rounded-xl font-medium transition-all active:scale-95 touch-manipulation cursor-pointer',
+                  isSelected
+                    ? 'bg-accent text-on-accent font-semibold shadow-xs'
+                    : 'bg-surface hover:bg-hover text-muted hover:text-content border border-line/50'
+                )}
+              >
+                {g}
+              </button>
+            );
+          })}
+          {!expanded && genres.length > 10 && (
+            <button
+              type="button"
+              onClick={() => setExpanded(true)}
+              className="px-2.5 py-1.5 text-xs rounded-xl text-faint hover:text-accent border border-dashed border-line active:scale-95 cursor-pointer"
+            >
+              +{genres.length - 10} 更多...
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* 上映年份流式药丸（仅在展开或有选中时呈现） */}
+      {(expanded || activeYear !== '全部') && (
+        <div className="pt-2 border-t border-line/40">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-xs font-semibold text-faint">上映年份:</span>
+            {activeYear !== '全部' && (
+              <span className="text-[11px] text-accent font-medium">已选: {activeYear}年</span>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {years.map((y) => {
+              const isSelected = activeYear === y;
+              return (
+                <button
+                  key={y}
+                  type="button"
+                  onClick={() => onUpdateFilters({ year: y })}
+                  className={cn(
+                    'px-3 py-1.5 text-xs rounded-xl font-medium transition-all active:scale-95 touch-manipulation cursor-pointer',
+                    isSelected
+                      ? 'bg-accent text-on-accent font-semibold shadow-xs'
+                      : 'bg-surface hover:bg-hover text-muted hover:text-content border border-line/50'
+                  )}
+                >
+                  {y}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FilterRow({
   label,
   options,
@@ -619,7 +816,7 @@ function FilterRow({
 
 function CatalogSkeleton() {
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4">
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3 sm:gap-4 md:gap-4.5">
       {Array.from({ length: 18 }).map((_, i) => (
         <div key={i} className="flex flex-col space-y-2">
           <div className="aspect-[2/3] w-full rounded-xl bg-chip/60 animate-pulse border border-line/30" />
@@ -662,7 +859,7 @@ function renderPageNumbers(
         key={pNum}
         onClick={() => onPageSelect(pNum)}
         className={cn(
-          'w-7 h-7 rounded-lg text-xs font-medium transition-all active:scale-95 touch-manipulation',
+          'w-7 h-7 sm:w-8 sm:h-8 rounded-lg text-xs font-medium transition-all active:scale-95 touch-manipulation',
           isCur
             ? 'bg-accent text-on-accent font-bold shadow-xs'
             : 'text-muted hover:text-content hover:bg-hover bg-chip/50'

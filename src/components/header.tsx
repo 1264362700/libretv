@@ -97,14 +97,19 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
             </div>
           </Link>
 
-          {/* 桌面端频道大导航 */}
+          {/* 平板端专属流式频道胶囊 */}
+          <Suspense fallback={null}>
+            <TabletChannelNav />
+          </Suspense>
+
+          {/* 桌面端大导航 */}
           <Suspense fallback={null}>
             <DesktopChannelNav />
           </Suspense>
 
           {showSearch && (
             <form
-              className="flex-1 max-w-sm lg:max-w-md hidden sm:block ml-auto"
+              className="flex-1 max-w-[140px] md:max-w-[200px] lg:max-w-md hidden sm:block ml-auto min-w-0"
               onSubmit={(e) => {
                 e.preventDefault();
                 submitSearch(query);
@@ -155,7 +160,7 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
 
           {/* 右侧功能入口组 */}
           <nav className="flex items-center gap-1 sm:gap-1.5 shrink-0 ml-auto sm:ml-0">
-            <div className="hidden lg:inline-flex">
+            <div className="hidden xl:inline-flex">
               <HeaderLink href="/about" active={false}>
                 关于
               </HeaderLink>
@@ -164,7 +169,7 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
             <IconButton label="观看历史" onClick={() => setHistoryOpen(true)}>
               <Icon name="clock" />
             </IconButton>
-            <div className="hidden sm:inline-flex">
+            <div className="hidden xl:inline-flex">
               <IconButton label="下载管理" onClick={requestShowDownloadManager}>
                 <Icon name="download" />
               </IconButton>
@@ -252,11 +257,37 @@ function useCurrentChannelId(): string {
   return '';
 }
 
+function TabletChannelNav() {
+  const currentId = useCurrentChannelId();
+
+  return (
+    <nav className="hidden md:flex lg:hidden items-center gap-1 min-w-0 overflow-x-auto no-scrollbar py-0.5 ml-1">
+      {CHANNELS.map((ch) => {
+        const isActive = currentId === ch.id;
+        return (
+          <Link
+            key={ch.id}
+            href={ch.href}
+            className={cn(
+              'shrink-0 px-2.5 py-1 rounded-lg text-xs font-medium transition-all active:scale-95 touch-manipulation',
+              isActive
+                ? 'bg-accent text-on-accent font-semibold shadow-xs'
+                : 'text-muted hover:text-content hover:bg-hover bg-chip/40'
+            )}
+          >
+            {ch.label}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
 function DesktopChannelNav() {
   const currentId = useCurrentChannelId();
 
   return (
-    <nav className="hidden md:flex items-center gap-1 ml-1 lg:ml-3">
+    <nav className="hidden lg:flex items-center gap-1 ml-3">
       {CHANNELS.map((ch) => {
         const isActive = currentId === ch.id;
         return (

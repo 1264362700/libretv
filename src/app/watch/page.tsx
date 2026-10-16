@@ -438,7 +438,7 @@ function WatchContent() {
         </div>
       </header>
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-2 sm:px-4 py-3 sm:py-5">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-2 sm:px-4 py-3 sm:py-5 overflow-x-hidden">
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4 sm:gap-5 items-start">
           {/* 左侧主视区：播放器 + 视频信息 + 就地选源面板 */}
           <div>

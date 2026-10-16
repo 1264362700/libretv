@@ -189,6 +189,30 @@ export const api = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'remove_source', key }),
       }),
+    getGistStatus: () =>
+      request<{
+        success: boolean;
+        status: {
+          enabled: boolean;
+          gistId: string | null;
+          gistUrl: string | null;
+          lastSyncAt: number | null;
+          lastAction: 'pull' | 'push' | 'idle' | 'error';
+          lastError: string | null;
+        };
+      }>('/api/admin?type=gist_status'),
+    syncGist: () =>
+      request<{ success: boolean; error?: string }>('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'gist_sync' }),
+      }),
+    pullGist: () =>
+      request<{ success: boolean; error?: string }>('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'gist_pull' }),
+      }),
   },
 
   /**

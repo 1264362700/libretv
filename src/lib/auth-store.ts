@@ -2,6 +2,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import os from 'node:os';
+import {
+  pullFromGist,
+  schedulePushToGist,
+  forcePushToGist,
+  getGistSyncState,
+  type GistSyncState,
+} from './gist-sync';
 
 /**
  * 账号系统与邀请码底层存储引擎（基于 JSON 文件，具备密码加盐 Hash、顶号版本号与动态加源）
@@ -236,6 +243,68 @@ function bootstrapCuratedSources(store: AuthDataStore) {
   }
 }
 
+let isGistLoaded = false;
+let gistLoadingPromise: Promise<void> | null = null;
+
+export async function ensureGistLoaded(): Promise<void> {
+  if (isGistLoaded) return;
+  if (gistLoadingPromise) return gistLoadingPromise;
+
+  gistLoadingPromise = (async () => {
+    try {
+      const current = loadStore();
+      const cloudData = await pullFromGist(current);
+      if (cloudData && typeof cloudData === 'object') {
+        const cd = cloudData as Partial<AuthDataStore>;
+        if (!inMemoryStore) inMemoryStore = { users: {}, invites: {}, globalSources: {} };
+        if (cd.users) inMemoryStore.users = { ...inMemoryStore.users, ...cd.users };
+        if (cd.invites) inMemoryStore.invites = { ...inMemoryStore.invites, ...cd.invites };
+        if (cd.globalSources) inMemoryStore.globalSources = { ...inMemoryStore.globalSources, ...cd.globalSources };
+        bootstrapAdmin(inMemoryStore);
+        bootstrapSeedInvites(inMemoryStore);
+        bootstrapCuratedSources(inMemoryStore);
+
+        const dataDir = getDataDir();
+        if (!fs.existsSync(dataDir)) {
+          fs.mkdirSync(dataDir, { recursive: true });
+        }
+        const storeFile = path.join(dataDir, 'auth-store.json');
+        fs.writeFileSync(storeFile, JSON.stringify(inMemoryStore, null, 2), 'utf-8');
+      }
+    } catch (e) {
+      console.error('[LibreTV] 加载 Gist 云端数据异常:', e);
+    } finally {
+      isGistLoaded = true;
+      gistLoadingPromise = null;
+    }
+  })();
+
+  return gistLoadingPromise;
+}
+
+export async function manualSyncGist(): Promise<{ success: boolean; error?: string; state: GistSyncState }> {
+  const store = loadStore();
+  const res = await forcePushToGist(store);
+  return { ...res, state: getGistSyncState() };
+}
+
+export async function manualPullGist(): Promise<{ success: boolean; error?: string; state: GistSyncState }> {
+  isGistLoaded = false;
+  await ensureGistLoaded();
+  return { success: true, state: getGistSyncState() };
+}
+
+export function getGistStatus(): GistSyncState {
+  return getGistSyncState();
+}
+
+// 服务端自动拉起云端同步探针
+if (typeof window === 'undefined' && (process.env.GITHUB_TOKEN || process.env.GH_TOKEN)) {
+  setTimeout(() => {
+    ensureGistLoaded().catch(() => {});
+  }, 50);
+}
+
 function loadStore(): AuthDataStore {
   if (inMemoryStore) return inMemoryStore;
 
@@ -274,6 +343,8 @@ function saveStore(store: AuthDataStore): void {
     }
     const storeFile = path.join(dataDir, 'auth-store.json');
     fs.writeFileSync(storeFile, JSON.stringify(store, null, 2), 'utf-8');
+    // 自动异步回写至 GitHub Gist 云存储
+    schedulePushToGist(store);
   } catch (err) {
     console.error('Failed to save auth-store.json:', err);
   }

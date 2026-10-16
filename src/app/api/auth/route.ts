@@ -9,6 +9,7 @@ import {
 import {
   verifyUserCredentials,
   registerWithInvite,
+  ensureGistLoaded,
 } from '@/lib/auth-store';
 
 export const runtime = 'nodejs';
@@ -31,6 +32,7 @@ function setSessionCookie(res: NextResponse, token: string, expiresAt: number, r
 }
 
 export async function POST(req: Request) {
+  await ensureGistLoaded();
   const ip =
     req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
     req.headers.get('x-real-ip') ||

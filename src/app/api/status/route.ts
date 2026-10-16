@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { sessionFromCookieHeader } from '@/lib/auth';
-import { listGlobalSources } from '@/lib/auth-store';
+import { listGlobalSources, ensureGistLoaded } from '@/lib/auth-store';
 import { getEnvSources } from '@/lib/env-sources';
 import { getEnvLiveSources } from '@/lib/env-live-sources';
 import { getEnvSubscriptions } from '@/lib/env-subscriptions';
@@ -11,6 +11,7 @@ export const runtime = 'nodejs';
 
 /** 站点状态：返回当前会话有效性、用户信息、动态全局源与预置源 */
 export async function GET(req: Request) {
+  await ensureGistLoaded();
   const session = sessionFromCookieHeader(req.headers.get('cookie'));
 
   const globalSources = listGlobalSources();

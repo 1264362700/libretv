@@ -36,7 +36,7 @@ interface SourceItem {
 
 export function AdminModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { toast } = useToast();
-  const [tab, setTab] = useState<'invites' | 'users' | 'sources'>('invites');
+  const [tab, setTab] = useState<'invites' | 'users' | 'sources' | 'persistence'>('invites');
 
   // 邀请码状态
   const [invites, setInvites] = useState<InviteItem[]>([]);
@@ -54,6 +54,17 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
   const [sourceName, setSourceName] = useState('');
   const [sourceUrl, setSourceUrl] = useState('');
   const [sourceType, setSourceType] = useState<'vod' | 'live'>('vod');
+
+  // Gist 云持久化状态
+  const [gistStatus, setGistStatus] = useState<{
+    enabled: boolean;
+    gistId: string | null;
+    gistUrl: string | null;
+    lastSyncAt: number | null;
+    lastAction: 'pull' | 'push' | 'idle' | 'error';
+    lastError: string | null;
+  } | null>(null);
+  const [syncingGist, setSyncingGist] = useState(false);
 
   const [loading, setLoading] = useState(false);
 
@@ -84,13 +95,59 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
     }
   }, [toast]);
 
+  const fetchGistStatus = useCallback(async () => {
+    try {
+      const res = await api.admin.getGistStatus();
+      if (res.success) setGistStatus(res.status);
+    } catch {
+      // ignore
+    }
+  }, []);
+
   useEffect(() => {
     if (!open) return;
     setLoading(true);
     if (tab === 'invites') fetchInvites().finally(() => setLoading(false));
     if (tab === 'users') fetchUsers().finally(() => setLoading(false));
     if (tab === 'sources') fetchSources().finally(() => setLoading(false));
-  }, [open, tab, fetchInvites, fetchUsers, fetchSources]);
+    if (tab === 'persistence') fetchGistStatus().finally(() => setLoading(false));
+  }, [open, tab, fetchInvites, fetchUsers, fetchSources, fetchGistStatus]);
+
+  const handleSyncGist = async () => {
+    setSyncingGist(true);
+    try {
+      const res = await api.admin.syncGist();
+      if (res.success) {
+        toast('已成功将全量数据推送同步至 GitHub Gist 云端！', 'success');
+        fetchGistStatus();
+      } else {
+        toast(res.error || '同步失败', 'error');
+      }
+    } catch {
+      toast('同步网络异常', 'error');
+    } finally {
+      setSyncingGist(false);
+    }
+  };
+
+  const handlePullGist = async () => {
+    setSyncingGist(true);
+    try {
+      const res = await api.admin.pullGist();
+      if (res.success) {
+        toast('已从 GitHub Gist 强制拉取最新云端数据！', 'success');
+        fetchGistStatus();
+        fetchInvites();
+        fetchUsers();
+      } else {
+        toast(res.error || '拉取失败', 'error');
+      }
+    } catch {
+      toast('拉取网络异常', 'error');
+    } finally {
+      setSyncingGist(false);
+    }
+  };
 
   // 生成邀请码
   const handleGenerateInvites = async () => {
@@ -242,10 +299,11 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
         </div>
 
         {/* 选项卡 */}
-        <div className="flex items-center gap-1 px-5 pt-3 border-b border-line/60 bg-surface">
+        <div className="flex items-center gap-1 px-5 pt-3 border-b border-line/60 bg-surface overflow-x-auto no-scrollbar">
           <TabButton active={tab === 'invites'} onClick={() => setTab('invites')} icon="🎟️" label="邀请码管理" />
           <TabButton active={tab === 'users'} onClick={() => setTab('users')} icon="👥" label="用户管理" />
           <TabButton active={tab === 'sources'} onClick={() => setTab('sources')} icon="📡" label="全局源管理" />
+          <TabButton active={tab === 'persistence'} onClick={() => setTab('persistence')} icon="☁️" label="云端持久化" />
         </div>
 
         {/* 主内容区 */}
@@ -547,6 +605,100 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* —— 选项卡 4：云端持久化 —— */}
+          {tab === 'persistence' && (
+            <div className="space-y-4">
+              <div className="bg-card border border-line rounded-xl p-4 sm:p-5 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-2xl">☁️</span>
+                    <div>
+                      <h3 className="text-sm font-bold text-content">GitHub Gist 云端持久化状态</h3>
+                      <p className="text-xs text-faint">基于私有 Gist API 自动同步用户账号与邀请码，重新部署永不丢失</p>
+                    </div>
+                  </div>
+                  <span
+                    className={cn(
+                      'text-xs px-2.5 py-1 rounded-full font-semibold shrink-0 self-start sm:self-auto',
+                      gistStatus?.enabled
+                        ? 'bg-success/15 text-success border border-success/30'
+                        : 'bg-warning/15 text-warning border border-warning/30'
+                    )}
+                  >
+                    {gistStatus?.enabled ? '● 已连接云端' : '○ 本地临时存储'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 text-xs">
+                  <div className="bg-chip/50 p-3 rounded-xl border border-line/50 space-y-1">
+                    <span className="text-faint font-medium">云存储仓库 (Gist):</span>
+                    {gistStatus?.gistId ? (
+                      <div className="flex items-center gap-1.5 font-mono text-accent">
+                        <span className="truncate">{gistStatus.gistId}</span>
+                        {gistStatus.gistUrl && (
+                          <a
+                            href={gistStatus.gistUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="underline text-[11px] shrink-0"
+                          >
+                            查看 ↗
+                          </a>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-muted font-mono">{gistStatus?.enabled ? '初始化探测中...' : '未连接 (请配置 GITHUB_TOKEN)'}</p>
+                    )}
+                  </div>
+
+                  <div className="bg-chip/50 p-3 rounded-xl border border-line/50 space-y-1">
+                    <span className="text-faint font-medium">上次同步时间:</span>
+                    <p className="text-content font-mono">
+                      {gistStatus?.lastSyncAt ? new Date(gistStatus.lastSyncAt).toLocaleString() : '尚未同步'}
+                    </p>
+                  </div>
+                </div>
+
+                {gistStatus?.lastError && (
+                  <div className="p-3 bg-danger/10 border border-danger/20 rounded-xl text-xs text-danger">
+                    同步告警: {gistStatus.lastError}
+                  </div>
+                )}
+
+                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-line/40">
+                  <button
+                    className="btn-primary py-1.5 px-3 text-xs active:scale-95 disabled:opacity-50"
+                    onClick={handleSyncGist}
+                    disabled={!gistStatus?.enabled || syncingGist}
+                  >
+                    {syncingGist ? '同步中...' : '☁️ 立即同步至 Gist'}
+                  </button>
+                  <button
+                    className="btn-ghost py-1.5 px-3 text-xs active:scale-95 disabled:opacity-50"
+                    onClick={handlePullGist}
+                    disabled={!gistStatus?.enabled || syncingGist}
+                  >
+                    📥 从云端拉取覆盖
+                  </button>
+                  <button
+                    className="btn-ghost py-1.5 px-3 text-xs ml-auto active:scale-95"
+                    onClick={fetchGistStatus}
+                  >
+                    🔄 刷新状态
+                  </button>
+                </div>
+              </div>
+
+              {/* 说明与指引 */}
+              <div className="p-4 bg-chip/40 border border-line/60 rounded-xl text-xs space-y-2">
+                <p className="font-semibold text-content">💡 云持久化运作机制</p>
+                <p className="text-muted leading-relaxed">
+                  在 Render 控制台配置了 <code>GITHUB_TOKEN</code> 后，系统每次启动时会自动从您的 GitHub 私有 Gist 拉取最新的账号与邀请码；当用户注册或下发新邀请码时，后台会自动秒级异步写回云端，保证无论项目重新部署多少次，所有数据永久完好。
+                </p>
+              </div>
             </div>
           )}
         </div>

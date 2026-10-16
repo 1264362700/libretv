@@ -12,6 +12,10 @@ import {
   listGlobalSources,
   addGlobalSource,
   removeGlobalSource,
+  ensureGistLoaded,
+  getGistStatus,
+  manualSyncGist,
+  manualPullGist,
 } from '@/lib/auth-store';
 
 export const runtime = 'nodejs';
@@ -20,8 +24,14 @@ export async function GET(req: Request) {
   const { errorResponse } = guardAdminRequest(req);
   if (errorResponse) return errorResponse;
 
+  await ensureGistLoaded();
+
   const url = new URL(req.url);
   const type = url.searchParams.get('type') || 'invites';
+
+  if (type === 'gist_status') {
+    return NextResponse.json({ success: true, status: getGistStatus() });
+  }
 
   if (type === 'invites') {
     return NextResponse.json({ success: true, invites: listInviteCodes() });
@@ -42,6 +52,8 @@ export async function POST(req: Request) {
   const { errorResponse, session } = guardAdminRequest(req);
   if (errorResponse) return errorResponse;
 
+  await ensureGistLoaded();
+
   let body: Record<string, unknown>;
   try {
     body = (await req.json()) as Record<string, unknown>;
@@ -50,6 +62,16 @@ export async function POST(req: Request) {
   }
 
   const action = String(body.action || '');
+
+  // 0. Gist 手动同步与强制拉取
+  if (action === 'gist_sync') {
+    const res = await manualSyncGist();
+    return NextResponse.json(res);
+  }
+  if (action === 'gist_pull') {
+    const res = await manualPullGist();
+    return NextResponse.json(res);
+  }
 
   // 1. 生成邀请码
   if (action === 'create_invite') {

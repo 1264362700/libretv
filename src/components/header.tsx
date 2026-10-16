@@ -162,26 +162,30 @@ export function Header(_props?: { showSearch?: boolean }) {
             </button>
             <LanguageToggle />
             <ThemeToggle />
-            <IconButton label={t('nav.history', '观看历史')} onClick={() => setHistoryOpen(true)}>
-              <Icon name="clock" />
-            </IconButton>
+            <div className="hidden md:inline-flex">
+              <IconButton label={t('nav.history', '观看历史')} onClick={() => setHistoryOpen(true)}>
+                <Icon name="clock" />
+              </IconButton>
+            </div>
             <div className="hidden xl:inline-flex">
               <IconButton label={t('nav.downloads', '下载管理')} onClick={requestShowDownloadManager}>
                 <Icon name="download" />
               </IconButton>
             </div>
 
-            {/* 源管理：仅管理员可见 */}
+            {/* 源管理：仅管理员可见（移动端收拢至侧边抽屉，平板与桌面展示） */}
             {isAdmin && (
-              <IconButton label={t('nav.sourceManager', '源管理')} onClick={() => setSettingsOpen(true)}>
-                <Icon name="gear" />
-              </IconButton>
+              <div className="hidden md:inline-flex">
+                <IconButton label={t('nav.sourceManager', '源管理')} onClick={() => setSettingsOpen(true)}>
+                  <Icon name="gear" />
+                </IconButton>
+              </div>
             )}
 
-            {/* 管理员专属后台入口：平板模式纯图标徽章，xl 以上大屏展开文字 */}
+            {/* 管理员专属后台入口：移动端收拢至侧边抽屉，平板与桌面展示 */}
             {isAdmin && (
               <button
-                className="px-2 py-1 rounded-lg text-xs font-semibold bg-purple-500/15 text-purple-600 dark:text-purple-300 hover:bg-purple-500/25 active:scale-95 transition-all flex items-center gap-1 shrink-0"
+                className="hidden md:inline-flex px-2 py-1 rounded-lg text-xs font-semibold bg-purple-500/15 text-purple-600 dark:text-purple-300 hover:bg-purple-500/25 active:scale-95 transition-all items-center gap-1 shrink-0"
                 onClick={openAdminModal}
                 title="打开管理员后台（邀请码、用户与全局源）"
               >
@@ -190,9 +194,9 @@ export function Header(_props?: { showSearch?: boolean }) {
               </button>
             )}
 
-            {/* 用户状态或登录入口 */}
+            {/* 用户状态或登录入口：移动端已登录态收拢至侧边抽屉，彻底杜绝切边 */}
             {verified ? (
-              <div className="flex items-center gap-1 pl-1 border-l border-line/60">
+              <div className="hidden md:flex items-center gap-1 pl-1 border-l border-line/60">
                 <span
                   className="text-xs text-faint max-w-[4rem] sm:max-w-[5rem] truncate hidden sm:inline"
                   title={`当前账号: ${user?.username}`}

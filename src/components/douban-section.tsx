@@ -63,11 +63,39 @@ const DOC_SORTS = [
   { id: 'time', label: '最新发布' },
 ];
 
+/** 可用首页推荐数据源配置（图文徽章定义） */
+const RECOMMEND_SOURCES: {
+  id: 'douban' | 'baidu-top' | 'douban-top250' | 'hot-list' | 'bangumi';
+  label: string;
+  icon: string;
+  tag: string;
+  desc: string;
+}[] = [
+  { id: 'douban', label: '豆瓣精选', icon: '🔥', tag: '多维分类', desc: '全品类豆瓣热门多维深度筛选' },
+  { id: 'baidu-top', label: '百度实时榜', icon: '📈', tag: '极速直连', desc: '全网亿级实时搜索热度风云榜' },
+  { id: 'douban-top250', label: '豆瓣 Top250', icon: '🏆', tag: '影史神作', desc: '传世经典殿堂级必看影单' },
+  { id: 'hot-list', label: '豆瓣周榜', icon: '📊', tag: '每周口碑', desc: '华语与全球影视口碑风向标' },
+  { id: 'bangumi', label: '新番周历', icon: '✨', tag: '每日追番', desc: '日本动漫每日放送连载日程' },
+];
+
 /** 首页推荐区：支持全功能多维筛选 + 动漫新番周历 + 影视热榜 + 百度实时榜 + 豆瓣Top250 */
 export function RecommendSection({ onPick }: { onPick: (title: string) => void }) {
   const doubanEnabled = useAppStore((s) => s.doubanEnabled);
   const recommendSource = useAppStore((s) => s.recommendSource);
   const updateSettings = useAppStore((s) => s.updateSettings);
+
+  const handleSwitchSource = (sourceId: typeof recommendSource) => {
+    if (sourceId === recommendSource) return;
+    // 采用与主题切换一致的 W3C View Transitions 极速流体过渡
+    if (typeof document !== 'undefined' && 'startViewTransition' in document) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (document as any).startViewTransition(() => {
+        updateSettings({ recommendSource: sourceId, doubanEnabled: true });
+      });
+    } else {
+      updateSettings({ recommendSource: sourceId, doubanEnabled: true });
+    }
+  };
 
   if (!doubanEnabled) {
     return (
@@ -84,11 +112,65 @@ export function RecommendSection({ onPick }: { onPick: (title: string) => void }
     );
   }
 
-  if (recommendSource === 'baidu-top') return <BaiduTopView onPick={onPick} />;
-  if (recommendSource === 'douban-top250') return <DoubanTop250View onPick={onPick} />;
-  if (recommendSource === 'bangumi') return <BangumiView onPick={onPick} />;
-  if (recommendSource === 'hot-list') return <HotListView onPick={onPick} />;
-  return <DoubanMultiCategoryView onPick={onPick} />;
+  return (
+    <section className="my-6 space-y-4">
+      {/* 炫酷流体药丸数据源切换栏：支持 W3C View Transitions 丝滑过渡与弹性触感 */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-2 sm:p-2.5 bg-surface-raised/80 backdrop-blur-md rounded-2xl border border-line/60 shadow-xs">
+        <div className="flex items-center gap-2 px-1">
+          <span className="w-2 h-4.5 rounded-full bg-accent shrink-0 shadow-xs" />
+          <span className="text-xs sm:text-sm font-bold text-content tracking-wide">推荐数据源</span>
+          <span className="text-[11px] text-faint hidden md:inline">即时无缝切换</span>
+        </div>
+
+        {/* 交互胶囊选项组 */}
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar scroll-smooth py-0.5 px-0.5 w-full sm:w-auto">
+          {RECOMMEND_SOURCES.map((s) => {
+            const active = recommendSource === s.id;
+            return (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => handleSwitchSource(s.id)}
+                className={cn(
+                  'group relative flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all duration-300 active:scale-95 shrink-0 touch-manipulation cursor-pointer border',
+                  active
+                    ? 'bg-accent text-white border-accent shadow-md shadow-accent/25 font-semibold -translate-y-0.5'
+                    : 'bg-surface hover:bg-hover text-muted hover:text-content border-line hover:border-accent/30'
+                )}
+                title={`切换到 ${s.label}（${s.desc}）`}
+              >
+                {active && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse shrink-0" />
+                )}
+                <span>{s.icon}</span>
+                <span>{s.label}</span>
+                <span
+                  className={cn(
+                    'text-[10px] px-1.5 py-0.5 rounded-md transition-colors font-normal',
+                    active ? 'bg-white/20 text-white' : 'bg-chip text-faint group-hover:text-muted'
+                  )}
+                >
+                  {s.tag}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 动态内容视图 */}
+      <div key={recommendSource} className="transition-opacity duration-300">
+        {recommendSource === 'baidu-top' && <BaiduTopView onPick={onPick} />}
+        {recommendSource === 'douban-top250' && <DoubanTop250View onPick={onPick} />}
+        {recommendSource === 'bangumi' && <BangumiView onPick={onPick} />}
+        {recommendSource === 'hot-list' && <HotListView onPick={onPick} />}
+        {recommendSource !== 'baidu-top' &&
+          recommendSource !== 'douban-top250' &&
+          recommendSource !== 'bangumi' &&
+          recommendSource !== 'hot-list' && <DoubanMultiCategoryView onPick={onPick} />}
+      </div>
+    </section>
+  );
 }
 
 /**

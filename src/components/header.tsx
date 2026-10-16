@@ -173,14 +173,12 @@ export function Header(_props?: { showSearch?: boolean }) {
               </IconButton>
             </div>
 
-            {/* 源管理：仅管理员可见（移动端收拢至侧边抽屉，平板与桌面展示） */}
-            {isAdmin && (
-              <div className="hidden md:inline-flex">
-                <IconButton label={t('nav.sourceManager', '源管理')} onClick={() => setSettingsOpen(true)}>
-                  <Icon name="gear" />
-                </IconButton>
-              </div>
-            )}
+            {/* 设置与偏好：对所有用户开放 */}
+            <div className="hidden md:inline-flex">
+              <IconButton label={t('nav.settings', '设置')} onClick={() => setSettingsOpen(true)}>
+                <Icon name="gear" />
+              </IconButton>
+            </div>
 
             {/* 管理员专属后台入口：移动端收拢至侧边抽屉，平板与桌面展示 */}
             {isAdmin && (
@@ -230,7 +228,7 @@ export function Header(_props?: { showSearch?: boolean }) {
         </Suspense>
       </header>
 
-      {isAdmin && <SourceManagerDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} />}
+      <SourceManagerDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <HistoryPanel open={historyOpen} onClose={() => setHistoryOpen(false)} />
       <Suspense fallback={null}>
         <MobileNavDrawer
@@ -406,19 +404,17 @@ function MobileNavDrawer({
             <Icon name="clock" className="w-4 h-4 text-muted" />
             <span>{t('nav.history', '观看历史')}</span>
           </button>
-          {isAdmin && (
-            <button
-              type="button"
-              onClick={() => {
-                onClose();
-                onOpenSettings();
-              }}
-              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs text-muted hover:text-content hover:bg-hover transition-all active:scale-95 text-left cursor-pointer"
-            >
-              <Icon name="gear" className="w-4 h-4 text-muted" />
-              <span>{t('nav.sourceManager', '源管理')}</span>
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              onOpenSettings();
+            }}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs text-muted hover:text-content hover:bg-hover transition-all active:scale-95 text-left cursor-pointer"
+          >
+            <Icon name="gear" className="w-4 h-4 text-muted" />
+            <span>{t('nav.settings', '设置')}</span>
+          </button>
           <button
             type="button"
             onClick={() => {

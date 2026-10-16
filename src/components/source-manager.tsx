@@ -65,7 +65,6 @@ const SECONDARY_TABS: Record<PrimaryTab, { id: SecondaryTab; label: string }[]> 
 const TAB_STORAGE_KEY = 'libretv-settings-tab';
 
 export function SourceManagerDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { isAdmin } = useAuth();
   const [primary, setPrimary] = useState<PrimaryTab>('sources');
   const [secondary, setSecondary] = useState<Record<PrimaryTab, SecondaryTab>>({
     sources: 'vod',
@@ -105,9 +104,6 @@ export function SourceManagerDrawer({ open, onClose }: { open: boolean; onClose:
       /* 隐私模式等无法写入时忽略 */
     }
   }, [primary, secondary]);
-
-  // 非管理员严禁访问源管理
-  if (!isAdmin) return null;
 
   const current = secondary[primary];
 

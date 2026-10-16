@@ -32,10 +32,35 @@ import {
   db,
 } from '@/lib/db';
 import { buildWatchUrl, cn } from '@/lib/utils';
+import { SmartImage } from '@/components/smart-image';
+import { DoubanCard } from '@/components/video-card';
 
 interface CandidateItem {
   source: SourceConfig;
   result: SearchResultItem;
+}
+
+/** 演员与主创姓名解析：按逗号/斜杠/顿号/空格拆分为纯净字符串数组 */
+function parseNames(raw: string | undefined): string[] {
+  if (!raw) return [];
+  return raw
+    .split(/[/,，、\s|]+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0 && s !== '未知' && s !== '暂无' && s !== '无');
+}
+
+/** 剧情概述净化：去除采集站常见 HTML 实体与 CMS 标签 */
+function sanitizeDesc(raw: string | undefined): string {
+  if (!raw) return '';
+  return raw
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /**
@@ -166,6 +191,111 @@ function WatchContent() {
     }
     return list;
   }, [candidatesQuery.data, source, vodId, videoTitle]);
+
+  // 影片元数据提取（当前源详情优先，跨源检索候选兜底）
+  const videoInfo = detailQuery.data?.videoInfo;
+  const coverUrl = videoInfo?.cover || candidates.find((c) => c.result.pic)?.result.pic;
+  const yearText = videoInfo?.year || candidates.find((c) => c.result.year)?.result.year;
+  const typeText = videoInfo?.typeName || candidates.find((c) => c.result.typeName)?.result.typeName;
+  const areaText = videoInfo?.area || candidates.find((c) => c.result.area)?.result.area;
+  const remarksText = videoInfo?.remarks || candidates.find((c) => c.result.remarks)?.result.remarks;
+
+  const actorList = useMemo(() => parseNames(videoInfo?.actor), [videoInfo?.actor]);
+  const directorList = useMemo(() => parseNames(videoInfo?.director), [videoInfo?.director]);
+  const cleanDesc = useMemo(() => sanitizeDesc(videoInfo?.desc), [videoInfo?.desc]);
+
+  const [descExpanded, setDescExpanded] = useState(false);
+  useEffect(() => {
+    setDescExpanded(false);
+  }, [vodId, titleParam]);
+
+  // 跨源候选提供的备选剧照/封面图列表（展示多图）
+  const [selectedPoster, setSelectedPoster] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    setSelectedPoster(undefined);
+  }, [vodId, titleParam]);
+
+  const extraPics = useMemo(() => {
+    const list: string[] = [];
+    const seen = new Set<string>();
+    if (coverUrl) {
+      list.push(coverUrl);
+      seen.add(coverUrl);
+    }
+    for (const c of candidates) {
+      if (c.result.pic && !seen.has(c.result.pic)) {
+        list.push(c.result.pic);
+        seen.add(c.result.pic);
+      }
+    }
+    return list;
+  }, [coverUrl, candidates]);
+
+  const activePoster = selectedPoster || coverUrl;
+
+  // 猜你喜欢：推荐类别智能推导（剧集/电影/动漫/综艺/纪录片）
+  const recommendCategory = useMemo(() => {
+    const combined = `${typeText || ''} ${videoTitle || ''}`.toLowerCase();
+    if (combined.includes('漫') || combined.includes('动画') || combined.includes('番剧')) return 'anime';
+    if (combined.includes('综艺')) return 'variety';
+    if (combined.includes('纪录') || combined.includes('记录')) return 'documentary';
+    if (
+      combined.includes('剧') ||
+      combined.includes('电视') ||
+      combined.includes('连续剧') ||
+      combined.includes('国产') ||
+      combined.includes('美剧') ||
+      combined.includes('韩剧')
+    ) {
+      return 'tv';
+    }
+    return 'movie';
+  }, [typeText, videoTitle]);
+
+  const [recPage, setRecPage] = useState(0);
+  const [recRefreshing, setRecRefreshing] = useState(false);
+  useEffect(() => {
+    setRecPage(0);
+  }, [videoTitle]);
+
+  const recommendQuery = useQuery({
+    queryKey: ['watch-recommendations', recommendCategory, recPage, videoTitle],
+    queryFn: async ({ signal }) => {
+      // 1. 优先调用豆瓣同类题材推荐
+      try {
+        const res = await api.douban(recommendCategory, '热门', recPage * 12, 12, signal);
+        if (res.items && res.items.length > 0) {
+          const filtered = res.items.filter(
+            (item) => item.title && !videoTitle.includes(item.title) && !item.title.includes(videoTitle)
+          );
+          if (filtered.length > 0) return filtered;
+        }
+      } catch {
+        // 豆瓣源失败，尝试降级
+      }
+
+      // 2. 降级备用榜单（百度热播剧榜 / 豆瓣周榜）
+      try {
+        const hotKey = recommendCategory === 'tv' ? 'baidu_teleplay' : 'douban_weekly';
+        const res = await api.hotList(hotKey, signal);
+        if (res.items && res.items.length > 0) {
+          return res.items.filter(
+            (item) => item.title && !videoTitle.includes(item.title) && !item.title.includes(videoTitle)
+          );
+        }
+      } catch {
+        // 降级失败
+      }
+      return [];
+    },
+    staleTime: 5 * 60_000,
+  });
+
+  const handleRefreshRecommend = () => {
+    setRecRefreshing(true);
+    setRecPage((p) => (p + 1) % 5);
+    setTimeout(() => setRecRefreshing(false), 500);
+  };
 
   // 当前播放地址：优先取剧集列表中的当前集，其次直连 URL 参数
   const currentUrl = useMemo(() => {
@@ -600,6 +730,179 @@ function WatchContent() {
                 )}
               </div>
             </div>
+
+            {/* 影片档案卡片（海报 + 备用剧照微相册 + 演员表 + 剧情概述折叠） */}
+            <div className="relative p-3.5 sm:p-5 bg-surface-raised rounded-xl border border-line shadow-sm overflow-hidden min-w-0">
+              {/* 背景微弱环境氛围微晕 */}
+              {activePoster && (
+                <div
+                  className="absolute -right-12 -bottom-12 w-64 h-64 rounded-full bg-cover bg-center opacity-[0.04] dark:opacity-[0.08] blur-3xl pointer-events-none select-none"
+                  style={{ backgroundImage: `url(${activePoster})` }}
+                  aria-hidden
+                />
+              )}
+
+              <div className="flex flex-col sm:flex-row gap-3.5 sm:gap-5 items-start">
+                {/* 封面海报与备选剧照缩略栏 */}
+                <div className="shrink-0 flex flex-col items-center sm:items-start gap-2 w-full sm:w-auto">
+                  <div className="relative w-28 sm:w-32 md:w-36 aspect-[2/3] rounded-lg sm:rounded-xl overflow-hidden bg-chip shadow-md border border-line/50 shrink-0 mx-auto sm:mx-0 group">
+                    {activePoster ? (
+                      <SmartImage
+                        url={activePoster}
+                        mode={store.imageProxyMode}
+                        customProxy={store.customImageProxy}
+                        alt={videoTitle}
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-faint">
+                        <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={1.5}
+                            d="M7 4v16m10-16v16M3 6a1 1 0 011-1h1a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V6zm4 0a1 1 0 011-1h1a1 1 0 011 1v12a1 1 0 01-1 1h-1a1 1 0 01-1-1V6zm8 0a1 1 0 011-1h1a1 1 0 011 1v12a1 1 0 01-1 1h-1a1 1 0 01-1-1V6zm4 0a1 1 0 011-1h1a1 1 0 011 1v12a1 1 0 01-1 1h-1a1 1 0 01-1-1V6z"
+                          />
+                        </svg>
+                      </div>
+                    )}
+                    {remarksText && (
+                      <span className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-black/75 text-white/90 backdrop-blur-sm pointer-events-none truncate max-w-[90%]">
+                        {remarksText}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* 多图联动：展示其他源探测到的剧照/海报缩略图 */}
+                  {extraPics.length > 1 && (
+                    <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar max-w-[144px] py-0.5">
+                      {extraPics.slice(0, 4).map((pic, idx) => (
+                        <button
+                          key={pic + idx}
+                          type="button"
+                          onClick={() => setSelectedPoster(pic)}
+                          className={cn(
+                            'w-7 h-10 rounded border overflow-hidden shrink-0 transition-all cursor-pointer',
+                            activePoster === pic ? 'ring-2 ring-accent border-accent scale-105' : 'opacity-70 hover:opacity-100 border-line'
+                          )}
+                          title={`查看第 ${idx + 1} 张封面/剧照`}
+                        >
+                          <SmartImage
+                            url={pic}
+                            mode={store.imageProxyMode}
+                            customProxy={store.customImageProxy}
+                            alt=""
+                            className="w-full h-full object-cover"
+                          />
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* 影片主体信息 */}
+                <div className="flex-1 min-w-0 space-y-2.5 sm:space-y-3 w-full">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                      <h2 className="text-base sm:text-lg font-bold text-content leading-snug break-words">
+                        {videoTitle}
+                      </h2>
+                      {remarksText && !remarksText.includes('全') && (
+                        <span className="tag bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-medium text-[11px]">
+                          {remarksText}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* 元数据标签组 */}
+                    <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                      {typeText && <span className="tag bg-accent/15 text-accent">{typeText}</span>}
+                      {yearText && <span className="tag bg-purple-500/15 text-purple-600 dark:text-purple-300">{yearText}</span>}
+                      {areaText && <span className="tag bg-chip text-muted">{areaText}</span>}
+                      {episodes.length > 0 && (
+                        <span className="tag bg-blue-500/10 text-blue-600 dark:text-blue-400">共 {episodes.length} 集</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 导演与主创 */}
+                  {directorList.length > 0 && (
+                    <div className="flex items-center gap-2 text-xs text-muted flex-wrap">
+                      <span className="text-faint shrink-0">导演：</span>
+                      <div className="flex flex-wrap gap-1">
+                        {directorList.map((d) => (
+                          <button
+                            key={d}
+                            type="button"
+                            onClick={() => router.push(`/?s=${encodeURIComponent(d)}`)}
+                            className="text-content hover:text-accent hover:underline cursor-pointer"
+                            title={`点击搜索 ${d} 执导的作品`}
+                          >
+                            {d}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 演员表（芯片徽章 Pill 模式，支持点击直接搜索） */}
+                  {actorList.length > 0 && (
+                    <div className="text-xs">
+                      <div className="text-faint mb-1.5 flex items-center justify-between">
+                        <span>演员阵容 ({actorList.length})</span>
+                        <span className="text-[10px] text-faint hidden sm:inline">点击演员名可快速搜片</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 max-h-24 sm:max-h-28 overflow-y-auto scrollbar-thin pr-1">
+                        {actorList.map((act) => (
+                          <button
+                            key={act}
+                            type="button"
+                            onClick={() => router.push(`/?s=${encodeURIComponent(act)}`)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-chip/60 hover:bg-accent/15 text-content hover:text-accent border border-line/60 hover:border-accent/40 transition-colors touch-manipulation cursor-pointer"
+                            title={`搜索 ${act} 参演的作品`}
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-accent/70 shrink-0" />
+                            <span>{act}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 剧情简介 / 概述 */}
+                  <div className="text-xs sm:text-sm pt-2 border-t border-line/40">
+                    <div className="text-faint text-xs mb-1 font-medium">剧情概述</div>
+                    {cleanDesc ? (
+                      <div>
+                        <p
+                          className={cn(
+                            'text-muted leading-relaxed transition-all duration-300',
+                            !descExpanded && 'line-clamp-3'
+                          )}
+                        >
+                          {cleanDesc}
+                        </p>
+                        {cleanDesc.length > 80 && (
+                          <button
+                            type="button"
+                            onClick={() => setDescExpanded((v) => !v)}
+                            className="inline-flex items-center gap-1 text-xs text-accent hover:underline mt-1 font-medium cursor-pointer"
+                          >
+                            <span>{descExpanded ? '收起简介' : '展开全文'}</span>
+                            <Icon
+                              name="arrowDown"
+                              className={cn('w-3 h-3 transition-transform duration-200', descExpanded && 'rotate-180')}
+                            />
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-faint text-xs">暂无剧情简介</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* 剧集侧栏（桌面置右，移动端自适应置底，网格密度自动调整） */}
@@ -647,6 +950,58 @@ function WatchContent() {
             </p>
           </aside>
         </div>
+
+        {/* 猜你喜欢（全宽智能推荐流，iPad & Mobile 自适应多列网格） */}
+        <section className="mt-8 pt-6 border-t border-line/60 min-w-0">
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-5 rounded-full bg-accent shrink-0" />
+              <h2 className="text-base sm:text-lg font-bold text-content">猜你喜欢</h2>
+              <span className="text-xs text-faint hidden sm:inline">
+                {recommendCategory === 'tv'
+                  ? '根据当前剧集精选热门电视剧'
+                  : recommendCategory === 'anime'
+                    ? '精选热门动漫番剧'
+                    : recommendCategory === 'variety'
+                      ? '精选热门综艺节目'
+                      : '精选高分热门电影'}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={handleRefreshRecommend}
+              disabled={recommendQuery.isLoading || recRefreshing}
+              className="text-xs text-accent hover:text-accent/80 font-medium flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-surface hover:bg-hover border border-line transition-colors cursor-pointer disabled:opacity-50"
+              title="换一批推荐"
+            >
+              <Icon
+                name="refresh"
+                className={cn('w-3.5 h-3.5', (recommendQuery.isLoading || recRefreshing) && 'animate-spin')}
+              />
+              <span>换一批</span>
+            </button>
+          </div>
+
+          {recommendQuery.isLoading ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2.5 sm:gap-3.5">
+              {Array.from({ length: 12 }).map((_, i) => (
+                <div key={i} className="aspect-[2/3] rounded-xl bg-chip/40 animate-pulse border border-line/40" />
+              ))}
+            </div>
+          ) : (recommendQuery.data?.length ?? 0) === 0 ? (
+            <EmptyState variant="plain" title="暂无相关推荐" />
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2.5 sm:gap-3.5">
+              {recommendQuery.data!.slice(0, 12).map((item) => (
+                <DoubanCard
+                  key={item.id || item.title}
+                  item={item}
+                  onClick={() => router.push(buildWatchUrl({ title: item.title }))}
+                />
+              ))}
+            </div>
+          )}
+        </section>
       </main>
 
       {switchOpen && (

@@ -39,7 +39,7 @@ function mockUpstream(): { fn: ReturnType<typeof vi.fn> } {
   return { fn };
 }
 
-function makeRequest(urls: string[], stream: boolean): Request {
+function makeRequest(urls: string[], stream = true): Request {
   const { token } = signSession();
   return new Request(`https://local.test/api/live/probe${stream ? '?stream=1' : ''}`, {
     method: 'POST',

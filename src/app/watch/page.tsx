@@ -55,8 +55,18 @@ function WatchContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const store = useAppStore();
-  const { verified } = useAuth();
+  const { verified, checked } = useAuth();
   const { toast } = useToast();
+
+  // 播放前强制登录校验：未登录直接拦截重定向至 /login
+  useEffect(() => {
+    if (checked && !verified) {
+      if (typeof window !== 'undefined') {
+        const currentUrl = window.location.pathname + window.location.search;
+        router.replace(`/login?redirect=${encodeURIComponent(currentUrl)}`);
+      }
+    }
+  }, [checked, verified, router]);
 
   const sourceKey = searchParams.get('source') || '';
   const vodId = searchParams.get('id') || '';
@@ -350,8 +360,9 @@ function WatchContent() {
 
   if (!verified) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-faint text-sm">等待访问验证...</p>
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3">
+        <Spinner size="md" />
+        <p className="text-faint text-xs">正在跳转至登录校验...</p>
       </div>
     );
   }

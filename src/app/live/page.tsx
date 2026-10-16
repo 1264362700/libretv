@@ -48,8 +48,15 @@ function LiveContent() {
   const liveFavorites = useAppStore((s) => s.liveFavorites);
   const imageProxyMode = useAppStore((s) => s.imageProxyMode);
   const customImageProxy = useAppStore((s) => s.customImageProxy);
-  const { verified } = useAuth();
+  const { verified, checked } = useAuth();
   const [copied, setCopied] = useState(false);
+
+  // 直播播放前强制校验登录状态：未登录直接拦截重定向至 /login
+  useEffect(() => {
+    if (checked && !verified) {
+      router.replace('/login?redirect=' + encodeURIComponent('/live'));
+    }
+  }, [checked, verified, router]);
   // 移动端频道抽屉开合
   const [listOpen, setListOpen] = useState(false);
   const [logoFailed, setLogoFailed] = useState(false);
@@ -210,6 +217,15 @@ function LiveContent() {
         <div className="flex-1 flex items-center justify-center">
           <p className="text-faint text-sm">等待访问验证...</p>
         </div>
+      </div>
+    );
+  }
+
+  if (!verified) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3">
+        <Spinner size="md" />
+        <p className="text-faint text-xs">正在跳转至登录校验...</p>
       </div>
     );
   }

@@ -22,6 +22,7 @@ export const CHANNELS = [
   { id: 'tv', label: '电视剧', href: '/catalog?type=tv' },
   { id: 'anime', label: '动漫', href: '/catalog?type=anime' },
   { id: 'variety', label: '综艺', href: '/catalog?type=variety' },
+  { id: 'documentary', label: '纪录片', href: '/catalog?type=documentary' },
   { id: 'catalog', label: '片库', href: '/catalog' },
   { id: 'live', label: '直播', href: '/live' },
 ];
@@ -65,7 +66,7 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
   return (
     <>
       <header className="sticky top-0 z-40 bg-surface/90 backdrop-blur border-b border-line shadow-xs">
-        <div className="max-w-6xl mx-auto px-4 h-14 flex items-center gap-3">
+        <div className="max-w-6xl mx-auto px-4 h-14 flex items-center gap-2.5 sm:gap-3">
           {/* 手机模式专属侧边栏呼出按钮（汉堡菜单图标） */}
           <button
             type="button"
@@ -93,19 +94,14 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
             </div>
           </Link>
 
-          {/* 平板端专属流式频道胶囊 */}
-          <Suspense fallback={null}>
-            <TabletChannelNav />
-          </Suspense>
-
-          {/* 桌面端大导航 */}
+          {/* 桌面端单行大导航（仅在 lg: 1024px 及以上大屏展示，平板/手机端移入次顶栏彻底防碰撞） */}
           <Suspense fallback={null}>
             <DesktopChannelNav />
           </Suspense>
 
           {showSearch && (
             <form
-              className="flex-1 max-w-[140px] md:max-w-[200px] lg:max-w-md hidden sm:block ml-auto min-w-0"
+              className="flex-1 max-w-[160px] sm:max-w-[220px] md:max-w-xs lg:max-w-sm hidden sm:block mx-2 min-w-0"
               onSubmit={(e) => {
                 e.preventDefault();
                 submitSearch(query);
@@ -152,10 +148,8 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
             </form>
           )}
 
-          <div className="flex-1 sm:hidden" />
-
-          {/* 右侧功能入口组 */}
-          <nav className="flex items-center gap-1 sm:gap-1.5 shrink-0 ml-auto sm:ml-0">
+          {/* 右侧功能入口组：ml-auto 永久居右对齐，与左侧/搜索形成安全呼吸间隔 */}
+          <nav className="flex items-center gap-1 sm:gap-1.5 shrink-0 ml-auto">
             <div className="hidden xl:inline-flex">
               <HeaderLink href="/about" active={false}>
                 {t('nav.about', '关于')}
@@ -179,7 +173,7 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
               </IconButton>
             )}
 
-            {/* 管理员专属后台入口 */}
+            {/* 管理员专属后台入口：平板模式纯图标徽章，xl 以上大屏展开文字 */}
             {isAdmin && (
               <button
                 className="px-2 py-1 rounded-lg text-xs font-semibold bg-purple-500/15 text-purple-600 dark:text-purple-300 hover:bg-purple-500/25 active:scale-95 transition-all flex items-center gap-1 shrink-0"
@@ -187,7 +181,7 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
                 title="打开管理员后台（邀请码、用户与全局源）"
               >
                 <span>👑</span>
-                <span className="hidden sm:inline">{t('nav.admin', '管理中心')}</span>
+                <span className="hidden xl:inline">{t('nav.admin', '管理中心')}</span>
               </button>
             )}
 
@@ -220,9 +214,10 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
           </nav>
         </div>
 
-        {/* 移动端专属横向滑动频道栏：极简、单行顺滑、彻底避免顶栏换行拥挤 */}
+        {/* 平板与手机端专属独立毛玻璃频道导航栏（< lg 屏幕下渲染）：
+            彻底移出 Top Bar 单行，杜绝与搜索框及右侧工具按钮发生任何横向几何碰撞 */}
         <Suspense fallback={null}>
-          <MobileChannelBar />
+          <TabletMobileChannelBar />
         </Suspense>
       </header>
 
@@ -258,33 +253,6 @@ function useCurrentChannelId(): string {
   return '';
 }
 
-function TabletChannelNav() {
-  const currentId = useCurrentChannelId();
-  const { t } = useTranslation();
-
-  return (
-    <nav className="hidden md:flex lg:hidden items-center gap-1 min-w-0 overflow-x-auto no-scrollbar py-0.5 ml-1">
-      {CHANNELS.map((ch) => {
-        const isActive = currentId === ch.id;
-        return (
-          <Link
-            key={ch.id}
-            href={ch.href}
-            className={cn(
-              'shrink-0 px-2.5 py-1 rounded-lg text-xs font-medium transition-all active:scale-95 touch-manipulation',
-              isActive
-                ? 'bg-accent text-on-accent font-semibold shadow-xs'
-                : 'text-muted hover:text-content hover:bg-hover bg-chip/40'
-            )}
-          >
-            {t(`nav.${ch.id}`, ch.label)}
-          </Link>
-        );
-      })}
-    </nav>
-  );
-}
-
 function DesktopChannelNav() {
   const currentId = useCurrentChannelId();
   const { t } = useTranslation();
@@ -303,12 +271,13 @@ function DesktopChannelNav() {
   );
 }
 
-function MobileChannelBar() {
+/** 平板与移动端专属频道导航栏（< lg）：手机端顺滑横滑、平板端优雅居中，完全避免挤压顶栏 */
+function TabletMobileChannelBar() {
   const currentId = useCurrentChannelId();
   const { t } = useTranslation();
 
   return (
-    <div className="md:hidden border-t border-line/40 px-3 py-1.5 overflow-x-auto no-scrollbar flex items-center gap-1.5 bg-surface/95">
+    <div className="lg:hidden border-t border-line/40 px-3 sm:px-6 py-1.5 sm:py-2 overflow-x-auto no-scrollbar flex items-center justify-start md:justify-center gap-1.5 sm:gap-2 bg-surface/95 backdrop-blur-sm">
       {CHANNELS.map((ch) => {
         const isActive = currentId === ch.id;
         return (
@@ -316,7 +285,7 @@ function MobileChannelBar() {
             key={ch.id}
             href={ch.href}
             className={cn(
-              'shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-all active:scale-95 touch-manipulation',
+              'shrink-0 px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-full text-xs sm:text-sm font-medium transition-all active:scale-95 touch-manipulation',
               isActive
                 ? 'bg-accent text-on-accent font-semibold shadow-xs'
                 : 'text-muted hover:text-content hover:bg-hover bg-chip/40'

@@ -13,6 +13,7 @@ import { api } from '@/lib/client-api';
 import type { SearchResultItem, SourceSearchOutcome } from '@/lib/types';
 import { SearchHistoryDropdown, useSearchHistory } from '@/components/search-history';
 import { cn, formatDisableTtl, validateSourceUrl, buildWatchUrl } from '@/lib/utils';
+import { useAuth } from '@/components/auth';
 import { useToast } from '@/components/toast';
 import { EmptyState } from '@/components/states';
 import { Icon } from '@/components/icon';
@@ -36,8 +37,19 @@ export default function HomePage() {
 function HomeContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { verified } = useAuth();
   const { toast } = useToast();
   const urlQuery = searchParams.get('s') || '';
+
+  // 播放前强制登录校验
+  const handlePlayTitle = (title: string) => {
+    const watchUrl = buildWatchUrl({ title });
+    if (!verified) {
+      router.push(`/login?redirect=${encodeURIComponent(watchUrl)}`);
+      return;
+    }
+    router.push(watchUrl);
+  };
   // 精确订阅所需字段（对齐 live 页的做法）：搜索流式期间逐源写健康度、
   // 打开设置抽屉/历史面板等无关 store 变化，都不应触发首页整树重渲染
   const customAPIs = useAppStore((s) => s.customAPIs);
@@ -193,7 +205,7 @@ function HomeContent() {
         {!urlQuery && (
           <HeroBanner
             items={heroQuery.data?.items ?? []}
-            onPick={(title) => router.push(buildWatchUrl({ title }))}
+            onPick={handlePlayTitle}
           />
         )}
 
@@ -394,7 +406,7 @@ function HomeContent() {
         {/* 首页推荐（有搜索时隐藏） */}
         {!urlQuery && (
           <RecommendSection
-            onPick={(title) => router.push(buildWatchUrl({ title }))}
+            onPick={handlePlayTitle}
           />
         )}
       </main>

@@ -27,7 +27,8 @@ export default function LoginPage() {
 function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const nextUrl = searchParams.get('next') || '/';
+  const nextUrl = searchParams.get('redirect') || searchParams.get('next') || '/';
+  const kickNotice = searchParams.get('kickNotice') || '';
   const { verified, checked } = useAuth();
   const { toast } = useToast();
   const { t } = useTranslation();
@@ -152,6 +153,14 @@ function LoginContent() {
 
       <div className="mt-6 sm:mx-auto sm:w-full sm:max-w-md px-4 sm:px-0 relative z-10">
         <div className="bg-surface-raised border border-line shadow-xl rounded-2xl p-6 sm:p-8 backdrop-blur">
+          {/* 被顶号或下线提示 */}
+          {kickNotice && (
+            <div className="mb-5 p-3.5 bg-danger/10 border border-danger/30 rounded-xl text-danger text-xs flex items-center gap-2.5 animate-fade-in font-medium">
+              <span className="text-base shrink-0">⚠️</span>
+              <span>{kickNotice}</span>
+            </div>
+          )}
+
           {/* Tab 切换 */}
           <div className="flex rounded-xl bg-chip/60 p-1 mb-6 border border-line/40">
             <button

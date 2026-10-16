@@ -7,6 +7,7 @@ import type { SearchResultItem, VideoDetail } from '@/lib/types';
 import { buildWatchUrl } from '@/lib/utils';
 import { SmartImage } from './smart-image';
 import { useAppStore, resolveSource } from '@/lib/store';
+import { useAuth } from './auth';
 import { useToast } from './toast';
 import { cn } from '@/lib/utils';
 import { addSearchHistory } from '@/lib/db';
@@ -23,6 +24,7 @@ import { Icon } from './icon';
 export function DetailModal({ item, onClose }: { item: SearchResultItem | null; onClose: () => void }) {
   const store = useAppStore();
   const router = useRouter();
+  const { verified } = useAuth();
   const { toast } = useToast();
   const [detail, setDetail] = useState<VideoDetail | null>(null);
   const [loading, setLoading] = useState(false);
@@ -94,16 +96,19 @@ export function DetailModal({ item, onClose }: { item: SearchResultItem | null; 
 
   const play = (index: number) => {
     if (!detail || !detail.episodes[index]) return;
+    const watchUrl = buildWatchUrl({
+      sourceKey: item.sourceKey,
+      vodId: item.vodId,
+      index,
+      title: item.name,
+      sourceUrl: item.sourceUrl,
+    });
+    if (!verified) {
+      router.push(`/login?redirect=${encodeURIComponent(watchUrl)}`);
+      return;
+    }
     addSearchHistory(item.name).catch(() => {});
-    router.push(
-      buildWatchUrl({
-        sourceKey: item.sourceKey,
-        vodId: item.vodId,
-        index,
-        title: item.name,
-        sourceUrl: item.sourceUrl,
-      })
-    );
+    router.push(watchUrl);
   };
 
   const copyLinks = async () => {

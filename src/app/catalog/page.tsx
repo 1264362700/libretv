@@ -8,6 +8,7 @@ import { SiteFooter } from '@/components/site-footer';
 import { DoubanCard } from '@/components/video-card';
 import { MobileFilterSheet } from '@/components/mobile-filter-sheet';
 import { api } from '@/lib/client-api';
+import { useAuth } from '@/components/auth';
 import { useTranslation } from '@/lib/i18n';
 import { buildWatchUrl, cn } from '@/lib/utils';
 
@@ -92,6 +93,7 @@ export default function CatalogPage() {
 function CatalogContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { verified } = useAuth();
   const { t } = useTranslation();
 
   // URL 参数优先，支持外部链接与浏览器前进后退
@@ -186,9 +188,14 @@ function CatalogContent() {
   const total = catalogQuery.data?.total ?? (items.length > 0 ? items.length * 10 : 0);
   const totalPages = Math.max(1, Math.min(500, Math.ceil(total / PAGE_SIZE)));
 
-  // 点击卡片直接进入播放页面，自动匹配首条线路第一集秒播
+  // 点击卡片直接进入播放前进行登录校验
   const handleCardClick = (title: string) => {
-    router.push(buildWatchUrl({ title }));
+    const watchUrl = buildWatchUrl({ title });
+    if (!verified) {
+      router.push(`/login?redirect=${encodeURIComponent(watchUrl)}`);
+      return;
+    }
+    router.push(watchUrl);
   };
 
   const hasActiveFilters =

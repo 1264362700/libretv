@@ -1,13 +1,10 @@
 import { NextResponse } from 'next/server';
-import { guardRequest } from '@/lib/api-guard';
 import { fetchDoubanRecommend } from '@/lib/douban';
 
 export const runtime = 'nodejs';
 
-/** 豆瓣推荐：服务端直连 + 缓存，替代旧版浏览器经公共 CORS 代理的方案 */
+/** 豆瓣推荐：服务端直连 + 缓存，未登录用户可自由浏览与筛选片库 */
 export async function GET(req: Request) {
-  const guarded = guardRequest(req);
-  if (guarded) return guarded;
 
   const url = new URL(req.url);
   const rawType = url.searchParams.get('type') || 'movie';

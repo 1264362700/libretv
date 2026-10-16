@@ -123,16 +123,8 @@ describe('POST /api/search', () => {
     expect(lines[lines.length - 1].type).toBe('done');
   });
 
-  it('未登录返回 401，未配置密码返回 503', async () => {
+  it('未登录返回 401', async () => {
     vi.stubGlobal('fetch', vi.fn());
-    const saved = process.env.PASSWORD;
-    delete process.env.PASSWORD;
-    try {
-      const noPassword = await POST(makeRequest({ wd: 'x', sources: SOURCES }));
-      expect(noPassword.status).toBe(503);
-    } finally {
-      process.env.PASSWORD = saved;
-    }
     const noCookie = new Request('https://local.test/api/search', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

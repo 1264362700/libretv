@@ -214,19 +214,20 @@ export function isRelevant(name: string, wd: string): boolean {
   if (!nName || !nWd) return true; // 空关键词不参与过滤
   if (nName.includes(nWd)) return true;
 
-  // 容错 1：尝试经过智能清洗后的核心词
-  const clean = sanitizeSearchQuery(wd);
-  const nClean = normalizeTitle(clean);
-  if (nClean && (nName.includes(nClean) || nClean.includes(nName))) return true;
-
-  // 容错 2：多词查询（空格分隔）时任意核心大词命中即可
-  const tokens = wd.trim().split(/\s+/);
+  // 容错 1：多词查询（空格分隔）时每个词都命中才算相关
+  const tokens = wd.trim().split(/\s+/).filter(Boolean);
   if (tokens.length > 1) {
-    return tokens.some((t) => {
+    return tokens.every((t) => {
       const n = normalizeTitle(t);
-      return n && n.length >= 2 && nName.includes(n);
+      return !n || nName.includes(n);
     });
   }
+
+  // 容错 2：单词或无空格时，尝试经过智能清洗后的核心词
+  const clean = sanitizeSearchQuery(wd);
+  const nClean = normalizeTitle(clean);
+  if (nClean && nName.includes(nClean)) return true;
+
   return false;
 }
 

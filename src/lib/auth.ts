@@ -43,10 +43,13 @@ export function signSession(user?: {
   sessionVersion?: number;
 }): { token: string; expiresAt: number } {
   const expiresAt = Date.now() + SESSION_TTL_MS;
+  const username = user?.username || 'admin';
+  const dbUser = getUser(username);
+  const sessionVersion = user?.sessionVersion ?? dbUser?.sessionVersion ?? 1;
   const payloadObj: SessionPayload = {
-    username: user?.username || 'admin',
-    role: user?.role || 'admin',
-    sessionVersion: user?.sessionVersion ?? 1,
+    username,
+    role: user?.role || dbUser?.role || 'admin',
+    sessionVersion,
     expiresAt,
   };
   const payload = Buffer.from(JSON.stringify(payloadObj)).toString('base64url');
@@ -55,6 +58,7 @@ export function signSession(user?: {
 }
 
 export function checkPassword(password: string): boolean {
+  if (!process.env.PASSWORD && !process.env.ADMIN_PASSWORD) return false;
   return verifyUserCredentials('admin', password).success;
 }
 

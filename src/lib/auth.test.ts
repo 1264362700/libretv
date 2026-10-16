@@ -21,7 +21,7 @@ describe('signSession / verifySession', () => {
   it(' freshly 签发的会话 token 校验通过', () => {
     const { token, expiresAt } = signSession();
     expect(expiresAt).toBeGreaterThan(Date.now());
-    expect(verifySession(token)).toBe(true);
+    expect(verifySession(token).valid).toBe(true);
   });
 
   it('过期会话被拒绝', () => {
@@ -30,7 +30,7 @@ describe('signSession / verifySession', () => {
     const { token } = signSession();
     // 快进 91 天（TTL 90 天）
     vi.setSystemTime(new Date('2026-04-02T00:00:00Z'));
-    expect(verifySession(token)).toBe(false);
+    expect(verifySession(token).valid).toBe(false);
     vi.useRealTimers();
   });
 
@@ -39,7 +39,7 @@ describe('signSession / verifySession', () => {
     const sig = token.slice(token.lastIndexOf('.') + 1);
     // 用与真实 TTL（90 天）不同的偏移构造新 payload，保证签名与 payload 不匹配
     const forged = `${String(Date.now() + 95 * 24 * 3600 * 1000)}.${sig}`;
-    expect(verifySession(forged)).toBe(false);
+    expect(verifySession(forged).valid).toBe(false);
   });
 
   it('用自算 HMAC 伪造签名也无法通过（密钥派生含盐）', () => {
@@ -47,15 +47,15 @@ describe('signSession / verifySession', () => {
     const payload = String(Date.now() + 60_000);
     const naiveSecret = crypto.createHash('sha256').update(TEST_PASSWORD).digest('hex');
     const naive = crypto.createHmac('sha256', naiveSecret).update(payload).digest('hex');
-    expect(verifySession(`${payload}.${naive}`)).toBe(false);
+    expect(verifySession(`${payload}.${naive}`).valid).toBe(false);
   });
 
   it('格式非法的 token 一律拒绝', () => {
-    expect(verifySession(undefined)).toBe(false);
-    expect(verifySession('')).toBe(false);
-    expect(verifySession('no-dot-token')).toBe(false);
-    expect(verifySession('.sig')).toBe(false);
-    expect(verifySession('abc.not-hex-sig')).toBe(false);
+    expect(verifySession(undefined).valid).toBe(false);
+    expect(verifySession('').valid).toBe(false);
+    expect(verifySession('no-dot-token').valid).toBe(false);
+    expect(verifySession('.sig').valid).toBe(false);
+    expect(verifySession('abc.not-hex-sig').valid).toBe(false);
   });
 });
 
@@ -83,16 +83,16 @@ describe('checkPassword', () => {
 describe('sessionFromCookieHeader', () => {
   it('含有效会话的 Cookie 头通过', () => {
     const { token } = signSession();
-    expect(sessionFromCookieHeader(`${SESSION_COOKIE}=${token}`)).toBe(true);
-    expect(sessionFromCookieHeader(`other=1; ${SESSION_COOKIE}=${token}; x=2`)).toBe(true);
+    expect(sessionFromCookieHeader(`${SESSION_COOKIE}=${token}`).valid).toBe(true);
+    expect(sessionFromCookieHeader(`other=1; ${SESSION_COOKIE}=${token}; x=2`).valid).toBe(true);
   });
 
   it('缺失 / 篡改 / 无关 Cookie 头拒绝', () => {
     const { token } = signSession();
-    expect(sessionFromCookieHeader(null)).toBe(false);
-    expect(sessionFromCookieHeader('')).toBe(false);
-    expect(sessionFromCookieHeader(`other=1`)).toBe(false);
-    expect(sessionFromCookieHeader(`${SESSION_COOKIE}=${token}x`)).toBe(false);
+    expect(sessionFromCookieHeader(null).valid).toBe(false);
+    expect(sessionFromCookieHeader('').valid).toBe(false);
+    expect(sessionFromCookieHeader(`other=1`).valid).toBe(false);
+    expect(sessionFromCookieHeader(`${SESSION_COOKIE}=${token}x`).valid).toBe(false);
   });
 });
 

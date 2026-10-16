@@ -16,6 +16,9 @@ import {
   getGistStatus,
   manualSyncGist,
   manualPullGist,
+  getGlobalSourcesBackupStatus,
+  manualBackupGlobalSources,
+  manualRestoreGlobalSources,
 } from '@/lib/auth-store';
 
 export const runtime = 'nodejs';
@@ -42,7 +45,11 @@ export async function GET(req: Request) {
   }
 
   if (type === 'sources') {
-    return NextResponse.json({ success: true, sources: listGlobalSources() });
+    return NextResponse.json({
+      success: true,
+      sources: listGlobalSources(),
+      backup: getGlobalSourcesBackupStatus(),
+    });
   }
 
   return NextResponse.json({ success: false, error: '未知的查询类型' }, { status: 400 });
@@ -143,6 +150,18 @@ export async function POST(req: Request) {
     const key = String(body.key || '');
     const ok = removeGlobalSource(key);
     return NextResponse.json({ success: ok, error: ok ? undefined : '全局源不存在' });
+  }
+
+  // 9. 手动落盘全局源物理备份
+  if (action === 'backup_sources') {
+    const res = manualBackupGlobalSources();
+    return NextResponse.json(res);
+  }
+
+  // 10. 手动触发物理备份 + 环境变量智能合并恢复
+  if (action === 'restore_sources') {
+    const res = manualRestoreGlobalSources();
+    return NextResponse.json(res);
   }
 
   return NextResponse.json({ success: false, error: '未支持的管理员动作' }, { status: 400 });

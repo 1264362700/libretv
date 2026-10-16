@@ -2,6 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import os from 'node:os';
+import { getEnvSources } from './env-sources';
+import { getEnvLiveSources } from './env-live-sources';
 import {
   pullFromGist,
   schedulePushToGist,
@@ -230,17 +232,151 @@ function generateRandomCode(prefix = 'LTV'): string {
   return `${prefix}-${rand.slice(0, 4)}-${rand.slice(4)}`;
 }
 
-function bootstrapCuratedSources(store: AuthDataStore) {
-  // 智能增量合并：既保证全新数据库初始化，也能自动为已有数据库补全最新扩展的点播与直播矩阵
+function normalizeSourceUrl(u: string): string {
+  return (u || '').trim().toLowerCase().replace(/\/+$/, '');
+}
+
+export function getGlobalSourcesBackupFilePath(): string {
+  return path.join(getDataDir(), 'global-sources-backup.json');
+}
+
+/** 将当前全局源持久化保存至独立物理备份文件 */
+export function saveGlobalSourcesBackup(store: AuthDataStore): void {
+  try {
+    const dataDir = getDataDir();
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+    const backupFile = getGlobalSourcesBackupFilePath();
+    const sourcesList = Object.values(store.globalSources || {});
+    fs.writeFileSync(
+      backupFile,
+      JSON.stringify(
+        {
+          version: 1,
+          updatedAt: Date.now(),
+          count: sourcesList.length,
+          sources: sourcesList,
+        },
+        null,
+        2
+      ),
+      'utf-8'
+    );
+  } catch (err) {
+    console.warn('[LibreTV] 全局源管理备份写入异常:', err);
+  }
+}
+
+/** 读取物理备份文件中的全局源列表 */
+export function loadGlobalSourcesBackup(): GlobalSourceRecord[] {
+  try {
+    const backupFile = getGlobalSourcesBackupFilePath();
+    if (!fs.existsSync(backupFile)) return [];
+    const content = fs.readFileSync(backupFile, 'utf-8');
+    const parsed = JSON.parse(content);
+    if (Array.isArray(parsed)) return parsed as GlobalSourceRecord[];
+    if (parsed && Array.isArray(parsed.sources)) return parsed.sources as GlobalSourceRecord[];
+    return [];
+  } catch (err) {
+    console.warn('[LibreTV] 全局源管理备份读取异常:', err);
+    return [];
+  }
+}
+
+/**
+ * 启动时智能合并引擎：
+ * 同时读取物理备份文件、环境变量（DEFAULT_SOURCES / DEFAULT_LIVE_SOURCES）与内置高可用矩阵，
+ * 智能按 URL 去重合并，并自动同步落盘备份，保障任何环境下零数据丢失。
+ */
+export function bootstrapAndMergeGlobalSources(store: AuthDataStore): void {
   if (!store.globalSources) store.globalSources = {};
+
+  // 1. 建立以 URL 为核心的已存在索引
+  const existingMap = new Map<string, GlobalSourceRecord>();
+  for (const s of Object.values(store.globalSources)) {
+    if (s && s.url) {
+      existingMap.set(`${s.type}:${normalizeSourceUrl(s.url)}`, s);
+    }
+  }
+
+  // 2. 读取物理备份文件中的源（跨版本、跨容器迁移恢复）
+  const backupList = loadGlobalSourcesBackup();
+  for (const b of backupList) {
+    if (!b || !b.url) continue;
+    const keyTag = `${b.type}:${normalizeSourceUrl(b.url)}`;
+    if (!existingMap.has(keyTag)) {
+      const recordKey = b.key || `backup_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+      const rec: GlobalSourceRecord = {
+        key: recordKey,
+        name: b.name || b.url,
+        url: b.url,
+        type: b.type === 'live' ? 'live' : 'vod',
+        createdAt: b.createdAt || Date.now(),
+      };
+      store.globalSources[rec.key] = rec;
+      existingMap.set(keyTag, rec);
+    }
+  }
+
+  // 3. 读取环境变量 DEFAULT_SOURCES（点播）与 DEFAULT_LIVE_SOURCES（直播）合并注入
+  try {
+    const envVods = getEnvSources();
+    for (const v of envVods) {
+      if (!v || !v.url) continue;
+      const keyTag = `vod:${normalizeSourceUrl(v.url)}`;
+      if (!existingMap.has(keyTag)) {
+        const rec: GlobalSourceRecord = {
+          key: `env_merged_${v.key}`,
+          name: v.name,
+          url: v.url,
+          type: 'vod',
+          createdAt: Date.now(),
+        };
+        store.globalSources[rec.key] = rec;
+        existingMap.set(keyTag, rec);
+      }
+    }
+  } catch (err) {
+    console.warn('[LibreTV] 启动合并 DEFAULT_SOURCES 异常:', err);
+  }
+
+  try {
+    const envLives = getEnvLiveSources();
+    for (const l of envLives) {
+      if (!l || !l.url) continue;
+      const keyTag = `live:${normalizeSourceUrl(l.url)}`;
+      if (!existingMap.has(keyTag)) {
+        const rec: GlobalSourceRecord = {
+          key: `env_merged_${l.key}`,
+          name: l.name,
+          url: l.url,
+          type: 'live',
+          createdAt: Date.now(),
+        };
+        store.globalSources[rec.key] = rec;
+        existingMap.set(keyTag, rec);
+      }
+    }
+  } catch (err) {
+    console.warn('[LibreTV] 启动合并 DEFAULT_LIVE_SOURCES 异常:', err);
+  }
+
+  // 4. 内置顶级秒播 CMS 与高可用直播矩阵兜底
   for (const src of CURATED_DEFAULT_SOURCES) {
-    if (!store.globalSources[src.key]) {
-      store.globalSources[src.key] = {
+    const keyTag = `${src.type}:${normalizeSourceUrl(src.url)}`;
+    if (!existingMap.has(keyTag) && !store.globalSources[src.key]) {
+      const rec: GlobalSourceRecord = {
         ...src,
         createdAt: Date.now(),
       };
+      store.globalSources[src.key] = rec;
+      existingMap.set(keyTag, rec);
     }
   }
+
+  // 5. 立即同步回写物理备份，确保最新合并成果稳固持久化
+  saveGlobalSourcesBackup(store);
 }
 
 let isGistLoaded = false;
@@ -262,7 +398,7 @@ export async function ensureGistLoaded(): Promise<void> {
         if (cd.globalSources) inMemoryStore.globalSources = { ...inMemoryStore.globalSources, ...cd.globalSources };
         bootstrapAdmin(inMemoryStore);
         bootstrapSeedInvites(inMemoryStore);
-        bootstrapCuratedSources(inMemoryStore);
+        bootstrapAndMergeGlobalSources(inMemoryStore);
 
         const dataDir = getDataDir();
         if (!fs.existsSync(dataDir)) {
@@ -328,8 +464,8 @@ function loadStore(): AuthDataStore {
   bootstrapAdmin(inMemoryStore);
   // 确保初始种子邀请码
   bootstrapSeedInvites(inMemoryStore);
-  // 方案 B：确保预置顶级秒播 CMS 源矩阵
-  bootstrapCuratedSources(inMemoryStore);
+  // 同时读取物理备份 + 环境变量（DEFAULT_SOURCES / DEFAULT_LIVE_SOURCES）并智能合并与持久化备份
+  bootstrapAndMergeGlobalSources(inMemoryStore);
 
   saveStore(inMemoryStore);
   return inMemoryStore;
@@ -625,6 +761,7 @@ export function addGlobalSource(source: { name: string; url: string; type: 'vod'
   };
   store.globalSources[key] = record;
   saveStore(store);
+  saveGlobalSourcesBackup(store);
   return record;
 }
 
@@ -633,9 +770,45 @@ export function removeGlobalSource(key: string): boolean {
   if (store.globalSources[key]) {
     delete store.globalSources[key];
     saveStore(store);
+    saveGlobalSourcesBackup(store);
     return true;
   }
   return false;
+}
+
+export function getGlobalSourcesBackupStatus(): { exists: boolean; path: string; count: number; updatedAt?: number } {
+  try {
+    const backupFile = getGlobalSourcesBackupFilePath();
+    if (!fs.existsSync(backupFile)) {
+      return { exists: false, path: backupFile, count: 0 };
+    }
+    const content = fs.readFileSync(backupFile, 'utf-8');
+    const parsed = JSON.parse(content);
+    const count = Array.isArray(parsed) ? parsed.length : (parsed?.count ?? (Array.isArray(parsed?.sources) ? parsed.sources.length : 0));
+    return {
+      exists: true,
+      path: backupFile,
+      count,
+      updatedAt: parsed?.updatedAt,
+    };
+  } catch {
+    return { exists: false, path: getGlobalSourcesBackupFilePath(), count: 0 };
+  }
+}
+
+export function manualBackupGlobalSources(): { success: boolean; count: number; path: string } {
+  const store = loadStore();
+  saveGlobalSourcesBackup(store);
+  const status = getGlobalSourcesBackupStatus();
+  return { success: true, count: status.count, path: status.path };
+}
+
+export function manualRestoreGlobalSources(): { success: boolean; count: number } {
+  const store = loadStore();
+  bootstrapAndMergeGlobalSources(store);
+  saveStore(store);
+  const sources = Object.values(store.globalSources || {});
+  return { success: true, count: sources.length };
 }
 
 /** 跨重启会话版本平滑对齐 */

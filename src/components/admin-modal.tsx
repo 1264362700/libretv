@@ -66,6 +66,16 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
   } | null>(null);
   const [syncingGist, setSyncingGist] = useState(false);
 
+  // 全局源物理备份状态与操作锁
+  const [sourcesBackup, setSourcesBackup] = useState<{
+    exists: boolean;
+    path: string;
+    count: number;
+    updatedAt?: number;
+  } | null>(null);
+  const [backingUpSources, setBackingUpSources] = useState(false);
+  const [restoringSources, setRestoringSources] = useState(false);
+
   const [loading, setLoading] = useState(false);
 
   const fetchInvites = useCallback(async () => {
@@ -89,7 +99,10 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
   const fetchSources = useCallback(async () => {
     try {
       const res = await api.admin.getSources();
-      if (res.success) setSources(res.sources);
+      if (res.success) {
+        setSources(res.sources);
+        if (res.backup) setSourcesBackup(res.backup);
+      }
     } catch {
       toast('获取源列表失败', 'error');
     }
@@ -267,6 +280,40 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
       fetchSources();
     } catch {
       toast('删除失败', 'error');
+    }
+  };
+
+  const handleBackupSources = async () => {
+    setBackingUpSources(true);
+    try {
+      const res = await api.admin.backupSources();
+      if (res.success) {
+        toast(`物理备份成功，共备份 ${res.count} 个源`, 'success');
+        fetchSources();
+      } else {
+        toast(res.error || '备份失败', 'error');
+      }
+    } catch {
+      toast('备份失败', 'error');
+    } finally {
+      setBackingUpSources(false);
+    }
+  };
+
+  const handleRestoreSources = async () => {
+    setRestoringSources(true);
+    try {
+      const res = await api.admin.restoreSources();
+      if (res.success) {
+        toast(`智能合并恢复成功，当前共 ${res.count} 个有效源`, 'success');
+        fetchSources();
+      } else {
+        toast(res.error || '合并恢复失败', 'error');
+      }
+    } catch {
+      toast('合并恢复失败', 'error');
+    } finally {
+      setRestoringSources(false);
     }
   };
 
@@ -539,6 +586,47 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
           {/* —— 选项卡 3：全局源管理 —— */}
           {tab === 'sources' && (
             <div className="space-y-4">
+              {/* 全局源物理备份与启动合并引擎状态条 */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-surface border border-line/60 rounded-xl">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">💾</span>
+                    <span className="text-xs font-bold text-content">全局源物理备份与环境变量合并引擎</span>
+                    <span
+                      className={cn(
+                        'text-[10px] px-1.5 py-0.5 rounded font-mono',
+                        sourcesBackup?.exists ? 'bg-success/15 text-success' : 'bg-warning/15 text-warning'
+                      )}
+                    >
+                      {sourcesBackup?.exists ? `已就绪 · ${sourcesBackup.count} 个源备份` : '未检测到独立备份'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-faint">
+                    启动时自动读取物理备份与环境变量 (DEFAULT_SOURCES / DEFAULT_LIVE_SOURCES) 智能去重合并
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    disabled={backingUpSources}
+                    className="px-2.5 py-1 text-xs rounded-lg border border-line bg-chip hover:bg-hover text-muted hover:text-content active:scale-95 transition-all disabled:opacity-50"
+                    onClick={handleBackupSources}
+                    title="立即将当前全部源强制写入独立物理备份文件"
+                  >
+                    {backingUpSources ? '备份中...' : '立即写入备份'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={restoringSources}
+                    className="px-2.5 py-1 text-xs rounded-lg border border-accent/40 bg-accent/10 hover:bg-accent/20 text-accent font-medium active:scale-95 transition-all disabled:opacity-50"
+                    onClick={handleRestoreSources}
+                    title="重新读取独立物理备份 + 环境变量进行增量智能合并"
+                  >
+                    {restoringSources ? '合并中...' : '智能合并恢复'}
+                  </button>
+                </div>
+              </div>
+
               {/* 添加全局源 */}
               <div className="bg-chip/50 border border-line/60 rounded-xl p-3.5 space-y-3">
                 <h3 className="text-xs font-semibold text-content">发布全局公共源（全员自动同步）</h3>

@@ -176,7 +176,11 @@ export const api = {
         body: JSON.stringify({ action: 'reset_password', username, newPassword }),
       }),
     getSources: () =>
-      request<{ success: boolean; sources: Array<{ key: string; name: string; url: string; type: 'vod' | 'live'; createdAt: number }> }>('/api/admin?type=sources'),
+      request<{
+        success: boolean;
+        sources: Array<{ key: string; name: string; url: string; type: 'vod' | 'live'; createdAt: number }>;
+        backup?: { exists: boolean; path: string; count: number; updatedAt?: number };
+      }>('/api/admin?type=sources'),
     addSource: (data: { name: string; url: string; type: 'vod' | 'live' }) =>
       request<{ success: boolean; source?: { key: string; name: string; url: string; type: 'vod' | 'live' }; error?: string }>('/api/admin', {
         method: 'POST',
@@ -188,6 +192,18 @@ export const api = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'remove_source', key }),
+      }),
+    backupSources: () =>
+      request<{ success: boolean; count: number; path: string; error?: string }>('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'backup_sources' }),
+      }),
+    restoreSources: () =>
+      request<{ success: boolean; count: number; error?: string }>('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'restore_sources' }),
       }),
     getGistStatus: () =>
       request<{

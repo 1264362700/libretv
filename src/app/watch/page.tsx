@@ -439,10 +439,10 @@ function WatchContent() {
       </header>
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-2 sm:px-4 py-3 sm:py-5 overflow-x-hidden">
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4 sm:gap-5 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_340px] gap-4 sm:gap-5 items-start">
           {/* 左侧主视区：播放器 + 视频信息 + 就地选源面板 */}
-          <div>
-            <div className="relative aspect-video w-full bg-black rounded-xl overflow-hidden shadow-2xl border border-line/40">
+          <div className="min-w-0 w-full space-y-3.5">
+            <div className="relative aspect-video max-h-[72vh] w-full bg-black rounded-xl overflow-hidden shadow-2xl border border-line/40">
               {currentUrl ? (
                 <PlayerShell
                   url={currentUrl}
@@ -523,7 +523,7 @@ function WatchContent() {
             </div>
 
             {/* 播放线路 / 来源切换栏（横向滚动 Pill 药丸设计） */}
-            <div className="mt-3.5 p-3.5 bg-surface-raised rounded-xl border border-line shadow-sm">
+            <div className="p-3 sm:p-3.5 bg-surface-raised rounded-xl border border-line shadow-sm min-w-0 max-w-full overflow-hidden">
               <div className="flex items-center justify-between gap-2 mb-2.5">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-semibold text-content flex items-center gap-1.5">
@@ -548,7 +548,7 @@ function WatchContent() {
               </div>
 
               {/* 线路水平滚动按钮栏 */}
-              <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-0.5 no-scrollbar scroll-smooth">
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-0.5 no-scrollbar scroll-smooth w-full min-w-0">
                 {candidates.map((c) => {
                   const isCurrent = c.source.key === sourceKey;
                   const isFailed = failedSources.has(c.source.key);
@@ -592,7 +592,7 @@ function WatchContent() {
           </div>
 
           {/* 剧集侧栏（桌面置右，移动端自适应置底，网格密度自动调整） */}
-          <aside className="bg-surface-raised rounded-xl p-3 sm:p-3.5 h-fit border border-line shadow-sm">
+          <aside className="bg-surface-raised rounded-xl p-3 sm:p-3.5 h-fit border border-line shadow-sm lg:sticky lg:top-20">
             <div className="flex items-center justify-between gap-2 mb-3">
               <div className="flex items-center gap-1.5">
                 <h3 className="text-sm font-semibold text-content">剧集列表</h3>

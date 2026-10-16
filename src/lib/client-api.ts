@@ -113,18 +113,23 @@ export const api = {
       typeof credentials === 'string'
         ? { action: 'login', username: 'admin', password: credentials }
         : { action: 'login', ...credentials };
-    return request<{ success: boolean; user?: { username: string; role: 'admin' | 'user' } }>('/api/auth', {
+    return request<{ success: boolean; user?: { username: string; role: 'admin' | 'user' }; message?: string }>('/api/auth', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
   },
 
-  register: (data: { username: string; password: string; inviteCode: string }) =>
+  register: (data: { username: string; password: string; inviteCode?: string; code?: string }) =>
     request<{ success: boolean; user?: { username: string; role: 'admin' | 'user' }; message?: string }>('/api/auth', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'register', ...data }),
+      body: JSON.stringify({
+        action: 'register',
+        username: data.username,
+        password: data.password,
+        inviteCode: data.inviteCode || data.code,
+      }),
     }),
 
   logout: () => request<{ success: boolean }>('/api/auth', { method: 'DELETE' }),

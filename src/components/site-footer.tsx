@@ -9,7 +9,7 @@ export function SiteFooter() {
     <footer className="border-t border-line py-4">
       <p className="text-center text-xs text-faint">
         <span className="font-medium text-muted">
-          星芒影院 Nova Cinema{version ? ` v${version}` : ''}
+          cl Cinema{version ? ` v${version}` : ''}
         </span>
         {' · '}
         影院级超清影视探索平台

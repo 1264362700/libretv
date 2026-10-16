@@ -8,6 +8,7 @@ import { SiteFooter } from '@/components/site-footer';
 import { DoubanCard } from '@/components/video-card';
 import { MobileFilterSheet } from '@/components/mobile-filter-sheet';
 import { api } from '@/lib/client-api';
+import { useTranslation } from '@/lib/i18n';
 import { buildWatchUrl, cn } from '@/lib/utils';
 
 type ChannelType = 'movie' | 'tv' | 'anime' | 'variety' | 'documentary';
@@ -36,7 +37,7 @@ const CHANNELS_CONFIG: ChannelConfig[] = [
     icon: '📺',
     subTitle: '热门华语剧 · 经典美剧 · 精彩韩剧日剧',
     regions: ['全部', '大陆', '美国', '韩国', '日本', '香港', '台湾', '英国', '泰国'],
-    genres: ['全部', '剧情', '古装', '悬疑', '都市', '爱情', '喜剧', '科幻', '武侠', '战争', '刑侦', '历史'],
+    genres: ['全部', '言情', '古装', '都市', '剧情', '悬疑', '喜剧', '科幻', '武侠', '谍战', '历史', '伦理', '偶像'],
   },
   {
     id: 'anime',
@@ -44,7 +45,7 @@ const CHANNELS_CONFIG: ChannelConfig[] = [
     icon: '✨',
     subTitle: '连载新番 · 热血神作 · 剧场版经典',
     regions: ['全部', '日本', '大陆', '美国'],
-    genres: ['全部', '热血', '冒险', '搞笑', '奇幻', '科幻', '战斗', '恋爱', '校园', '悬疑', '治愈'],
+    genres: ['全部', '热血', '冒险', '搞笑', '奇幻', '科幻', '战斗', '恋爱', '校园', '悬疑', '治愈', '机战', '运动', '励志'],
   },
   {
     id: 'variety',
@@ -52,7 +53,7 @@ const CHANNELS_CONFIG: ChannelConfig[] = [
     icon: '🎤',
     subTitle: '爆笑下饭 · 音乐舞台 · 真实真人秀',
     regions: ['全部', '大陆', '韩国', '香港', '台湾', '美国'],
-    genres: ['全部', '真人秀', '搞笑', '音乐', '脱口秀', '竞技', '访谈', '情感', '美食'],
+    genres: ['全部', '真人秀', '脱口秀', '音乐', '访谈', '晚会', '文化', '情感', '搞笑', '美食', '竞技'],
   },
   {
     id: 'documentary',
@@ -91,6 +92,7 @@ export default function CatalogPage() {
 function CatalogContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { t } = useTranslation();
 
   // URL 参数优先，支持外部链接与浏览器前进后退
   const rawType = searchParams.get('type') || 'movie';
@@ -243,7 +245,7 @@ function CatalogContent() {
         <div className="hidden lg:block bg-chip/35 border border-line/50 rounded-2xl p-3 sm:p-4 space-y-2.5 sm:space-y-3">
           {/* 地区行 */}
           <FilterRow
-            label="地区"
+            label={t('catalog.region', '地区')}
             options={activeChannelConfig.regions}
             active={currentRegion}
             onSelect={(r) => updateFilters({ region: r })}
@@ -251,7 +253,7 @@ function CatalogContent() {
 
           {/* 类型行 */}
           <FilterRow
-            label="类型"
+            label={t('catalog.genre', '类型')}
             options={activeChannelConfig.genres}
             active={currentGenre}
             onSelect={(g) => updateFilters({ genre: g })}
@@ -259,7 +261,7 @@ function CatalogContent() {
 
           {/* 年份行 */}
           <FilterRow
-            label="年份"
+            label={t('catalog.year', '年份')}
             options={YEARS}
             active={currentYear}
             onSelect={(y) => updateFilters({ year: y })}
@@ -268,7 +270,7 @@ function CatalogContent() {
           {/* 排序行 */}
           <div className="flex items-center justify-between pt-1 border-t border-line/40 gap-2 flex-wrap">
             <div className="flex items-center gap-1.5 sm:gap-2">
-              <span className="text-xs font-semibold text-faint shrink-0 w-8 sm:w-10 text-left sm:text-right">排序:</span>
+              <span className="text-xs font-semibold text-faint shrink-0 w-8 sm:w-10 text-left sm:text-right">{t('catalog.sort', '排序')}:</span>
               <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
                 {SORTS.map((s) => (
                   <button

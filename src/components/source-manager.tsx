@@ -64,6 +64,7 @@ const SECONDARY_TABS: Record<PrimaryTab, { id: SecondaryTab; label: string }[]> 
 const TAB_STORAGE_KEY = 'libretv-settings-tab';
 
 export function SourceManagerDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { isAdmin } = useAuth();
   const [primary, setPrimary] = useState<PrimaryTab>('sources');
   const [secondary, setSecondary] = useState<Record<PrimaryTab, SecondaryTab>>({
     sources: 'vod',
@@ -71,7 +72,6 @@ export function SourceManagerDrawer({ open, onClose }: { open: boolean; onClose:
     data: 'io',
   });
 
-  // 挂载后读取上次位置（不在渲染期读 localStorage，避免 SSR/hydration 不一致）
   useEffect(() => {
     try {
       const raw = localStorage.getItem(TAB_STORAGE_KEY);
@@ -80,7 +80,6 @@ export function SourceManagerDrawer({ open, onClose }: { open: boolean; onClose:
         primary?: PrimaryTab;
         secondary?: Partial<Record<PrimaryTab, SecondaryTab>>;
       };
-      // 旧版把「数据源订阅」放在「数据」下，现已迁至「源管理」：自动重定向到新位置
       const migratedSubs = saved.secondary?.data === 'subs';
       const targetPrimary = migratedSubs && saved.primary === 'data' ? 'sources' : saved.primary;
       if (targetPrimary && SECONDARY_TABS[targetPrimary]) setPrimary(targetPrimary);
@@ -94,7 +93,7 @@ export function SourceManagerDrawer({ open, onClose }: { open: boolean; onClose:
         return next;
       });
     } catch {
-      /* 本地记录损坏时忽略，回到默认面板 */
+      /* ignore */
     }
   }, []);
 
@@ -105,6 +104,9 @@ export function SourceManagerDrawer({ open, onClose }: { open: boolean; onClose:
       /* 隐私模式等无法写入时忽略 */
     }
   }, [primary, secondary]);
+
+  // 非管理员严禁访问源管理
+  if (!isAdmin) return null;
 
   const current = secondary[primary];
 

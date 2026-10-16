@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { getUser, verifyUserCredentials } from './auth-store';
+import { getUser, verifyUserCredentials, syncUserSessionVersion, restoreUserSession } from './auth-store';
 
 /**
  * 会话鉴权：httpOnly cookie + HMAC 签名。
@@ -87,9 +87,10 @@ export function verifySession(token: string | undefined | null): VerifySessionRe
       return { valid: false, reason: 'EXPIRED', message: '登录状态已过期，请重新登录' };
     }
 
-    const user = getUser(parsed.username);
+    let user = getUser(parsed.username);
     if (!user) {
-      return { valid: false, reason: 'USER_NOT_FOUND', message: '账号已不存在' };
+      // 容灾设计：Render 容器重启重置临时内存时，若具备合法 HMAC 签名则平滑复原
+      user = restoreUserSession(parsed.username, parsed.role || 'user', parsed.sessionVersion);
     }
 
     if (user.status === 'banned') {
@@ -97,12 +98,18 @@ export function verifySession(token: string | undefined | null): VerifySessionRe
     }
 
     // 核心安全逻辑：顶号互踢校验
-    if (user.sessionVersion !== parsed.sessionVersion) {
+    // 只有当客户端版本小于服务端更高版本时才断定被新设备顶下线；
+    // 若客户端版本 >= 服务端版本（如容器重启重置为 1），则平滑同步为客户端最新版本，彻底根除跨部署掉签
+    if (parsed.sessionVersion < user.sessionVersion) {
       return {
         valid: false,
         reason: 'KICKED_OUT',
         message: '您的账号已在其他设备登录，当前会话已下线',
       };
+    }
+
+    if (parsed.sessionVersion > user.sessionVersion) {
+      syncUserSessionVersion(user.username, parsed.sessionVersion);
     }
 
     return {

@@ -44,6 +44,7 @@ function mapCatId(type: string, tag: string): number {
   }
   if (type === 'anime') return 4;
   if (type === 'variety') return 3;
+  if (type === 'documentary') return 1;
   return 1;
 }
 
@@ -70,14 +71,28 @@ function mapRank(sort: string): 'rankhot' | 'ranklatest' | 'rankpoint' {
   return 'rankhot';
 }
 
-function mapGenre(tag: string): string {
+function mapGenre(tag: string, catId = 1): string {
   const t = (tag || '').trim();
   if (!t || t === '全部' || t === '热门' || t === '最新' || t === '经典' || t === '高分' || t === '冷门佳片') return '';
+
+  // 电视剧 (catid=2) 关键词特殊对其：360kan 用言情/谍战/悬疑
+  if (catId === 2) {
+    if (t.includes('爱情')) return '言情';
+    if (t.includes('刑侦')) return '悬疑';
+    if (t.includes('战争') || t.includes('军旅')) return '谍战';
+  }
+
+  // 动漫 (catid=4)
+  if (catId === 4) {
+    if (t.includes('爱情')) return '恋爱';
+  }
+
   const genres = [
-    '动作', '喜剧', '爱情', '科幻', '恐怖', '惊悚', '战争', '悬疑', '动画', '剧情',
-    '纪录片', '脱口秀', '真人秀', '古装', '都市', '武侠', '刑侦', '历史', '奇幻', '犯罪',
-    '热血', '冒险', '搞笑', '战斗', '恋爱', '校园', '治愈', '音乐', '竞技', '访谈',
-    '情感', '美食', '自然', '科学', '人文', '军事', '探险', '地理', '选秀', '家庭', '传记', '歌舞'
+    '言情', '古装', '都市', '偶像', '剧情', '武侠', '谍战', '悬疑', '奇幻', '科幻', '神话',
+    '喜剧', '动作', '动作片', '动作', '恐怖', '惊悚', '战争', '犯罪', '纪录片',
+    '热血', '冒险', '搞笑', '战斗', '机战', '恋爱', '校园', '治愈', '运动', '励志',
+    '真人秀', '脱口秀', '音乐', '访谈', '晚会', '文化', '情感', '美食', '竞技',
+    '自然', '科学', '人文', '军事', '探险', '地理', '伦理', '历史', '农村'
   ];
   for (const g of genres) {
     if (t.includes(g)) return g;
@@ -104,7 +119,10 @@ export async function fetchDoubanRecommend(
   const area = options?.area !== undefined ? mapArea(options.area) : mapArea(rawTag);
 
   // 2. 类型提取：显式 options.genre 优先；未传 options.genre 时才尝试从 rawTag 解析
-  const genre = options?.genre !== undefined ? mapGenre(options.genre) : mapGenre(rawTag);
+  let genre = options?.genre !== undefined ? mapGenre(options.genre, catId) : mapGenre(rawTag, catId);
+  if (type === 'documentary' && !genre) {
+    genre = '纪录片';
+  }
 
   // 3. 年份提取：严格仅接受 4 位纯数字
   let year = '';
@@ -118,7 +136,7 @@ export async function fetchDoubanRecommend(
   const pageno = Math.max(1, Math.floor(pageStart / size) + 1);
 
   // 严格隔离缓存 key，彻底杜绝历史坏榜单缓存污染
-  const cacheKey = `kan360:v6:${catId}:${area}:${genre}:${year}:${rank}:${pageno}:${size}`;
+  const cacheKey = `kan360:v7:${catId}:${area}:${genre}:${year}:${rank}:${pageno}:${size}`;
   const cached = getCache<DoubanRecommendResult>(cacheKey);
   if (cached) return cached;
 

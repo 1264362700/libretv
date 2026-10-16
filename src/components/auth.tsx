@@ -269,8 +269,8 @@ function AuthModal({
         <div className="p-6 pb-2">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-bold text-content flex items-center gap-2">
-              <span className="text-accent text-xl">🎬</span>
-              <span>星芒影院 访问中心</span>
+              <span className="w-6 h-6 rounded-lg bg-accent text-white flex items-center justify-center font-black text-xs">cl</span>
+              <span>cl 访问中心</span>
             </h2>
             <button
               className="text-faint hover:text-content text-sm p-1 rounded-md active:scale-90"

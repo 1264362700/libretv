@@ -4,11 +4,11 @@ import { Providers } from '@/components/providers';
 
 export const metadata: Metadata = {
   title: {
-    default: '星芒影院 - 影院级超清影视探索平台',
-    template: '%s - 星芒影院',
+    default: 'cl - 影院级超清影视探索平台',
+    template: '%s - cl',
   },
   description:
-    '星芒影院（Nova Cinema）是一个现代化全网聚合在线影视平台，无广告、极速秒播，支持跳过片头片尾与原画播放。',
+    'cl（CL Cinema）是一个现代化全网聚合在线影视平台，无广告、极速秒播，支持跳过片头片尾与原画播放。',
   manifest: '/manifest.webmanifest',
   // 图标与门户站（LibreTV-portal）同一套：同一张 artwork 导出的多尺寸 + 根目录 favicon.ico 兜底。
   // 只声明单张 512 时，抓取端只能拿大图缩放，小尺寸下易糊、看起来「没填满」。

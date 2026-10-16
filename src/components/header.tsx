@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { Suspense, useEffect, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { ThemeToggle } from './theme';
+import { LanguageToggle } from './language-toggle';
 import { useAuth } from './auth';
 import { Drawer } from './drawer';
 import { SourceManagerDrawer } from './source-manager';
@@ -12,6 +13,7 @@ import { requestShowDownloadManager } from './download-manager';
 import { SHOW_HISTORY_EVENT, SHOW_SETTINGS_EVENT } from './mobile-bottom-bar';
 import { Icon } from './icon';
 import { SearchHistoryDropdown, useSearchHistory } from './search-history';
+import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 
 export const CHANNELS = [
@@ -33,7 +35,8 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
   const [query, setQuery] = useState('');
   const searchHistory = useSearchHistory(query);
 
-  const { verified, user, isAdmin, openLogin, openAdminModal, logout } = useAuth();
+  const { verified, user, isAdmin, openAdminModal, logout } = useAuth();
+  const { t } = useTranslation();
 
   useEffect(() => {
     const handleHistory = () => setHistoryOpen(true);
@@ -78,21 +81,14 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
             </svg>
           </button>
 
-          <Link href="/" aria-label="星芒影院 首页" className="flex items-center gap-2.5 shrink-0 group">
-            <div className="flex items-center justify-center w-8 h-8 rounded-lg border border-line/70 bg-surface/80 group-hover:border-accent/70 group-hover:bg-accent/5 transition-all">
-              <svg className="w-4.5 h-4.5 text-accent transition-transform duration-300 group-hover:scale-110" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="2.5" y="4" width="19" height="13" rx="3" />
-                <polygon points="10 8 15.5 10.5 10 13 10 8" />
-                <line x1="8" y1="20" x2="16" y2="20" />
-                <line x1="12" y1="17" x2="12" y2="20" />
-              </svg>
+          {/* 极简 cl 品牌 Logo */}
+          <Link href="/" aria-label="cl 首页" className="flex items-center gap-2 shrink-0 group">
+            <div className="flex items-center justify-center w-8 h-8 rounded-xl bg-accent text-white font-black text-sm tracking-tighter shadow-sm group-hover:scale-105 transition-all">
+              cl
             </div>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-base sm:text-lg font-bold tracking-tight text-content group-hover:text-accent transition-colors">
-                星芒<span className="text-accent">影院</span>
-              </span>
-              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded border border-line text-muted tracking-wider uppercase hidden sm:inline-block">
-                NOVA
+            <div className="flex items-baseline gap-1">
+              <span className="text-base sm:text-lg font-extrabold tracking-tight text-content group-hover:text-accent transition-colors font-mono">
+                cl<span className="text-accent">.tv</span>
               </span>
             </div>
           </Link>
@@ -162,21 +158,26 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
           <nav className="flex items-center gap-1 sm:gap-1.5 shrink-0 ml-auto sm:ml-0">
             <div className="hidden xl:inline-flex">
               <HeaderLink href="/about" active={false}>
-                关于
+                {t('nav.about', '关于')}
               </HeaderLink>
             </div>
+            <LanguageToggle />
             <ThemeToggle />
-            <IconButton label="观看历史" onClick={() => setHistoryOpen(true)}>
+            <IconButton label={t('nav.history', '观看历史')} onClick={() => setHistoryOpen(true)}>
               <Icon name="clock" />
             </IconButton>
             <div className="hidden xl:inline-flex">
-              <IconButton label="下载管理" onClick={requestShowDownloadManager}>
+              <IconButton label={t('nav.downloads', '下载管理')} onClick={requestShowDownloadManager}>
                 <Icon name="download" />
               </IconButton>
             </div>
-            <IconButton label="设置" onClick={() => setSettingsOpen(true)}>
-              <Icon name="gear" />
-            </IconButton>
+
+            {/* 源管理：仅管理员可见 */}
+            {isAdmin && (
+              <IconButton label={t('nav.sourceManager', '源管理')} onClick={() => setSettingsOpen(true)}>
+                <Icon name="gear" />
+              </IconButton>
+            )}
 
             {/* 管理员专属后台入口 */}
             {isAdmin && (
@@ -186,7 +187,7 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
                 title="打开管理员后台（邀请码、用户与全局源）"
               >
                 <span>👑</span>
-                <span className="hidden sm:inline">管理中心</span>
+                <span className="hidden sm:inline">{t('nav.admin', '管理中心')}</span>
               </button>
             )}
 
@@ -204,17 +205,17 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
                   onClick={logout}
                   title="登出账号"
                 >
-                  退出
+                  {t('nav.logout', '退出')}
                 </button>
               </div>
             ) : (
-              <button
+              <Link
+                href="/login"
                 className="btn-primary px-2.5 py-1 text-xs rounded-lg active:scale-95 shrink-0"
-                onClick={openLogin}
               >
-                <span className="sm:hidden">登录</span>
-                <span className="hidden sm:inline">登录 / 注册</span>
-              </button>
+                <span className="sm:hidden">{t('nav.login', '登录')}</span>
+                <span className="hidden sm:inline">{t('nav.loginOrRegister', '登录 / 注册')}</span>
+              </Link>
             )}
           </nav>
         </div>
@@ -225,7 +226,7 @@ export function Header({ showSearch = false }: { showSearch?: boolean }) {
         </Suspense>
       </header>
 
-      <SourceManagerDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      {isAdmin && <SourceManagerDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} />}
       <HistoryPanel open={historyOpen} onClose={() => setHistoryOpen(false)} />
       <Suspense fallback={null}>
         <MobileNavDrawer
@@ -259,6 +260,7 @@ function useCurrentChannelId(): string {
 
 function TabletChannelNav() {
   const currentId = useCurrentChannelId();
+  const { t } = useTranslation();
 
   return (
     <nav className="hidden md:flex lg:hidden items-center gap-1 min-w-0 overflow-x-auto no-scrollbar py-0.5 ml-1">
@@ -275,7 +277,7 @@ function TabletChannelNav() {
                 : 'text-muted hover:text-content hover:bg-hover bg-chip/40'
             )}
           >
-            {ch.label}
+            {t(`nav.${ch.id}`, ch.label)}
           </Link>
         );
       })}
@@ -285,6 +287,7 @@ function TabletChannelNav() {
 
 function DesktopChannelNav() {
   const currentId = useCurrentChannelId();
+  const { t } = useTranslation();
 
   return (
     <nav className="hidden lg:flex items-center gap-1 ml-3">
@@ -292,7 +295,7 @@ function DesktopChannelNav() {
         const isActive = currentId === ch.id;
         return (
           <HeaderLink key={ch.id} href={ch.href} active={isActive}>
-            {ch.label}
+            {t(`nav.${ch.id}`, ch.label)}
           </HeaderLink>
         );
       })}
@@ -302,6 +305,7 @@ function DesktopChannelNav() {
 
 function MobileChannelBar() {
   const currentId = useCurrentChannelId();
+  const { t } = useTranslation();
 
   return (
     <div className="md:hidden border-t border-line/40 px-3 py-1.5 overflow-x-auto no-scrollbar flex items-center gap-1.5 bg-surface/95">
@@ -318,7 +322,7 @@ function MobileChannelBar() {
                 : 'text-muted hover:text-content hover:bg-hover bg-chip/40'
             )}
           >
-            {ch.label}
+            {t(`nav.${ch.id}`, ch.label)}
           </Link>
         );
       })}
@@ -338,7 +342,8 @@ function MobileNavDrawer({
   onOpenSettings: () => void;
 }) {
   const currentId = useCurrentChannelId();
-  const { verified, user, isAdmin, openLogin, openAdminModal, logout } = useAuth();
+  const { verified, user, isAdmin, openAdminModal, logout } = useAuth();
+  const { t } = useTranslation();
   const router = useRouter();
   const [drawerQuery, setDrawerQuery] = useState('');
 
@@ -362,14 +367,14 @@ function MobileNavDrawer({
   ];
 
   return (
-    <Drawer open={open} onClose={onClose} title="星芒影院 导航" side="left" width="max-w-[290px]">
+    <Drawer open={open} onClose={onClose} title="cl 导航" side="left" width="max-w-[290px]">
       <div className="space-y-4">
         {/* 抽屉内快捷搜索 */}
         <form onSubmit={handleSearch} className="relative">
           <input
             type="text"
             className="input w-full h-8.5 text-xs pl-8 pr-2"
-            placeholder="搜索影片、演员或剧集..."
+            placeholder={t('nav.searchPlaceholder', '搜索影片、演员或剧集...')}
             value={drawerQuery}
             onChange={(e) => setDrawerQuery(e.target.value)}
           />
@@ -380,7 +385,7 @@ function MobileNavDrawer({
 
         {/* 核心频道大厅 */}
         <div className="space-y-1">
-          <p className="text-[11px] font-semibold text-faint px-2 uppercase tracking-wider">探索频道</p>
+          <p className="text-[11px] font-semibold text-faint px-2 uppercase tracking-wider">{t('nav.catalog', '探索频道')}</p>
           {navItems.map((item) => {
             const active = currentId === item.id;
             return (
@@ -398,7 +403,7 @@ function MobileNavDrawer({
                 <div className="flex items-center gap-2.5">
                   <span className="text-base">{item.icon}</span>
                   <div className="flex flex-col text-left">
-                    <span className={cn(active ? 'text-accent font-bold' : 'text-content')}>{item.label}</span>
+                    <span className={cn(active ? 'text-accent font-bold' : 'text-content')}>{t(`nav.${item.id}`, item.label)}</span>
                     {item.desc && <span className="text-[10px] text-faint font-normal">{item.desc}</span>}
                   </div>
                 </div>
@@ -410,7 +415,7 @@ function MobileNavDrawer({
 
         {/* 快捷工具与设置 */}
         <div className="pt-2 border-t border-line/50 space-y-1">
-          <p className="text-[11px] font-semibold text-faint px-2 uppercase tracking-wider">实用工具</p>
+          <p className="text-[11px] font-semibold text-faint px-2 uppercase tracking-wider">{t('nav.settings', '实用工具')}</p>
           <button
             type="button"
             onClick={() => {
@@ -420,19 +425,21 @@ function MobileNavDrawer({
             className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs text-muted hover:text-content hover:bg-hover transition-all active:scale-95 text-left cursor-pointer"
           >
             <Icon name="clock" className="w-4 h-4 text-muted" />
-            <span>观看历史</span>
+            <span>{t('nav.history', '观看历史')}</span>
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              onClose();
-              onOpenSettings();
-            }}
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs text-muted hover:text-content hover:bg-hover transition-all active:scale-95 text-left cursor-pointer"
-          >
-            <Icon name="gear" className="w-4 h-4 text-muted" />
-            <span>点播源管理</span>
-          </button>
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                onOpenSettings();
+              }}
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs text-muted hover:text-content hover:bg-hover transition-all active:scale-95 text-left cursor-pointer"
+            >
+              <Icon name="gear" className="w-4 h-4 text-muted" />
+              <span>{t('nav.sourceManager', '源管理')}</span>
+            </button>
+          )}
           <button
             type="button"
             onClick={() => {
@@ -442,7 +449,7 @@ function MobileNavDrawer({
             className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs text-muted hover:text-content hover:bg-hover transition-all active:scale-95 text-left cursor-pointer"
           >
             <Icon name="download" className="w-4 h-4 text-muted" />
-            <span>下载管理</span>
+            <span>{t('nav.downloads', '下载管理')}</span>
           </button>
           <Link
             href="/about"
@@ -450,7 +457,7 @@ function MobileNavDrawer({
             className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs text-muted hover:text-content hover:bg-hover transition-all active:scale-95"
           >
             <span className="text-sm">ℹ️</span>
-            <span>关于星芒影院</span>
+            <span>关于 cl</span>
           </Link>
         </div>
 
@@ -469,19 +476,17 @@ function MobileNavDrawer({
                 }}
                 className="text-danger hover:underline text-xs shrink-0 cursor-pointer"
               >
-                退出
+                {t('nav.logout', '退出')}
               </button>
             </div>
           ) : (
-            <button
-              onClick={() => {
-                onClose();
-                openLogin();
-              }}
-              className="btn-primary w-full py-2 text-xs rounded-xl font-medium cursor-pointer"
+            <Link
+              href="/login"
+              onClick={onClose}
+              className="btn-primary w-full py-2 text-xs rounded-xl font-medium flex items-center justify-center cursor-pointer"
             >
-              登录 / 注册
-            </button>
+              {t('nav.loginOrRegister', '登录 / 注册')}
+            </Link>
           )}
 
           {isAdmin && (
@@ -493,7 +498,7 @@ function MobileNavDrawer({
               className="w-full py-1.5 rounded-lg text-xs font-semibold bg-purple-500/15 text-purple-600 dark:text-purple-300 hover:bg-purple-500/25 flex items-center justify-center gap-1 cursor-pointer"
             >
               <span>👑</span>
-              <span>管理员控制台</span>
+              <span>{t('nav.admin', '管理中心')}</span>
             </button>
           )}
         </div>

@@ -479,3 +479,48 @@ export function removeGlobalSource(key: string): boolean {
   }
   return false;
 }
+
+/** 跨重启会话版本平滑对齐 */
+export function syncUserSessionVersion(username: string, sessionVersion: number): void {
+  const store = loadStore();
+  const uname = username.toLowerCase().trim();
+  const user = store.users[uname];
+  if (user && sessionVersion > user.sessionVersion) {
+    user.sessionVersion = sessionVersion;
+    saveStore(store);
+  }
+}
+
+/** 跨重启合法签名用户会话平滑恢复 */
+export function restoreUserSession(
+  username: string,
+  role: 'admin' | 'user',
+  sessionVersion: number
+): UserRecord {
+  const store = loadStore();
+  const uname = username.toLowerCase().trim();
+  if (store.users[uname]) {
+    if (sessionVersion > store.users[uname].sessionVersion) {
+      store.users[uname].sessionVersion = sessionVersion;
+      saveStore(store);
+    }
+    return store.users[uname];
+  }
+
+  // 容器重启恢复：为合法 HMAC 签名的用户恢复基础记录
+  const salt = crypto.randomBytes(32).toString('hex');
+  const record: UserRecord = {
+    id: crypto.randomUUID(),
+    username: uname,
+    passwordHash: '',
+    salt,
+    role,
+    status: 'active',
+    sessionVersion,
+    createdAt: Date.now(),
+    lastLoginAt: Date.now(),
+  };
+  store.users[uname] = record;
+  saveStore(store);
+  return record;
+}

@@ -28,12 +28,13 @@ export function Drawer({
   subheader,
   closeOnOverlay = true,
   resetScrollKey,
+  side = 'right',
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   children: ReactNode;
-  /** 抽屉最大宽度类（如 max-w-lg） */
+  /** 抽屉最大宽度类（如 max-w-md） */
   width?: string;
   /** 固定在标题栏下方的非滚动区（如 Tab 条），随抽屉一起保持可见 */
   subheader?: ReactNode;
@@ -41,6 +42,8 @@ export function Drawer({
   closeOnOverlay?: boolean;
   /** 该值变化时内容区滚回顶部（如切换设置分组 / 面板） */
   resetScrollKey?: string;
+  /** 滑出侧边：'right' (默认右侧) 或 'left' (左侧导航抽屉) */
+  side?: 'left' | 'right';
 }) {
   const [mounted, setMounted] = useState(open);
   const [entered, setEntered] = useState(false);
@@ -148,10 +151,15 @@ export function Drawer({
         aria-label={title}
         tabIndex={-1}
         className={cn(
-          'absolute right-0 top-0 h-full w-full bg-surface-raised border-l border-line flex flex-col outline-none',
+          'absolute top-0 h-full w-full bg-surface-raised flex flex-col outline-none',
+          side === 'left' ? 'left-0 border-r border-line' : 'right-0 border-l border-line',
           'transition-transform duration-200 ease-out',
           width,
-          entered ? 'translate-x-0' : 'translate-x-full'
+          entered
+            ? 'translate-x-0'
+            : side === 'left'
+            ? '-translate-x-full'
+            : 'translate-x-full'
         )}
       >
         <div className="shrink-0 px-4 py-2.5 border-b border-line flex items-center justify-between">

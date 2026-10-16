@@ -48,16 +48,18 @@ function mapCatId(type: string, tag: string): number {
 }
 
 function mapArea(tag: string): string {
-  const t = tag.trim();
+  const t = (tag || '').trim();
+  if (!t || t === '全部') return '';
   if (t === '日本' || t === '日剧' || t === '日本动画') return '日本';
   if (t === '韩国' || t === '韩剧' || t === '韩国综艺') return '韩国';
-  if (t === '欧美' || t === '美剧' || t === '欧美动画' || t === '欧美综艺') return '美国';
+  if (t === '欧美' || t === '美剧' || t === '欧美动画' || t === '欧美综艺' || t === '美国') return '美国';
   if (t === '华语' || t === '国产剧' || t === '国产动画' || t === '国产综艺' || t === '大陆') return '大陆';
   if (t === '香港' || t === '港剧') return '香港';
   if (t === '台湾' || t === '台剧') return '台湾';
   if (t === '英国' || t === '英剧') return '英国';
   if (t === '法国') return '法国';
-  return '';
+  if (t === '泰国' || t === '泰剧') return '泰国';
+  return t;
 }
 
 function mapRank(sort: string): 'rankhot' | 'ranklatest' | 'rankpoint' {
@@ -67,11 +69,18 @@ function mapRank(sort: string): 'rankhot' | 'ranklatest' | 'rankpoint' {
 }
 
 function mapGenre(tag: string): string {
-  const genres = ['动作', '喜剧', '爱情', '科幻', '恐怖', '惊悚', '战争', '悬疑', '动画', '剧情', '纪录片', '脱口秀', '真人秀'];
+  const t = (tag || '').trim();
+  if (!t || t === '全部' || t === '热门') return '';
+  const genres = [
+    '动作', '喜剧', '爱情', '科幻', '恐怖', '惊悚', '战争', '悬疑', '动画', '剧情',
+    '纪录片', '脱口秀', '真人秀', '古装', '都市', '武侠', '刑侦', '历史', '奇幻', '犯罪',
+    '热血', '冒险', '搞笑', '战斗', '恋爱', '校园', '治愈', '音乐', '竞技', '访谈',
+    '情感', '美食', '自然', '科学', '人文', '军事', '探险', '地理', '选秀'
+  ];
   for (const g of genres) {
-    if (tag.includes(g)) return g;
+    if (t.includes(g)) return g;
   }
-  return '';
+  return t;
 }
 
 export interface DoubanRecommendResult {
@@ -88,14 +97,23 @@ export async function fetchDoubanRecommend(
   options?: { area?: string; genre?: string; year?: string }
 ): Promise<DoubanRecommendResult> {
   const catId = mapCatId(type, rawTag);
-  const area = options?.area && options.area !== '全部' ? options.area : mapArea(rawTag);
-  const genre = options?.genre && options.genre !== '全部' ? options.genre : mapGenre(rawTag);
-  const year = options?.year && options.year !== '全部' ? options.year : '';
+  const rawArea = options?.area && options.area !== '全部' ? options.area : rawTag;
+  const area = mapArea(rawArea);
+
+  const rawGenre = options?.genre && options.genre !== '全部' ? options.genre : (options?.area ? '' : rawTag);
+  const genre = mapGenre(rawGenre);
+
+  let year = options?.year && options.year !== '全部' ? options.year.trim() : '';
+  if (year && !/^\d{4}$/.test(year)) {
+    year = '';
+  }
+
   const rank = mapRank(sort);
   const size = Math.min(50, Math.max(12, pageSize));
   const pageno = Math.max(1, Math.floor(pageStart / size) + 1);
 
-  const cacheKey = `kan360:v3:${catId}:${area}:${genre}:${year}:${rank}:${pageno}:${size}`;
+  // 严格隔离缓存 key，彻底杜绝历史坏榜单缓存污染
+  const cacheKey = `kan360:v5:${catId}:${area}:${genre}:${year}:${rank}:${pageno}:${size}`;
   const cached = getCache<DoubanRecommendResult>(cacheKey);
   if (cached) return cached;
 
@@ -150,17 +168,21 @@ export async function fetchDoubanRecommend(
     console.warn('[Explore API] 360kan 接口调用异常，尝试兜底:', err);
   }
 
-  // 2. 兜底容灾：若 360kan 偶发波动，无缝使用百度影视榜 / 60s 影视热榜
-  try {
-    const hotId = catId === 1 ? 'douban_movie_weekly' : 'baidu_teleplay';
-    const fallbackList = await fetchHotList(hotId);
-    if (fallbackList && fallbackList.length > 0) {
-      const result: DoubanRecommendResult = { items: fallbackList, total: fallbackList.length };
-      setCache(cacheKey, result, CACHE_TTL);
-      return result;
+  // 2. 兜底容灾：仅当无任何筛选条件（完全默认大盘推荐首页）且 360kan 偶发故障时才允许兜底。
+  // 若用户指定了特定地区、类型或年份，绝不使用热播榜兜底（防止返回风马牛不相及的静态榜单导致所有筛选看起来一模一样）。
+  const hasSpecificFilter = Boolean(area || genre || year || pageno > 1);
+  if (!hasSpecificFilter) {
+    try {
+      const hotId = catId === 1 ? 'douban_movie_weekly' : 'baidu_teleplay';
+      const fallbackList = await fetchHotList(hotId);
+      if (fallbackList && fallbackList.length > 0) {
+        const result: DoubanRecommendResult = { items: fallbackList, total: fallbackList.length };
+        setCache(cacheKey, result, CACHE_TTL);
+        return result;
+      }
+    } catch {
+      // 忽略兜底失败
     }
-  } catch {
-    // 忽略兜底失败
   }
 
   return { items: [], total: 0 };

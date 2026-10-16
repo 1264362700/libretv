@@ -67,8 +67,23 @@ const DOC_SORTS = [
 export function RecommendSection({ onPick }: { onPick: (title: string) => void }) {
   const doubanEnabled = useAppStore((s) => s.doubanEnabled);
   const recommendSource = useAppStore((s) => s.recommendSource);
+  const updateSettings = useAppStore((s) => s.updateSettings);
 
-  if (!doubanEnabled) return null;
+  if (!doubanEnabled) {
+    return (
+      <div className="flex flex-col items-center justify-center py-10 px-4 text-center border border-dashed border-line/60 rounded-2xl bg-chip/20 my-6">
+        <p className="text-sm text-muted mb-3">首页推荐内容已处于停用状态</p>
+        <button
+          type="button"
+          className="px-4 py-1.5 rounded-full bg-accent text-on-accent text-xs font-medium hover:bg-accent/90 transition-all active:scale-95 shadow-sm"
+          onClick={() => updateSettings({ doubanEnabled: true })}
+        >
+          立即开启首页推荐
+        </button>
+      </div>
+    );
+  }
+
   if (recommendSource === 'baidu-top') return <BaiduTopView onPick={onPick} />;
   if (recommendSource === 'douban-top250') return <DoubanTop250View onPick={onPick} />;
   if (recommendSource === 'bangumi') return <BangumiView onPick={onPick} />;

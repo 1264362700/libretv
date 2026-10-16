@@ -282,8 +282,9 @@ export function DoubanCard({ item, onClick }: { item: { title: string; cover: st
 
   // 严格校验纯数字评分（如 7.1, 9.0），非数字文本一律不展示，防止长短评污染海报
   const numericRating = useMemo(() => {
-    if (!item.rating) return null;
-    const trimmed = item.rating.trim();
+    if (item.rating === undefined || item.rating === null) return null;
+    const trimmed = String(item.rating).trim();
+    if (!trimmed) return null;
     const num = parseFloat(trimmed);
     if (!Number.isNaN(num) && num > 0 && num <= 10 && /^\d+(\.\d+)?$/.test(trimmed)) {
       return num.toFixed(1);

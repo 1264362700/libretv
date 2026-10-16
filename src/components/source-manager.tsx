@@ -733,8 +733,8 @@ function HomePanel() {
           value={store.recommendSource}
           onChange={(v) => {
             const next = v as RecommendSourceValue;
-            store.updateSettings({ recommendSource: next });
-            toast(`已切换推荐源为「${labelMap[next] || next}」，首页已实时更新`, 'success');
+            store.updateSettings({ recommendSource: next, doubanEnabled: true });
+            toast(`已切换推荐源为「${labelMap[next] || next}」，首页已实时生效`, 'success');
           }}
           options={[
             { value: 'baidu-top', label: '百度实时热榜', hint: '极速直连 · 热门电影与剧集' },

@@ -8,6 +8,9 @@ import {
   loadUsersBackup,
   getUsersBackupFilePath,
   bootstrapAndMergeUsers,
+  exportFullBackup,
+  importFullBackup,
+  getStorageDiagnostics,
 } from './auth-store';
 
 describe('Users Backup and Recovery Engine', () => {
@@ -140,5 +143,66 @@ describe('Users Backup and Recovery Engine', () => {
     expect(emptyStore.users['preset_alice'].username).toBe('preset_alice');
     expect(emptyStore.users['preset_bob']).toBeDefined();
     expect(emptyStore.users['preset_bob'].username).toBe('preset_bob');
+  });
+
+  it('exportFullBackup 和 importFullBackup 能完成全量离线备份与灾备恢复', () => {
+    const backup = exportFullBackup();
+    expect(backup).toBeDefined();
+    expect(backup.version).toBe(1);
+    expect(backup.users).toBeDefined();
+    expect(backup.invites).toBeDefined();
+    expect(backup.meta.exportedAt).toBeGreaterThan(0);
+
+    const testPayload = {
+      version: 1,
+      users: {
+        offline_user: {
+          id: 'off-1',
+          username: 'offline_user',
+          passwordHash: 'hash-off',
+          salt: 'salt-off',
+          role: 'user',
+          status: 'active',
+          sessionVersion: 1,
+          createdAt: Date.now(),
+        },
+      },
+      invites: {
+        'OFFLINE-CODE': {
+          code: 'OFFLINE-CODE',
+          createdBy: 'admin',
+          maxUses: 1,
+          useCount: 0,
+          usedBy: [],
+          active: true,
+          createdAt: Date.now(),
+        },
+      },
+      globalSources: {
+        'vod:https://test.com': {
+          key: 'vod:https://test.com',
+          name: '离线测试源',
+          url: 'https://test.com',
+          type: 'vod',
+          createdAt: Date.now(),
+        },
+      },
+    };
+
+    const importRes = importFullBackup(testPayload);
+    expect(importRes.success).toBe(true);
+    expect(importRes.userCount).toBeGreaterThanOrEqual(1);
+
+    const diag = getStorageDiagnostics();
+    expect(diag.userCount).toBeGreaterThanOrEqual(2); // admin + offline_user
+    expect(diag.inviteCount).toBeGreaterThanOrEqual(1);
+    expect(diag.globalSourceCount).toBeGreaterThanOrEqual(1);
+
+    // 非法数据安全防御
+    const badRes1 = importFullBackup(null);
+    expect(badRes1.success).toBe(false);
+
+    const badRes2 = importFullBackup({ invalid: true });
+    expect(badRes2.success).toBe(false);
   });
 });

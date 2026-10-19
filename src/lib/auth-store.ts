@@ -9,6 +9,10 @@ import {
   schedulePushToGist,
   forcePushToGist,
   getGistSyncState,
+  setCustomGithubToken,
+  getCustomGithubToken,
+  testAndVerifyGithubToken,
+  registerRemoteHydrateCallback,
   type GistSyncState,
 } from './gist-sync';
 
@@ -51,6 +55,11 @@ interface AuthDataStore {
   users: Record<string, UserRecord>;
   invites: Record<string, InviteCodeRecord>;
   globalSources: Record<string, GlobalSourceRecord>;
+  systemConfig?: {
+    githubToken?: string;
+    gistId?: string;
+    updatedAt?: number;
+  };
 }
 
 let hasWarnedEphemeral = false;
@@ -652,6 +661,35 @@ if (typeof window === 'undefined' && (process.env.GITHUB_TOKEN || process.env.GH
   }, 50);
 }
 
+// 注册 Gist 远端账号反向水合回调：当远端发现本地缺失的账号时，无感写回本地物理文件
+registerRemoteHydrateCallback((mergedData) => {
+  if (inMemoryStore) {
+    let changed = false;
+    if (mergedData.users) {
+      for (const [u, r] of Object.entries(mergedData.users as Record<string, UserRecord>)) {
+        if (!inMemoryStore.users[u] && r && r.username) {
+          inMemoryStore.users[u] = r;
+          changed = true;
+        }
+      }
+    }
+    if (mergedData.invites) {
+      for (const [c, inv] of Object.entries(mergedData.invites as Record<string, InviteCodeRecord>)) {
+        if (!inMemoryStore.invites[c] && inv && inv.code) {
+          inMemoryStore.invites[c] = inv;
+          changed = true;
+        }
+      }
+    }
+    if (changed) {
+      const storeFile = getStoreFilePath();
+      atomicWriteJsonSync(storeFile, inMemoryStore);
+      saveUsersBackup(inMemoryStore);
+      console.log('[LibreTV] Gist 云端账号数据已反向水合至本地物理备份');
+    }
+  }
+});
+
 function loadStore(): AuthDataStore {
   if (inMemoryStore) return inMemoryStore;
 
@@ -686,6 +724,10 @@ function loadStore(): AuthDataStore {
   }
 
   inMemoryStore = loaded || { users: {}, invites: {}, globalSources: {} };
+
+  if (inMemoryStore.systemConfig?.githubToken) {
+    setCustomGithubToken(inMemoryStore.systemConfig.githubToken);
+  }
 
   if (!inMemoryStore.globalSources) inMemoryStore.globalSources = {};
   if (!inMemoryStore.invites) inMemoryStore.invites = {};
@@ -1097,4 +1139,187 @@ export function restoreUserSession(
   store.users[uname] = record;
   saveStore(store);
   return record;
+}
+
+/** 保存并绑定自定义 GitHub Token */
+export async function saveCustomGithubToken(token: string): Promise<{
+  success: boolean;
+  error?: string;
+  username?: string;
+  gistState: GistSyncState;
+}> {
+  const clean = token.trim();
+  const test = await testAndVerifyGithubToken(clean);
+  if (!test.success) {
+    return { success: false, error: test.error, gistState: getGistStatus() };
+  }
+
+  setCustomGithubToken(clean);
+  const store = loadStore();
+  if (!store.systemConfig) store.systemConfig = {};
+  store.systemConfig.githubToken = clean;
+  store.systemConfig.updatedAt = Date.now();
+  saveStore(store);
+
+  // 立即重置并拉取云端 Gist
+  isGistLoaded = false;
+  await ensureGistLoaded();
+
+  return {
+    success: true,
+    username: test.username,
+    gistState: getGistStatus(),
+  };
+}
+
+/** 导出全量数据备份（供管理员离线下载） */
+export function exportFullBackup(): Record<string, unknown> {
+  const store = loadStore();
+  const now = Date.now();
+  return {
+    version: 1,
+    exportedAt: now,
+    meta: {
+      exportedAt: now,
+      usersCount: Object.keys(store.users || {}).length,
+      invitesCount: Object.keys(store.invites || {}).length,
+      sourcesCount: Object.keys(store.globalSources || {}).length,
+    },
+    users: store.users || {},
+    invites: store.invites || {},
+    globalSources: store.globalSources || {},
+  };
+}
+
+/** 导入全量数据备份（离线恢复/灾难重建） */
+export function importFullBackup(payload: unknown): {
+  success: boolean;
+  userCount: number;
+  inviteCount: number;
+  sourceCount: number;
+  importedUsers: number;
+  importedInvites: number;
+  importedSources: number;
+  error?: string;
+} {
+  if (!payload || typeof payload !== 'object') {
+    return {
+      success: false,
+      userCount: 0,
+      inviteCount: 0,
+      sourceCount: 0,
+      importedUsers: 0,
+      importedInvites: 0,
+      importedSources: 0,
+      error: '无效的备份数据结构',
+    };
+  }
+
+  const data = payload as {
+    users?: Record<string, UserRecord>;
+    invites?: Record<string, InviteCodeRecord>;
+    globalSources?: Record<string, GlobalSourceRecord>;
+  };
+
+  if (!data.users && !data.invites && !data.globalSources) {
+    return {
+      success: false,
+      userCount: 0,
+      inviteCount: 0,
+      sourceCount: 0,
+      importedUsers: 0,
+      importedInvites: 0,
+      importedSources: 0,
+      error: '备份文件中未包含任何可恢复的数据',
+    };
+  }
+
+  const store = loadStore();
+  let userCount = 0;
+  let inviteCount = 0;
+  let sourceCount = 0;
+
+  if (data.users && typeof data.users === 'object' && !Array.isArray(data.users)) {
+    for (const [uname, u] of Object.entries(data.users)) {
+      if (u && u.username && u.passwordHash) {
+        store.users[uname.toLowerCase().trim()] = u;
+        userCount++;
+      }
+    }
+  }
+
+  if (data.invites && typeof data.invites === 'object' && !Array.isArray(data.invites)) {
+    for (const [code, inv] of Object.entries(data.invites)) {
+      if (inv && inv.code) {
+        store.invites[code] = inv;
+        inviteCount++;
+      }
+    }
+  }
+
+  if (data.globalSources && typeof data.globalSources === 'object' && !Array.isArray(data.globalSources)) {
+    for (const [k, s] of Object.entries(data.globalSources)) {
+      if (s && s.url) {
+        store.globalSources[k] = s;
+        sourceCount++;
+      }
+    }
+  }
+
+  saveStore(store);
+  saveUsersBackup(store);
+  saveGlobalSourcesBackup(store);
+  schedulePushToGist(store);
+
+  return {
+    success: true,
+    userCount,
+    inviteCount,
+    sourceCount,
+    importedUsers: userCount,
+    importedInvites: inviteCount,
+    importedSources: sourceCount,
+  };
+}
+
+/** 获取存储层与数据持久化体检诊断信息 */
+export function getStorageDiagnostics() {
+  const store = loadStore();
+  const dir = getDataDir();
+  const filePath = getStoreFilePath();
+  const fileExists = fs.existsSync(filePath);
+  let fileSize = 0;
+  let lastModified = 0;
+  if (fileExists) {
+    try {
+      const stat = fs.statSync(filePath);
+      fileSize = stat.size;
+      lastModified = stat.mtimeMs;
+    } catch {
+      // ignore
+    }
+  }
+
+  const isEphemeral = isStorageEphemeral();
+
+  return {
+    dataDir: dir,
+    isEphemeral,
+    isPersistentMounted: !isEphemeral,
+    storePath: filePath,
+    exists: fileExists,
+    storeSize: fileSize,
+    lastModified,
+    userCount: Object.keys(store.users || {}).length,
+    inviteCount: Object.keys(store.invites || {}).length,
+    globalSourceCount: Object.keys(store.globalSources || {}).length,
+    hasCustomGithubToken: Boolean(getCustomGithubToken()),
+    gistConfigured: Boolean(getCustomGithubToken() || process.env.GITHUB_TOKEN || process.env.GH_TOKEN),
+    // 兼容字段
+    usersCount: Object.keys(store.users || {}).length,
+    invitesCount: Object.keys(store.invites || {}).length,
+    sourcesCount: Object.keys(store.globalSources || {}).length,
+    hasTokenConfigured: Boolean(getCustomGithubToken() || process.env.GITHUB_TOKEN || process.env.GH_TOKEN),
+    gist: getGistStatus(),
+  };
 }

@@ -229,6 +229,50 @@ export const api = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'gist_pull' }),
       }),
+    getStorageInfo: () =>
+      request<{
+        success: boolean;
+        diagnostics: {
+          dataDir: string;
+          isPersistentMounted: boolean;
+          storePath: string;
+          exists: boolean;
+          storeSize: number;
+          userCount: number;
+          inviteCount: number;
+          globalSourceCount: number;
+          hasCustomGithubToken: boolean;
+          gistConfigured: boolean;
+          lastModified: number;
+        };
+        gistStatus: {
+          enabled: boolean;
+          gistId: string | null;
+          gistUrl: string | null;
+          lastSyncAt: number | null;
+          lastAction: 'pull' | 'push' | 'idle' | 'error';
+          lastError: string | null;
+        };
+      }>('/api/admin?type=storage_info'),
+    saveGithubToken: (token: string) =>
+      request<{ success: boolean; error?: string; gistId?: string }>('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'save_github_token', token }),
+      }),
+    importBackup: (data: unknown) =>
+      request<{
+        success: boolean;
+        userCount?: number;
+        inviteCount?: number;
+        sourceCount?: number;
+        error?: string;
+      }>('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'import_backup', data }),
+      }),
+    exportBackupUrl: '/api/admin?type=export_backup',
   },
 
   /**

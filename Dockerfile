@@ -20,6 +20,7 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=8080
 ENV HOSTNAME=0.0.0.0
+ENV DATA_DIR=/app/data
 
 # 非 root 用户
 RUN addgroup -S nodejs && adduser -S nextjs -G nodejs

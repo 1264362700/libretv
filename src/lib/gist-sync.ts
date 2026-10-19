@@ -29,7 +29,38 @@ let pushTimer: NodeJS.Timeout | null = null;
 let pendingStoreToPush: unknown = null;
 let isPushing = false;
 
+let inMemoryCustomToken: string | null = null;
+let hasCompletedInitialPull = false;
+type HydrateCallback = (remoteData: Record<string, unknown>) => void;
+let onRemoteHydrate: HydrateCallback | null = null;
+
+export function setCustomGithubToken(token: string | null): void {
+  const clean = token?.trim() || null;
+  if (clean !== inMemoryCustomToken) {
+    inMemoryCustomToken = clean;
+    resolvedGistId = null;
+    hasCompletedInitialPull = false;
+  }
+}
+
+export function getCustomGithubToken(): string | null {
+  return inMemoryCustomToken;
+}
+
+export function markInitialPullCompleted(): void {
+  hasCompletedInitialPull = true;
+}
+
+export function isInitialPullCompleted(): boolean {
+  return hasCompletedInitialPull;
+}
+
+export function registerRemoteHydrateCallback(cb: HydrateCallback): void {
+  onRemoteHydrate = cb;
+}
+
 function getToken(): string | null {
+  if (inMemoryCustomToken) return inMemoryCustomToken;
   const t = process.env.GITHUB_TOKEN?.trim() || process.env.GH_TOKEN?.trim();
   return t || null;
 }
@@ -167,6 +198,7 @@ export async function pullFromGist(fallbackLocalStore?: unknown): Promise<Record
     const targetFile = data.files?.[GIST_FILENAME] || data.files?.['auth-store.json'];
     if (!targetFile) {
       console.warn(`[LibreTV] Gist ${gistId} 中尚未包含 ${GIST_FILENAME}，将写入初始数据`);
+      markInitialPullCompleted();
       return null;
     }
 
@@ -176,12 +208,16 @@ export async function pullFromGist(fallbackLocalStore?: unknown): Promise<Record
       if (rawRes.ok) jsonContent = await rawRes.text();
     }
 
-    if (!jsonContent || !jsonContent.trim()) return null;
+    if (!jsonContent || !jsonContent.trim()) {
+      markInitialPullCompleted();
+      return null;
+    }
 
     const parsed = JSON.parse(jsonContent) as Record<string, unknown>;
     state.lastSyncAt = Date.now();
     state.lastAction = 'idle';
     state.lastError = null;
+    markInitialPullCompleted();
     console.log(`[LibreTV] 成功从 GitHub Gist (${gistId}) 恢复全量账号与邀请码数据!`);
     return parsed;
   } catch (err: unknown) {
@@ -199,6 +235,12 @@ export async function pullFromGist(fallbackLocalStore?: unknown): Promise<Record
 export function schedulePushToGist(store: unknown): void {
   const token = getToken();
   if (!token) return;
+
+  // 核心防冲刷红线：若尚未完成首次云端拉取，坚决不排队推送，防止空白冷启动冲刷云端已有数据
+  if (!hasCompletedInitialPull) {
+    console.warn('[LibreTV] 尚未完成 Gist 首次拉取与合并，暂缓云端推送');
+    return;
+  }
 
   pendingStoreToPush = store;
   if (pushTimer) clearTimeout(pushTimer);
@@ -234,6 +276,74 @@ async function executePush(token: string, store: unknown): Promise<boolean> {
       'User-Agent': 'LibreTV-cl.tv-GistSync',
     };
 
+    // 核心防线：推送前强制读取远端现有 Gist 做双向深度合并，物理级杜绝空白覆盖已存数据
+    let payloadToSend = store;
+    try {
+      const getRes = await fetch(`https://api.github.com/gists/${gistId}`, {
+        headers,
+        cache: 'no-store',
+      });
+      if (getRes.ok) {
+        const remoteGist = (await getRes.json()) as {
+          files?: Record<string, { filename: string; content?: string }>;
+        };
+        const targetFile = remoteGist.files?.[GIST_FILENAME] || remoteGist.files?.['auth-store.json'];
+        if (targetFile?.content) {
+          const remoteParsed = JSON.parse(targetFile.content) as {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            users?: Record<string, any>;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            invites?: Record<string, any>;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            globalSources?: Record<string, any>;
+          };
+          const localObj = (store && typeof store === 'object' ? store : {}) as {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            users?: Record<string, any>;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            invites?: Record<string, any>;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            globalSources?: Record<string, any>;
+          };
+
+          const mergedUsers = { ...(remoteParsed.users || {}) };
+          for (const [k, v] of Object.entries(localObj.users || {})) {
+            mergedUsers[k] = v;
+          }
+
+          const mergedInvites = { ...(remoteParsed.invites || {}) };
+          for (const [k, v] of Object.entries(localObj.invites || {})) {
+            mergedInvites[k] = v;
+          }
+
+          const mergedSources = { ...(remoteParsed.globalSources || {}) };
+          for (const [k, v] of Object.entries(localObj.globalSources || {})) {
+            mergedSources[k] = v;
+          }
+
+          const mergedPayload = {
+            ...localObj,
+            users: mergedUsers,
+            invites: mergedInvites,
+            globalSources: mergedSources,
+          };
+
+          payloadToSend = mergedPayload;
+
+          // 若远端存在本地尚未加载的账号，立即回流水合本地内存与磁盘
+          if (onRemoteHydrate) {
+            try {
+              onRemoteHydrate(mergedPayload);
+            } catch (hErr) {
+              console.warn('[LibreTV] 回流水合本地存储异常:', hErr);
+            }
+          }
+        }
+      }
+    } catch (checkErr) {
+      console.warn('[LibreTV] 推送前校验远端数据异常，继续执行写入:', checkErr);
+    }
+
     const res = await fetch(`https://api.github.com/gists/${gistId}`, {
       method: 'PATCH',
       headers,
@@ -241,7 +351,7 @@ async function executePush(token: string, store: unknown): Promise<boolean> {
         description: GIST_DESC,
         files: {
           [GIST_FILENAME]: {
-            content: JSON.stringify(store, null, 2),
+            content: JSON.stringify(payloadToSend, null, 2),
           },
         },
       }),
@@ -255,6 +365,7 @@ async function executePush(token: string, store: unknown): Promise<boolean> {
     state.lastSyncAt = Date.now();
     state.lastAction = 'idle';
     state.lastError = null;
+    markInitialPullCompleted();
     console.log(`[LibreTV] 成功回写数据至 GitHub Gist (${gistId})，云端已同步!`);
     return true;
   } catch (err: unknown) {
@@ -269,6 +380,50 @@ async function executePush(token: string, store: unknown): Promise<boolean> {
 }
 
 /**
+ * 校验 GitHub Token 有效性与 Gist 权限
+ */
+export async function testAndVerifyGithubToken(token: string): Promise<{
+  success: boolean;
+  username?: string;
+  scopes?: string[];
+  hasGistScope?: boolean;
+  error?: string;
+}> {
+  try {
+    const cleanToken = token.trim();
+    if (!cleanToken) return { success: false, error: 'Token 不能为空' };
+
+    const res = await fetch('https://api.github.com/user', {
+      headers: {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${cleanToken}`,
+        'User-Agent': 'LibreTV-cl.tv-GistSync',
+      },
+      cache: 'no-store',
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      return { success: false, error: `GitHub 鉴权失败 (${res.status}): ${errText.slice(0, 100)}` };
+    }
+
+    const user = (await res.json()) as { login?: string };
+    const scopesHeader = res.headers.get('x-oauth-scopes') || '';
+    const scopes = scopesHeader.split(',').map((s) => s.trim()).filter(Boolean);
+    const hasGist = scopes.length === 0 || scopes.includes('gist');
+
+    return {
+      success: true,
+      username: user.login || 'GitHub User',
+      scopes,
+      hasGistScope: hasGist,
+    };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/**
  * 立即强制推送到 Gist（管理后台手动触发）
  */
 export async function forcePushToGist(store: unknown): Promise<{ success: boolean; error?: string }> {
@@ -276,6 +431,7 @@ export async function forcePushToGist(store: unknown): Promise<{ success: boolea
   if (!token) return { success: false, error: '未配置 GITHUB_TOKEN' };
 
   try {
+    markInitialPullCompleted(); // 手动强制推送时放开门禁
     const ok = await executePush(token, store);
     return { success: ok, error: state.lastError || undefined };
   } catch (err: unknown) {

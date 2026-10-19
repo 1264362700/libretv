@@ -19,6 +19,10 @@ import {
   getGlobalSourcesBackupStatus,
   manualBackupGlobalSources,
   manualRestoreGlobalSources,
+  getStorageDiagnostics,
+  exportFullBackup,
+  importFullBackup,
+  saveCustomGithubToken,
 } from '@/lib/auth-store';
 
 export const runtime = 'nodejs';
@@ -34,6 +38,26 @@ export async function GET(req: Request) {
 
   if (type === 'gist_status') {
     return NextResponse.json({ success: true, status: getGistStatus() });
+  }
+
+  if (type === 'storage_info') {
+    return NextResponse.json({
+      success: true,
+      diagnostics: getStorageDiagnostics(),
+      gistStatus: getGistStatus(),
+    });
+  }
+
+  if (type === 'export_backup') {
+    const backup = exportFullBackup();
+    const filename = `libretv-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    return new NextResponse(JSON.stringify(backup, null, 2), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Content-Disposition': `attachment; filename="${filename}"`,
+      },
+    });
   }
 
   if (type === 'invites') {
@@ -161,6 +185,20 @@ export async function POST(req: Request) {
   // 10. 手动触发物理备份 + 环境变量智能合并恢复
   if (action === 'restore_sources') {
     const res = manualRestoreGlobalSources();
+    return NextResponse.json(res);
+  }
+
+  // 11. 保存自定义 GitHub Token 并绑定云端 Gist
+  if (action === 'save_github_token') {
+    const token = typeof body.token === 'string' ? body.token.trim() : '';
+    const res = await saveCustomGithubToken(token);
+    return NextResponse.json(res);
+  }
+
+  // 12. 离线导入全量备份
+  if (action === 'import_backup') {
+    const rawData = body.data;
+    const res = importFullBackup(rawData);
     return NextResponse.json(res);
   }
 

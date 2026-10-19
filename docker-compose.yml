@@ -14,6 +14,15 @@ services:
     volumes:
       - ./data:/app/data
     environment:
+      # 持久化存储目录（容器内绝对路径）
+      - DATA_DIR=/app/data
+      # GitHub Gist 账号/邀请码云端持久化 Token 与 Gist ID
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - GH_TOKEN=${GH_TOKEN:-}
+      - GIST_ID=${GIST_ID:-}
+      # 预置账号与初始邀请码
+      - PRESET_USERS=${PRESET_USERS:-}
+      - INITIAL_INVITE_CODES=${INITIAL_INVITE_CODES:-}
       # 必填：访问密码（在 .env 中设置，缺失时 compose 启动即报错提醒）
       - PASSWORD=${PASSWORD:?请在 .env 中设置 PASSWORD}
       # 可选：会话/代理签名密钥（多实例部署建议显式设置：openssl rand -hex 32）

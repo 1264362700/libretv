@@ -24,6 +24,7 @@ interface UserItem {
   sessionVersion: number;
   createdAt: number;
   lastLoginAt?: number;
+  isSuperAdmin?: boolean;
 }
 
 interface SourceItem {
@@ -43,9 +44,16 @@ interface StorageDiagnostics {
   userCount: number;
   inviteCount: number;
   globalSourceCount: number;
+  userConfigsCount?: number;
   hasCustomGithubToken: boolean;
   gistConfigured: boolean;
   lastModified: number;
+  database?: {
+    type: string;
+    configured: boolean;
+  };
+  superAdminUsername?: string;
+  isDefaultPassword?: boolean;
 }
 
 export function AdminModal({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -69,6 +77,17 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
   const [sourceUrl, setSourceUrl] = useState('');
   const [sourceType, setSourceType] = useState<'vod' | 'live'>('vod');
 
+  // Neon PostgreSQL 主库状态与连通性
+  const [neonStatus, setNeonStatus] = useState<{
+    configured: boolean;
+    ok: boolean;
+    latencyMs?: number;
+    error?: string;
+  } | null>(null);
+  const [testingNeon, setTestingNeon] = useState(false);
+  const [exportingGist, setExportingGist] = useState(false);
+  const [restoringGist, setRestoringGist] = useState(false);
+
   // Gist 云持久化与存储健康度状态
   const [gistStatus, setGistStatus] = useState<{
     enabled: boolean;
@@ -83,7 +102,6 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
   const [showTokenInput, setShowTokenInput] = useState(false);
   const [savingToken, setSavingToken] = useState(false);
   const [importingBackup, setImportingBackup] = useState(false);
-  const [syncingGist, setSyncingGist] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 全局源物理备份状态与操作锁
@@ -134,11 +152,74 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
       if (res.success) {
         setStorageDiagnostics(res.diagnostics);
         setGistStatus(res.gistStatus);
+        if (res.neon) {
+          setNeonStatus(res.neon);
+        }
       }
     } catch {
       // ignore
     }
   }, []);
+
+  const handleTestNeon = async () => {
+    setTestingNeon(true);
+    try {
+      const res = await api.admin.testNeon();
+      if (res.ok) {
+        setNeonStatus({ configured: true, ok: true, latencyMs: res.latencyMs });
+        toast(`Neon 主库连接正常！响应延迟: ${res.latencyMs ?? 0}ms`, 'success');
+      } else {
+        setNeonStatus({ configured: Boolean(storageDiagnostics?.database?.configured), ok: false, error: res.error });
+        toast(res.error || '主库连接探测失败', 'error');
+      }
+      fetchStorageInfo();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '探测异常', 'error');
+    } finally {
+      setTestingNeon(false);
+    }
+  };
+
+  const handleExportNeonToGist = async () => {
+    setExportingGist(true);
+    try {
+      const res = await api.admin.backupToGist();
+      if (res.success) {
+        const stats = res.stats;
+        toast(
+          `全量冷备已写入 GitHub Gist！包含 ${stats?.usersCount ?? 0} 用户, ${stats?.invitesCount ?? 0} 邀请码, ${stats?.sourcesCount ?? 0} 全站源`,
+          'success'
+        );
+        fetchStorageInfo();
+      } else {
+        toast(res.error || '导出冷备失败', 'error');
+      }
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '导出冷备异常', 'error');
+    } finally {
+      setExportingGist(false);
+    }
+  };
+
+  const handleRestoreGistToNeon = async () => {
+    if (!window.confirm('⚠️ 容灾恢复将从 Gist 拉取备份覆盖/合并至 Neon 主库，确定执行吗？')) return;
+    setRestoringGist(true);
+    try {
+      const res = await api.admin.restoreFromGist();
+      if (res.success) {
+        toast('容灾数据已成功还原至 Neon 主库！', 'success');
+        fetchStorageInfo();
+        fetchUsers();
+        fetchSources();
+      } else {
+        toast(res.error || '从 Gist 容灾还原失败', 'error');
+      }
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '容灾恢复异常', 'error');
+    } finally {
+      setRestoringGist(false);
+    }
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -148,42 +229,6 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
     if (tab === 'sources') fetchSources().finally(() => setLoading(false));
     if (tab === 'persistence') fetchStorageInfo().finally(() => setLoading(false));
   }, [open, tab, fetchInvites, fetchUsers, fetchSources, fetchStorageInfo]);
-
-  const handleSyncGist = async () => {
-    setSyncingGist(true);
-    try {
-      const res = await api.admin.syncGist();
-      if (res.success) {
-        toast('已成功将全量数据推送同步至 GitHub Gist 云端！', 'success');
-        fetchStorageInfo();
-      } else {
-        toast(res.error || '同步失败', 'error');
-      }
-    } catch {
-      toast('同步网络异常', 'error');
-    } finally {
-      setSyncingGist(false);
-    }
-  };
-
-  const handlePullGist = async () => {
-    setSyncingGist(true);
-    try {
-      const res = await api.admin.pullGist();
-      if (res.success) {
-        toast('已从 GitHub Gist 强制拉取最新云端数据！', 'success');
-        fetchStorageInfo();
-        fetchInvites();
-        fetchUsers();
-      } else {
-        toast(res.error || '拉取失败', 'error');
-      }
-    } catch {
-      toast('拉取网络异常', 'error');
-    } finally {
-      setSyncingGist(false);
-    }
-  };
 
   const handleSaveToken = async () => {
     if (!customToken.trim()) {
@@ -434,12 +479,37 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
           </button>
         </div>
 
-        {/* 选项卡 */}
-        <div className="flex items-center gap-1 px-5 pt-3 border-b border-line/60 bg-surface overflow-x-auto no-scrollbar">
-          <TabButton active={tab === 'invites'} onClick={() => setTab('invites')} icon="🎟️" label="邀请码管理" />
-          <TabButton active={tab === 'users'} onClick={() => setTab('users')} icon="👥" label="用户管理" />
-          <TabButton active={tab === 'sources'} onClick={() => setTab('sources')} icon="📡" label="全局源管理" />
-          <TabButton active={tab === 'persistence'} onClick={() => setTab('persistence')} icon="🛡️" label="持久化与数据安全" />
+        {/* 选项卡导航栏（防塌陷与贴合对齐） */}
+        <div className="flex items-center gap-2 px-4 sm:px-6 pt-3 border-b border-line bg-surface/95 overflow-x-auto no-scrollbar whitespace-nowrap">
+          <TabButton
+            active={tab === 'invites'}
+            onClick={() => setTab('invites')}
+            icon="🎟️"
+            label="邀请码管理"
+            badge={invites.length > 0 ? invites.length : undefined}
+          />
+          <TabButton
+            active={tab === 'users'}
+            onClick={() => setTab('users')}
+            icon="👥"
+            label="用户管理"
+            badge={users.length > 0 ? users.length : undefined}
+          />
+          <TabButton
+            active={tab === 'sources'}
+            onClick={() => setTab('sources')}
+            icon="📡"
+            label="全局源管理"
+            badge={sources.length > 0 ? sources.length : undefined}
+          />
+          <TabButton
+            active={tab === 'persistence'}
+            onClick={() => setTab('persistence')}
+            icon="🛡️"
+            label="持久化与数据安全"
+            badge={neonStatus?.ok ? 'Neon' : storageDiagnostics?.database?.configured ? 'Neon' : undefined}
+            badgeColor={neonStatus?.ok ? 'bg-success/20 text-success font-bold' : undefined}
+          />
         </div>
 
         {/* 主内容区 */}
@@ -564,6 +634,21 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
           {/* —— 选项卡 2：用户管理 —— */}
           {tab === 'users' && (
             <div className="space-y-4">
+              {/* 超级管理员提示条 */}
+              <div className="bg-chip/40 border border-line/60 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-2 text-faint">
+                  <span className="text-base">🛡️</span>
+                  <span>
+                    当前超级管理员账号：<strong className="text-content font-mono font-bold text-accent">{storageDiagnostics?.superAdminUsername || 'admin'}</strong>。可在 Render 环境变量配置 <code className="text-accent">ADMIN_USERNAME</code> 随时自定义指定。
+                  </span>
+                </div>
+                {storageDiagnostics?.isDefaultPassword && (
+                  <span className="text-[11px] px-2 py-0.5 rounded bg-danger/15 text-danger font-semibold flex items-center gap-1 border border-danger/30">
+                    ⚠️ 超级管理员正在使用默认弱密码 (admin888)
+                  </span>
+                )}
+              </div>
+
               {loading ? (
                 <p className="text-center text-xs text-faint py-8">正在拉取用户列表...</p>
               ) : (
@@ -582,7 +667,20 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
                     <tbody className="divide-y divide-line/40">
                       {users.map((u) => (
                         <tr key={u.id} className="hover:bg-chip/30">
-                          <td className="p-3 font-medium text-content">{u.username}</td>
+                          <td className="p-3 font-medium text-content">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span>{u.username}</span>
+                              {u.isSuperAdmin && (
+                                <span
+                                  className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 font-bold border border-amber-500/30 flex items-center gap-0.5"
+                                  title="超级管理员（享有系统最高权限，不可封禁）"
+                                >
+                                  <span>👑</span>
+                                  <span>超级管理员</span>
+                                </span>
+                              )}
+                            </div>
+                          </td>
                           <td className="p-3">
                             <span
                               className={cn(
@@ -608,7 +706,7 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
                           <td className="p-3 font-mono text-faint">v{u.sessionVersion}</td>
                           <td className="p-3 text-faint">{new Date(u.createdAt).toLocaleDateString()}</td>
                           <td className="p-3 text-right space-x-1.5 whitespace-nowrap">
-                            {u.role !== 'admin' && (
+                            {u.role !== 'admin' && !u.isSuperAdmin && (
                               <>
                                 <button
                                   className="px-2 py-1 rounded bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 text-[11px] active:scale-95"
@@ -797,14 +895,134 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
                 onChange={handleFileChange}
               />
 
-              {/* 1. GitHub Gist 云端持久化状态与直配面板 */}
-              <div className="bg-card border border-line rounded-xl p-4 sm:p-5 space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              {/* 0. 超级管理员弱密码风险提示 */}
+              {storageDiagnostics?.isDefaultPassword && (
+                <div className="bg-danger/10 border border-danger/30 rounded-xl p-3.5 flex items-start gap-3 animate-fade-in">
+                  <span className="text-xl">⚠️</span>
+                  <div className="flex-1 text-xs">
+                    <div className="font-bold text-danger flex items-center gap-1.5">
+                      安全红线警告：当前超级管理员使用默认初始密码 (admin888)
+                    </div>
+                    <p className="text-faint mt-1 leading-relaxed">
+                      公网部署环境下使用默认弱密码存在被未授权扫描接管的风险！请前往【用户管理】对账号 <strong>{storageDiagnostics?.superAdminUsername || 'admin'}</strong> 进行改密，或在 Render 环境变量中通过 <code>ADMIN_PASSWORD</code> 配置高强度密码。
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* 1. Neon PostgreSQL 主数据库直观状态与连通性卡片 */}
+              <div className="bg-card border border-line rounded-xl p-4 sm:p-5 space-y-4 shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-line/60 pb-3">
                   <div className="flex items-center gap-2.5">
-                    <span className="text-2xl">☁️</span>
+                    <span className="text-2xl">🐘</span>
                     <div>
-                      <h3 className="text-sm font-bold text-content">GitHub Gist 云端自动备份 (强烈推荐)</h3>
-                      <p className="text-xs text-faint">基于私有 Gist API 自动双向同步账号、邀请码与全局源，无论容器怎么重启重建永不丢失</p>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-sm font-bold text-content">Neon PostgreSQL (生产主数据库)</h3>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent/15 text-accent font-semibold">主存储</span>
+                      </div>
+                      <p className="text-xs text-faint mt-0.5">
+                        负责用户鉴权、邀请码、全站源池与每个用户的搜索源个性化配置 (user_configs) 的持久读写
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* 状态徽章与 Ping 按钮 */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span
+                      className={cn(
+                        'text-xs px-3 py-1 rounded-full font-semibold flex items-center gap-1.5',
+                        neonStatus?.ok
+                          ? 'bg-success/15 text-success border border-success/30'
+                          : storageDiagnostics?.database?.configured
+                            ? 'bg-danger/15 text-danger border border-danger/30'
+                            : 'bg-warning/15 text-warning border border-warning/30'
+                      )}
+                    >
+                      <span className={cn('w-2 h-2 rounded-full', neonStatus?.ok ? 'bg-success animate-pulse' : storageDiagnostics?.database?.configured ? 'bg-danger' : 'bg-warning')} />
+                      {neonStatus?.ok
+                        ? `● 已连接 Neon 主库 (${neonStatus.latencyMs ?? 0}ms)`
+                        : storageDiagnostics?.database?.configured
+                          ? '✕ 连接失败 (点击右侧重试)'
+                          : '○ 未配置 DATABASE_URL (本地降级)'}
+                    </span>
+                    <button
+                      type="button"
+                      className="btn-secondary py-1 px-3 text-xs flex items-center gap-1 active:scale-95 disabled:opacity-50"
+                      onClick={handleTestNeon}
+                      disabled={testingNeon}
+                    >
+                      <span>⚡</span>
+                      <span>{testingNeon ? '探测中...' : '测试连通性'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 状态一：未配置 DATABASE_URL 引导提示 */}
+                {!storageDiagnostics?.database?.configured && (
+                  <div className="bg-warning/10 border border-warning/25 rounded-xl p-3 text-xs text-warning leading-relaxed space-y-1.5">
+                    <div className="font-semibold flex items-center gap-1.5">
+                      📌 尚未检测到 DATABASE_URL 环境变量生效（当前处于本地 JSON 保护模式）
+                    </div>
+                    <div className="text-faint text-[11px] space-y-1">
+                      <p>如果您已经在 Render 后台填入了 <code>DATABASE_URL</code>，请检查：</p>
+                      <ol className="list-decimal pl-4 space-y-0.5">
+                        <li><strong>Render 是否完成重新部署</strong>：修改环境变量后 Render 需要 1-2 分钟重新构建部署容器；</li>
+                        <li><strong>连接串格式</strong>：必须以 <code>postgresql://</code> 或 <code>postgres://</code> 开头，且包含 <code>?sslmode=require</code>；</li>
+                        <li>部署成功后，点击上方 <strong>“测试连通性”</strong> 按钮，系统将自动建表并激活主库！</li>
+                      </ol>
+                    </div>
+                  </div>
+                )}
+
+                {/* 状态二：已配置但连接报错提示 */}
+                {storageDiagnostics?.database?.configured && !neonStatus?.ok && neonStatus?.error && (
+                  <div className="bg-danger/10 border border-danger/30 rounded-xl p-3 text-xs text-danger space-y-1.5">
+                    <div className="font-semibold flex items-center gap-1.5">
+                      ⚠️ Neon PostgreSQL 连接探测失败
+                    </div>
+                    <p className="font-mono text-[11px] bg-chip/60 p-2 rounded break-all text-content">
+                      {neonStatus.error}
+                    </p>
+                    <p className="text-faint text-[11px]">
+                      排查建议：请检查连接串密码是否包含特殊符号（需 URL 编码），或前往 Neon 控制台确认该分支 (Branch) 是否被暂停。
+                    </p>
+                  </div>
+                )}
+
+                {/* 数据表统计 */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1 text-xs">
+                  <div className="bg-chip/50 p-2.5 rounded-xl border border-line/50">
+                    <span className="text-faint text-[11px] block">用户账号 (users)</span>
+                    <span className="text-sm font-bold text-content">{storageDiagnostics?.userCount ?? users.length} 人</span>
+                  </div>
+                  <div className="bg-chip/50 p-2.5 rounded-xl border border-line/50">
+                    <span className="text-faint text-[11px] block">邀请码库 (invites)</span>
+                    <span className="text-sm font-bold text-content">{storageDiagnostics?.inviteCount ?? invites.length} 条</span>
+                  </div>
+                  <div className="bg-chip/50 p-2.5 rounded-xl border border-line/50">
+                    <span className="text-faint text-[11px] block">全站源池 (global_sources)</span>
+                    <span className="text-sm font-bold text-content">{storageDiagnostics?.globalSourceCount ?? sources.length} 路</span>
+                  </div>
+                  <div className="bg-chip/50 p-2.5 rounded-xl border border-line/50">
+                    <span className="text-faint text-[11px] block">用户源配置 (user_configs)</span>
+                    <span className="text-sm font-bold text-content">{storageDiagnostics?.userConfigsCount ?? 0} 份</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. GitHub Gist 独立容灾冷备面板 */}
+              <div className="bg-card border border-line rounded-xl p-4 sm:p-5 space-y-4 shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-line/60 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-2xl">📦</span>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-sm font-bold text-content">GitHub Gist 独立容灾冷备</h3>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-chip text-muted font-semibold">独立冷备</span>
+                      </div>
+                      <p className="text-xs text-faint mt-0.5">
+                        不承担日常高频读写，仅作为防灾备份：按需将 Neon 主库数据导出为版本化 JSON，发生故障可一键还原
+                      </p>
                     </div>
                   </div>
                   <span
@@ -815,7 +1033,7 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
                         : 'bg-warning/15 text-warning border border-warning/30'
                     )}
                   >
-                    {gistStatus?.enabled ? '● 已连接 GitHub 云端' : '○ 未连接云端 (仅本地)'}
+                    {gistStatus?.enabled ? '● 已配置 GitHub 冷备' : '○ 未配置冷备 Token'}
                   </span>
                 </div>
 
@@ -823,7 +1041,7 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
                 {(!gistStatus?.enabled || showTokenInput) ? (
                   <div className="bg-chip/40 border border-line/60 rounded-xl p-3.5 space-y-2.5 animate-fade-in">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-content">绑定 GitHub Personal Access Token (PAT)</span>
+                      <span className="text-xs font-semibold text-content">配置 GitHub Personal Access Token (PAT)</span>
                       {showTokenInput && (
                         <button
                           type="button"
@@ -837,7 +1055,7 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
                     <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                       <input
                         type="password"
-                        placeholder="ghp_xxxxxxxxxxxxxxxxxxxx (需勾选 gist 权限)"
+                        placeholder="ghp_xxxxxxxxxxxxxxxxxxxx (需勾选 gist 读写权限)"
                         className="input py-1.5 px-3 text-xs flex-1 font-mono"
                         value={customToken}
                         onChange={(e) => setCustomToken(e.target.value)}
@@ -848,20 +1066,17 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
                         onClick={handleSaveToken}
                         disabled={savingToken}
                       >
-                        {savingToken ? '验证连接中...' : '保存并连接 GitHub 云端'}
+                        {savingToken ? '验证连接中...' : '保存冷备 Token'}
                       </button>
                     </div>
                     <p className="text-[11px] text-faint leading-relaxed">
-                      💡 前往 GitHub: <strong>Settings</strong> → <strong>Developer settings</strong> → <strong>Personal access tokens (classic)</strong> → <strong>Generate new token</strong>，勾选 <code>gist</code> 权限后复制填入。系统将自动创建或绑定专属私密 Gist。
+                      💡 前往 GitHub: <strong>Settings</strong> → <strong>Developer settings</strong> → <strong>Personal access tokens (classic)</strong>，勾选 <code>gist</code> 权限。系统将自动创建并管理私密冷备 Gist。
                     </p>
                   </div>
                 ) : (
                   <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 bg-success/5 border border-success/20 rounded-xl text-xs">
                     <div className="flex items-center gap-2 text-success font-medium">
-                      <span>✓ GitHub Token 已绑定并受密码学保护</span>
-                      {storageDiagnostics?.hasCustomGithubToken && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-success/15 font-normal">存储引擎安全保存</span>
-                      )}
+                      <span>✓ GitHub 冷备 Token 已就绪并安全保存</span>
                     </div>
                     <button
                       type="button"
@@ -875,7 +1090,7 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 text-xs">
                   <div className="bg-chip/50 p-3 rounded-xl border border-line/50 space-y-1">
-                    <span className="text-faint font-medium">云端私有仓库 (Gist):</span>
+                    <span className="text-faint font-medium">云端私密 Gist 仓库:</span>
                     {gistStatus?.gistId ? (
                       <div className="flex items-center gap-1.5 font-mono text-accent">
                         <span className="truncate">{gistStatus.gistId}</span>
@@ -886,52 +1101,41 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
                             rel="noopener noreferrer"
                             className="underline text-[11px] shrink-0"
                           >
-                            在 GitHub 打开 ↗
+                            在 GitHub 查看 ↗
                           </a>
                         )}
                       </div>
                     ) : (
-                      <p className="text-muted font-mono">{gistStatus?.enabled ? '初始化探测连接中...' : '未连接 (请配置 GitHub Token)'}</p>
+                      <p className="text-muted font-mono">{gistStatus?.enabled ? '待首次导出时自动创建...' : '未配置 (请填入 GitHub Token)'}</p>
                     )}
                   </div>
 
                   <div className="bg-chip/50 p-3 rounded-xl border border-line/50 space-y-1">
-                    <span className="text-faint font-medium">上次云端同步状态:</span>
+                    <span className="text-faint font-medium">上次冷备导出状态:</span>
                     <div className="flex items-center gap-2">
                       <p className="text-content font-mono">
-                        {gistStatus?.lastSyncAt ? new Date(gistStatus.lastSyncAt).toLocaleString() : '尚未同步'}
+                        {gistStatus?.lastSyncAt ? new Date(gistStatus.lastSyncAt).toLocaleString() : '尚未导出'}
                       </p>
-                      {gistStatus?.lastAction && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-chip text-faint uppercase font-mono">
-                          {gistStatus.lastAction}
-                        </span>
-                      )}
                     </div>
                   </div>
                 </div>
-
-                {gistStatus?.lastError && (
-                  <div className="p-3 bg-danger/10 border border-danger/20 rounded-xl text-xs text-danger">
-                    云同步告警: {gistStatus.lastError}
-                  </div>
-                )}
 
                 <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-line/40">
                   <button
                     type="button"
                     className="btn-primary py-1.5 px-3 text-xs active:scale-95 disabled:opacity-50"
-                    onClick={handleSyncGist}
-                    disabled={!gistStatus?.enabled || syncingGist}
+                    onClick={handleExportNeonToGist}
+                    disabled={!gistStatus?.enabled || exportingGist}
                   >
-                    {syncingGist ? '同步中...' : '☁️ 立即同步至 Gist'}
+                    {exportingGist ? '导出冷备中...' : '📦 导出 Neon 全量冷备至 Gist'}
                   </button>
                   <button
                     type="button"
-                    className="btn-ghost py-1.5 px-3 text-xs active:scale-95 disabled:opacity-50"
-                    onClick={handlePullGist}
-                    disabled={!gistStatus?.enabled || syncingGist}
+                    className="btn-secondary py-1.5 px-3 text-xs active:scale-95 disabled:opacity-50"
+                    onClick={handleRestoreGistToNeon}
+                    disabled={!gistStatus?.enabled || restoringGist}
                   >
-                    📥 从云端拉取覆盖
+                    {restoringGist ? '还原中...' : '🔄 从 Gist 容灾恢复回 Neon'}
                   </button>
                   <button
                     type="button"
@@ -1050,24 +1254,39 @@ function TabButton({
   onClick,
   icon,
   label,
+  badge,
+  badgeColor,
 }: {
   active: boolean;
   onClick: () => void;
   icon: string;
   label: string;
+  badge?: string | number;
+  badgeColor?: string;
 }) {
   return (
     <button
+      type="button"
       className={cn(
-        'px-3.5 py-2 rounded-t-lg text-xs font-semibold flex items-center gap-1.5 transition-all border-b-2',
+        'shrink-0 whitespace-nowrap px-4 py-2.5 rounded-t-xl text-xs sm:text-sm font-semibold flex items-center gap-2 transition-all -mb-[1px] border-b-2',
         active
-          ? 'border-accent text-accent bg-chip/40'
+          ? 'border-accent text-accent bg-accent/10 shadow-sm'
           : 'border-transparent text-muted hover:text-content hover:bg-hover'
       )}
       onClick={onClick}
     >
-      <span>{icon}</span>
-      <span>{label}</span>
+      <span className="text-sm shrink-0">{icon}</span>
+      <span className="shrink-0">{label}</span>
+      {badge !== undefined && (
+        <span
+          className={cn(
+            'text-[10px] px-1.5 py-0.5 rounded-full font-mono shrink-0',
+            badgeColor || (active ? 'bg-accent/20 text-accent font-bold' : 'bg-chip text-muted')
+          )}
+        >
+          {badge}
+        </span>
+      )}
     </button>
   );
 }

@@ -14,15 +14,20 @@ import {
   getUserSearchConfig,
   saveUserSearchConfig,
   getStorageDiagnostics,
+  getSuperAdminUsername,
+  listUsers,
+  banUser,
 } from './auth-store';
 
 describe('Neon PostgreSQL & Decoupled Gist Architecture', () => {
   const originalDbUrl = process.env.DATABASE_URL;
   const originalGhToken = process.env.GITHUB_TOKEN;
+  const originalAdminUser = process.env.ADMIN_USERNAME;
 
   beforeEach(() => {
     delete process.env.DATABASE_URL;
     delete process.env.GITHUB_TOKEN;
+    delete process.env.ADMIN_USERNAME;
     setCustomGithubToken(null);
   });
 
@@ -32,6 +37,9 @@ describe('Neon PostgreSQL & Decoupled Gist Architecture', () => {
 
     if (originalGhToken !== undefined) process.env.GITHUB_TOKEN = originalGhToken;
     else delete process.env.GITHUB_TOKEN;
+
+    if (originalAdminUser !== undefined) process.env.ADMIN_USERNAME = originalAdminUser;
+    else delete process.env.ADMIN_USERNAME;
   });
 
   it('未配置 DATABASE_URL 时正确识别未启用状态并安全防御', async () => {
@@ -92,5 +100,22 @@ describe('Neon PostgreSQL & Decoupled Gist Architecture', () => {
     expect(diag.database.type).toBe('local_json_fallback');
     expect(diag.database.configured).toBe(false);
     expect(diag.gist).toBeDefined();
+  });
+
+  it('超级管理员支持 ADMIN_USERNAME 自定义指定与绝对物理防封禁保护', () => {
+    expect(getSuperAdminUsername()).toBe('admin');
+
+    process.env.ADMIN_USERNAME = 'RootMaster';
+    expect(getSuperAdminUsername()).toBe('rootmaster');
+
+    // 严禁封禁超级管理员
+    const banResult = banUser('rootmaster');
+    expect(banResult).toBe(false);
+
+    const users = listUsers();
+    const adminUser = users.find((u) => u.username === 'rootmaster' || u.username === 'admin');
+    if (adminUser) {
+      expect(typeof adminUser.isSuperAdmin).toBe('boolean');
+    }
   });
 });

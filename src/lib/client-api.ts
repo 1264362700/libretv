@@ -241,9 +241,16 @@ export const api = {
           userCount: number;
           inviteCount: number;
           globalSourceCount: number;
+          userConfigsCount?: number;
           hasCustomGithubToken: boolean;
           gistConfigured: boolean;
           lastModified: number;
+          database?: {
+            type: string;
+            configured: boolean;
+          };
+          superAdminUsername?: string;
+          isDefaultPassword?: boolean;
         };
         gistStatus: {
           enabled: boolean;
@@ -253,7 +260,53 @@ export const api = {
           lastAction: 'pull' | 'push' | 'idle' | 'error';
           lastError: string | null;
         };
+        neon?: {
+          configured: boolean;
+          ok: boolean;
+          latencyMs?: number;
+          error?: string;
+        };
       }>('/api/admin?type=storage_info'),
+    getNeonStatus: () =>
+      request<{
+        success: boolean;
+        configured: boolean;
+        neon: { ok: boolean; latencyMs?: number; error?: string };
+      }>('/api/admin?type=neon_status'),
+    testNeon: () =>
+      request<{
+        success: boolean;
+        ok: boolean;
+        latencyMs?: number;
+        error?: string;
+      }>('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'neon_test' }),
+      }),
+    backupToGist: () =>
+      request<{
+        success: boolean;
+        gistId?: string;
+        gistUrl?: string;
+        stats?: { usersCount: number; invitesCount: number; sourcesCount: number; userConfigsCount: number };
+        error?: string;
+      }>('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'backup_to_gist' }),
+      }),
+    restoreFromGist: () =>
+      request<{
+        success: boolean;
+        restoredStats?: { users: number; invites: number; sources: number; userConfigs: number };
+        gistUrl?: string;
+        error?: string;
+      }>('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'restore_from_gist' }),
+      }),
     saveGithubToken: (token: string) =>
       request<{ success: boolean; error?: string; gistId?: string }>('/api/admin', {
         method: 'POST',

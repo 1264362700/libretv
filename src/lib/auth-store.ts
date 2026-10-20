@@ -638,8 +638,21 @@ function saveStore(store: AuthDataStore): void {
   }
 }
 
+export function getSuperAdminUsername(): string {
+  const envName = process.env.ADMIN_USERNAME?.trim() || process.env.SUPERADMIN_USERNAME?.trim();
+  return (envName || 'admin').toLowerCase();
+}
+
+export function isUsingDefaultPassword(): boolean {
+  const store = loadStore();
+  const adminUname = getSuperAdminUsername();
+  const user = store.users[adminUname];
+  if (!user) return false;
+  return hashPassword('admin888', user.salt) === user.passwordHash;
+}
+
 function bootstrapAdmin(store: AuthDataStore) {
-  const adminUsername = 'admin';
+  const adminUsername = getSuperAdminUsername();
   const envPassword = process.env.ADMIN_PASSWORD || process.env.PASSWORD;
   const defaultPassword = envPassword || 'admin888';
 
@@ -656,12 +669,18 @@ function bootstrapAdmin(store: AuthDataStore) {
       createdAt: Date.now(),
       lastLoginAt: Date.now(),
     };
+    if (isPostgresConfigured()) {
+      dbUpsertUser(store.users[adminUsername]).catch(() => {});
+    }
   } else if (envPassword && hashPassword(envPassword, store.users[adminUsername].salt) !== store.users[adminUsername].passwordHash) {
     // 若环境变量显式配置了 ADMIN_PASSWORD 或 PASSWORD 且发生变更，平滑同步管理员密码
     const salt = crypto.randomBytes(32).toString('hex');
     store.users[adminUsername].salt = salt;
     store.users[adminUsername].passwordHash = hashPassword(envPassword, salt);
     store.users[adminUsername].sessionVersion = (store.users[adminUsername].sessionVersion || 1) + 1;
+    if (isPostgresConfigured()) {
+      dbUpsertUser(store.users[adminUsername]).catch(() => {});
+    }
   }
 }
 
@@ -689,8 +708,9 @@ export function getUser(username: string): UserRecord | undefined {
   return store.users[username.toLowerCase().trim()];
 }
 
-export function listUsers(): Omit<UserRecord, 'passwordHash' | 'salt'>[] {
+export function listUsers(): (Omit<UserRecord, 'passwordHash' | 'salt'> & { isSuperAdmin: boolean })[] {
   const store = loadStore();
+  const superAdmin = getSuperAdminUsername();
   return Object.values(store.users).map((u) => ({
     id: u.id,
     username: u.username,
@@ -699,6 +719,7 @@ export function listUsers(): Omit<UserRecord, 'passwordHash' | 'salt'>[] {
     sessionVersion: u.sessionVersion,
     createdAt: u.createdAt,
     lastLoginAt: u.lastLoginAt,
+    isSuperAdmin: u.username.toLowerCase() === superAdmin,
   }));
 }
 
@@ -858,6 +879,8 @@ export function revokeInviteCode(code: string): boolean {
 export function banUser(username: string): boolean {
   const store = loadStore();
   const uname = username.toLowerCase().trim();
+  const superAdmin = getSuperAdminUsername();
+  if (uname === superAdmin) return false;
   const user = store.users[uname];
   if (user && user.role !== 'admin') {
     user.status = 'banned';
@@ -1286,6 +1309,8 @@ export function getStorageDiagnostics() {
     inviteCount: Object.keys(store.invites || {}).length,
     globalSourceCount: Object.keys(store.globalSources || {}).length,
     userConfigsCount: Object.keys(store.userConfigs || {}).length,
+    superAdminUsername: getSuperAdminUsername(),
+    isDefaultPassword: isUsingDefaultPassword(),
     hasCustomGithubToken: Boolean(getCustomGithubToken()),
     gistConfigured: Boolean(getCustomGithubToken() || process.env.GITHUB_TOKEN || process.env.GH_TOKEN),
     // 兼容历史字段

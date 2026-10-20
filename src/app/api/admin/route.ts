@@ -51,10 +51,15 @@ export async function GET(req: Request) {
   }
 
   if (type === 'storage_info') {
+    const neonConn = await testNeonConnection();
     return NextResponse.json({
       success: true,
       diagnostics: getStorageDiagnostics(),
       gistStatus: getGistStatus(),
+      neon: {
+        configured: isPostgresConfigured(),
+        ...neonConn,
+      },
     });
   }
 

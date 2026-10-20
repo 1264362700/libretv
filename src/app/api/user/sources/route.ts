@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { sessionFromCookieHeader } from '@/lib/auth';
-import { getUserSearchConfig, saveUserSearchConfig, ensureGistLoaded } from '@/lib/auth-store';
+import { getUserSearchConfig, saveUserSearchConfigAsync, ensureGistLoaded } from '@/lib/auth-store';
 
 export const runtime = 'nodejs';
 
@@ -51,7 +51,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: false, error: '请求数据格式不正确' }, { status: 400 });
   }
 
-  const updated = saveUserSearchConfig(session.user.username, {
+  const updated = await saveUserSearchConfigAsync(session.user.username, {
     customSources: Array.isArray(body.customSources) ? body.customSources : undefined,
     selectedKeys: Array.isArray(body.selectedKeys) ? body.selectedKeys : undefined,
     subscriptions: Array.isArray(body.subscriptions) ? body.subscriptions : undefined,

@@ -24,6 +24,7 @@ import {
   exportFullBackup,
   importFullBackup,
   saveCustomGithubToken,
+  pushAllLocalDataToNeon,
 } from '@/lib/auth-store';
 
 export const runtime = 'nodejs';
@@ -121,6 +122,10 @@ export async function POST(req: Request) {
   if (action === 'neon_test') {
     const res = await testNeonConnection();
     return NextResponse.json({ success: res.ok, ...res });
+  }
+  if (action === 'push_to_neon') {
+    const res = await pushAllLocalDataToNeon();
+    return NextResponse.json(res);
   }
 
   // 1. 生成邀请码

@@ -83,8 +83,15 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
     ok: boolean;
     latencyMs?: number;
     error?: string;
+    tableCounts?: {
+      users: number;
+      invites: number;
+      globalSources: number;
+      userConfigs: number;
+    };
   } | null>(null);
   const [testingNeon, setTestingNeon] = useState(false);
+  const [pushingToNeon, setPushingToNeon] = useState(false);
   const [exportingGist, setExportingGist] = useState(false);
   const [restoringGist, setRestoringGist] = useState(false);
 
@@ -166,7 +173,7 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
     try {
       const res = await api.admin.testNeon();
       if (res.ok) {
-        setNeonStatus({ configured: true, ok: true, latencyMs: res.latencyMs });
+        setNeonStatus({ configured: true, ok: true, latencyMs: res.latencyMs, tableCounts: res.tableCounts });
         toast(`Neon 主库连接正常！响应延迟: ${res.latencyMs ?? 0}ms`, 'success');
       } else {
         setNeonStatus({ configured: Boolean(storageDiagnostics?.database?.configured), ok: false, error: res.error });
@@ -177,6 +184,27 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
       toast(e instanceof Error ? e.message : '探测异常', 'error');
     } finally {
       setTestingNeon(false);
+    }
+  };
+
+  const handlePushToNeon = async () => {
+    setPushingToNeon(true);
+    try {
+      const res = await api.admin.pushToNeon();
+      if (res.success) {
+        toast(
+          `全量数据已成功推送写入 Neon 数据库！(用户: ${res.stats.users}, 邀请码: ${res.stats.invites}, 全局源: ${res.stats.sources}, 用户配置: ${res.stats.userConfigs})`,
+          'success'
+        );
+        fetchStorageInfo();
+        handleTestNeon();
+      } else {
+        toast(res.error || '推送 Neon 失败', 'error');
+      }
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '推送 Neon 异常', 'error');
+    } finally {
+      setPushingToNeon(false);
     }
   };
 
@@ -990,22 +1018,53 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
                 )}
 
                 {/* 数据表统计 */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1 text-xs">
-                  <div className="bg-chip/50 p-2.5 rounded-xl border border-line/50">
-                    <span className="text-faint text-[11px] block">用户账号 (users)</span>
-                    <span className="text-sm font-bold text-content">{storageDiagnostics?.userCount ?? users.length} 人</span>
+                <div className="space-y-2.5 pt-1">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                    <span className="text-faint font-medium flex items-center gap-1.5">
+                      <span>📊</span>
+                      <span>
+                        {neonStatus?.tableCounts
+                          ? 'Neon PostgreSQL 物理数据表行数 (实时库表统计)'
+                          : '系统核心数据项统计'}
+                      </span>
+                    </span>
+                    {storageDiagnostics?.database?.configured && (
+                      <button
+                        type="button"
+                        disabled={pushingToNeon}
+                        className="px-2.5 py-1 rounded-lg text-xs font-medium bg-accent/10 hover:bg-accent/20 text-accent border border-accent/30 active:scale-95 transition-all disabled:opacity-50 self-start sm:self-auto"
+                        onClick={handlePushToNeon}
+                        title="将系统所有存量用户、邀请码、全局源及配置一次性全量写入 Neon 主库"
+                      >
+                        {pushingToNeon ? '正在全量写入 Neon...' : '⚡ 一键全量同步至 Neon 数据库'}
+                      </button>
+                    )}
                   </div>
-                  <div className="bg-chip/50 p-2.5 rounded-xl border border-line/50">
-                    <span className="text-faint text-[11px] block">邀请码库 (invites)</span>
-                    <span className="text-sm font-bold text-content">{storageDiagnostics?.inviteCount ?? invites.length} 条</span>
-                  </div>
-                  <div className="bg-chip/50 p-2.5 rounded-xl border border-line/50">
-                    <span className="text-faint text-[11px] block">全站源池 (global_sources)</span>
-                    <span className="text-sm font-bold text-content">{storageDiagnostics?.globalSourceCount ?? sources.length} 路</span>
-                  </div>
-                  <div className="bg-chip/50 p-2.5 rounded-xl border border-line/50">
-                    <span className="text-faint text-[11px] block">用户源配置 (user_configs)</span>
-                    <span className="text-sm font-bold text-content">{storageDiagnostics?.userConfigsCount ?? 0} 份</span>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+                    <div className="bg-chip/50 p-2.5 rounded-xl border border-line/50">
+                      <span className="text-faint text-[11px] block">用户账号 (users)</span>
+                      <span className="text-sm font-bold text-content">
+                        {neonStatus?.tableCounts?.users ?? storageDiagnostics?.userCount ?? users.length} 人
+                      </span>
+                    </div>
+                    <div className="bg-chip/50 p-2.5 rounded-xl border border-line/50">
+                      <span className="text-faint text-[11px] block">邀请码库 (invites)</span>
+                      <span className="text-sm font-bold text-content">
+                        {neonStatus?.tableCounts?.invites ?? storageDiagnostics?.inviteCount ?? invites.length} 条
+                      </span>
+                    </div>
+                    <div className="bg-chip/50 p-2.5 rounded-xl border border-line/50">
+                      <span className="text-faint text-[11px] block">全站源池 (global_sources)</span>
+                      <span className="text-sm font-bold text-content">
+                        {neonStatus?.tableCounts?.globalSources ?? storageDiagnostics?.globalSourceCount ?? sources.length} 路
+                      </span>
+                    </div>
+                    <div className="bg-chip/50 p-2.5 rounded-xl border border-line/50">
+                      <span className="text-faint text-[11px] block">用户源配置 (user_configs)</span>
+                      <span className="text-sm font-bold text-content">
+                        {neonStatus?.tableCounts?.userConfigs ?? storageDiagnostics?.userConfigsCount ?? 0} 份
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>

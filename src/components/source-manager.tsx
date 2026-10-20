@@ -19,7 +19,7 @@ import {
 import { loadCacheSettings, saveCacheSettings, getCacheSummary, clearVideoCache, type CacheSummary } from '@/lib/video-cache';
 import { EmptyState, Spinner } from './states';
 import { useSourceProbe } from './use-source-probe';
-import { allLiveSources, isSourceDisabled, keyBelongsToSubscription, resolveSource, subKeyPrefix, useAppStore } from '@/lib/store';
+import { allLiveSources, isSourceDisabled, keyBelongsToSubscription, resolveSource, subKeyPrefix, useAppStore, type SourceSubscription } from '@/lib/store';
 import type { SourceConfig } from '@/lib/types';
 import type { RecommendSourceValue } from '@/lib/env-recommend-source';
 import { useToast } from './toast';
@@ -28,6 +28,7 @@ import { exportConfig, importConfig } from '@/lib/db';
 import { PERSIST_KEY } from '@/lib/persist-storage';
 import { copyToClipboard } from '@/lib/clipboard';
 import { useAuth } from './auth';
+import { useUserSourcesSync } from './use-user-sources-sync';
 import { api } from '@/lib/client-api';
 import { syncSourceSubscription } from '@/lib/subscription-sync';
 import { describeParseStats } from '@/lib/tvbox-parser';
@@ -1098,8 +1099,39 @@ function SourceSubscriptions() {
 /** 配置导入导出（导出受登录门控；导入前先解析预览再确认，避免误覆盖） */
 function ConfigIoPanel() {
   const { toast } = useToast();
-  const { verified, openLogin } = useAuth();
+  const { verified, user, openLogin } = useAuth();
+  const { syncing, lastSyncedAt, syncError, triggerManualSave } = useUserSourcesSync();
   const [pending, setPending] = useState<{ file: File; summary: string } | null>(null);
+  const [pullingCloud, setPullingCloud] = useState(false);
+
+  const handlePullFromCloud = async () => {
+    if (!verified) {
+      openLogin();
+      return;
+    }
+    setPullingCloud(true);
+    try {
+      const res = await api.user.getSources();
+      if (res.success && res.config) {
+        if (res.config.updatedAt) {
+          useAppStore.setState({
+            customAPIs: (res.config.customSources || []) as SourceConfig[],
+            selectedKeys: res.config.selectedKeys || [],
+            subscriptions: (res.config.subscriptions || []) as SourceSubscription[],
+          });
+          toast('已成功从 Neon 数据库拉取并覆盖本设备配置！', 'success');
+        } else {
+          toast('云端数据库中尚无个性化源记录', 'info');
+        }
+      } else {
+        toast(res.error || '拉取失败', 'error');
+      }
+    } catch {
+      toast('网络拉取异常', 'error');
+    } finally {
+      setPullingCloud(false);
+    }
+  };
 
   const doExport = async () => {
     if (verified === false) {
@@ -1174,6 +1206,51 @@ function ConfigIoPanel() {
         onCancel={() => setPending(null)}
         onConfirm={confirmImport}
       />
+
+      {/* Neon 数据库实时云端同步状态卡片 */}
+      {verified && user && (
+        <div className="mt-5 p-3.5 bg-chip/40 border border-line/60 rounded-xl space-y-2.5 text-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+            <div className="flex items-center gap-1.5 font-semibold text-content">
+              <span>☁️</span>
+              <span>Neon 数据库云端同步</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-success/15 text-success font-medium">
+                {syncing ? '正在同步...' : '自动双向同步已启用'}
+              </span>
+            </div>
+            {lastSyncedAt && (
+              <span className="text-[11px] text-faint">
+                上次已同步: {new Date(lastSyncedAt).toLocaleTimeString()}
+              </span>
+            )}
+          </div>
+          <p className="text-[11px] text-faint leading-relaxed">
+            当前账号 [<strong>{user.username}</strong>] 的自定义源、订阅与勾选状态会自动防抖保存在主数据库，无论在手机、平板还是其他浏览器登录均无缝自动还原。
+          </p>
+          <div className="flex gap-2 pt-0.5">
+            <button
+              type="button"
+              disabled={syncing}
+              className="btn-secondary flex-1 py-1.5 text-xs active:scale-95 transition-all disabled:opacity-50"
+              onClick={async () => {
+                const ok = await triggerManualSave();
+                if (ok) toast('已立即将当前配置同步推送到 Neon 数据库', 'success');
+              }}
+            >
+              {syncing ? '同步中...' : '☁️ 立即同步至 Neon 数据库'}
+            </button>
+            <button
+              type="button"
+              disabled={pullingCloud}
+              className="btn-ghost flex-1 py-1.5 text-xs active:scale-95 transition-all disabled:opacity-50"
+              onClick={handlePullFromCloud}
+            >
+              {pullingCloud ? '拉取中...' : '🔄 从 Neon 数据库重新拉取'}
+            </button>
+          </div>
+          {syncError && <p className="text-[11px] text-danger">⚠️ 同步提示: {syncError}</p>}
+        </div>
+      )}
     </section>
   );
 }

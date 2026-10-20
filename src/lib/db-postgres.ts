@@ -168,18 +168,42 @@ export async function initPostgresSchema(): Promise<boolean> {
   }
 }
 
-/** 测试 Neon 连通性与延迟 */
-export async function testNeonConnection(): Promise<{ ok: boolean; latencyMs?: number; error?: string }> {
+/** 测试 Neon 连通性与延迟，并读取物理表真实行数 */
+export async function testNeonConnection(): Promise<{
+  ok: boolean;
+  latencyMs?: number;
+  error?: string;
+  tableCounts?: {
+    users: number;
+    invites: number;
+    globalSources: number;
+    userConfigs: number;
+  };
+}> {
   const pool = getPostgresPool();
   if (!pool) return { ok: false, error: '未配置 DATABASE_URL 环境变量' };
 
   const start = Date.now();
   try {
-    const res = await pool.query('SELECT 1 as ping');
-    if (res.rows?.[0]?.ping === 1) {
-      return { ok: true, latencyMs: Date.now() - start };
-    }
-    return { ok: false, error: '查询无响应' };
+    await initPostgresSchema();
+    const countRes = await pool.query(`
+      SELECT 
+        (SELECT COUNT(*) FROM users) as users_count,
+        (SELECT COUNT(*) FROM invites) as invites_count,
+        (SELECT COUNT(*) FROM global_sources) as sources_count,
+        (SELECT COUNT(*) FROM user_configs) as configs_count
+    `);
+    const row = countRes.rows?.[0] || {};
+    return {
+      ok: true,
+      latencyMs: Date.now() - start,
+      tableCounts: {
+        users: Number(row.users_count || 0),
+        invites: Number(row.invites_count || 0),
+        globalSources: Number(row.sources_count || 0),
+        userConfigs: Number(row.configs_count || 0),
+      },
+    };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
@@ -484,14 +508,14 @@ export async function dbSaveUserConfig(
   const now = Date.now();
   await pool.query(
     `INSERT INTO user_configs (username, custom_sources, selected_keys, subscriptions, updated_at)
-     VALUES ($1, $2, $3, $4, $5)
+     VALUES ($1, COALESCE($2::jsonb, '[]'::jsonb), COALESCE($3::jsonb, '[]'::jsonb), COALESCE($4::jsonb, '[]'::jsonb), $5)
      ON CONFLICT (username) DO UPDATE SET
-       custom_sources = COALESCE($2, user_configs.custom_sources),
-       selected_keys = COALESCE($3, user_configs.selected_keys),
-       subscriptions = COALESCE($4, user_configs.subscriptions),
+       custom_sources = CASE WHEN $2::jsonb IS NOT NULL THEN $2::jsonb ELSE user_configs.custom_sources END,
+       selected_keys = CASE WHEN $3::jsonb IS NOT NULL THEN $3::jsonb ELSE user_configs.selected_keys END,
+       subscriptions = CASE WHEN $4::jsonb IS NOT NULL THEN $4::jsonb ELSE user_configs.subscriptions END,
        updated_at = $5`,
     [
-      username,
+      username.toLowerCase().trim(),
       config.customSources !== undefined ? JSON.stringify(config.customSources) : null,
       config.selectedKeys !== undefined ? JSON.stringify(config.selectedKeys) : null,
       config.subscriptions !== undefined ? JSON.stringify(config.subscriptions) : null,

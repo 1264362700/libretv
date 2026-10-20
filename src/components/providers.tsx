@@ -11,6 +11,12 @@ import { MobileBottomBar } from './mobile-bottom-bar';
 import { useAppStore, hydrateLiveProbeResults } from '@/lib/store';
 import { api, STATUS_QUERY_KEY } from '@/lib/client-api';
 import { applyEnvPresets } from '@/lib/subscription-sync';
+import { useUserSourcesSync } from './use-user-sources-sync';
+
+function UserSourcesSyncListener() {
+  useUserSourcesSync();
+  return null;
+}
 
 export function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(
@@ -54,6 +60,7 @@ export function Providers({ children }: { children: ReactNode }) {
                 挂在 Header 里会让 /watch 等不渲染 Header 的页面派发的事件凭空丢失 */}
             <GlobalDownloadManager />
             <AuthProvider>
+              <UserSourcesSyncListener />
               {children}
               <MobileBottomBar />
             </AuthProvider>

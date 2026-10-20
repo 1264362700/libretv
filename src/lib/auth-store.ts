@@ -14,6 +14,7 @@ import {
   dbUpsertGlobalSource,
   dbDeleteGlobalSource,
   dbSaveUserConfig,
+  restoreAllDataToNeon,
 } from './db-postgres';
 import {
   exportNeonToGist,
@@ -1108,10 +1109,41 @@ export function saveUserSearchConfig(
   saveStore(store);
 
   if (isPostgresConfigured()) {
-    dbSaveUserConfig(uname, config).catch((e) => console.error('[Neon] 用户源配置保存异常:', e));
+    dbSaveUserConfig(uname, updated).catch((e) => console.error('[Neon] 用户源配置保存异常:', e));
   }
 
   return updated;
+}
+
+export async function saveUserSearchConfigAsync(
+  username: string,
+  config: { customSources?: unknown[]; selectedKeys?: string[]; subscriptions?: unknown[] }
+): Promise<UserConfigRecord> {
+  const updated = saveUserSearchConfig(username, config);
+  if (isPostgresConfigured()) {
+    try {
+      await dbSaveUserConfig(username.toLowerCase().trim(), updated);
+    } catch (e) {
+      console.error('[Neon] 用户源配置异步保存异常:', e);
+    }
+  }
+  return updated;
+}
+
+/** 将本地全部数据（用户、邀请码、全局源、用户配置）一次性全量推送到 Neon 主库 */
+export async function pushAllLocalDataToNeon(): Promise<{
+  success: boolean;
+  error?: string;
+  stats: { users: number; invites: number; sources: number; userConfigs: number };
+}> {
+  const store = loadStore();
+  const res = await restoreAllDataToNeon({
+    users: store.users,
+    invites: store.invites,
+    globalSources: store.globalSources,
+    userConfigs: store.userConfigs,
+  });
+  return res;
 }
 
 /** 保存并绑定自定义 GitHub Token */

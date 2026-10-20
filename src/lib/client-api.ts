@@ -265,13 +265,29 @@ export const api = {
           ok: boolean;
           latencyMs?: number;
           error?: string;
+          tableCounts?: {
+            users: number;
+            invites: number;
+            globalSources: number;
+            userConfigs: number;
+          };
         };
       }>('/api/admin?type=storage_info'),
     getNeonStatus: () =>
       request<{
         success: boolean;
         configured: boolean;
-        neon: { ok: boolean; latencyMs?: number; error?: string };
+        neon: {
+          ok: boolean;
+          latencyMs?: number;
+          error?: string;
+          tableCounts?: {
+            users: number;
+            invites: number;
+            globalSources: number;
+            userConfigs: number;
+          };
+        };
       }>('/api/admin?type=neon_status'),
     testNeon: () =>
       request<{
@@ -279,10 +295,26 @@ export const api = {
         ok: boolean;
         latencyMs?: number;
         error?: string;
+        tableCounts?: {
+          users: number;
+          invites: number;
+          globalSources: number;
+          userConfigs: number;
+        };
       }>('/api/admin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'neon_test' }),
+      }),
+    pushToNeon: () =>
+      request<{
+        success: boolean;
+        stats: { users: number; invites: number; sources: number; userConfigs: number };
+        error?: string;
+      }>('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'push_to_neon' }),
       }),
     backupToGist: () =>
       request<{
@@ -326,6 +358,42 @@ export const api = {
         body: JSON.stringify({ action: 'import_backup', data }),
       }),
     exportBackupUrl: '/api/admin?type=export_backup',
+  },
+
+  user: {
+    getSources: () =>
+      request<{
+        success: boolean;
+        username: string;
+        config: {
+          customSources: unknown[];
+          selectedKeys: string[];
+          subscriptions: unknown[];
+          updatedAt: number | null;
+        };
+        error?: string;
+      }>('/api/user/sources'),
+    saveSources: (payload: {
+      customSources?: unknown[];
+      selectedKeys?: string[];
+      subscriptions?: unknown[];
+    }) =>
+      request<{
+        success: boolean;
+        message?: string;
+        config?: {
+          username: string;
+          customSources: unknown[];
+          selectedKeys: string[];
+          subscriptions: unknown[];
+          updatedAt: number;
+        };
+        error?: string;
+      }>('/api/user/sources', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }),
   },
 
   /**

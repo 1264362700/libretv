@@ -14,6 +14,8 @@ import {
 import {
   getUserSearchConfig,
   saveUserSearchConfig,
+  saveUserSearchConfigAsync,
+  pushAllLocalDataToNeon,
   getStorageDiagnostics,
   getSuperAdminUsername,
   listUsers,
@@ -133,5 +135,20 @@ describe('Neon PostgreSQL & Decoupled Gist Architecture', () => {
     // 空串或非 ssl 保持防御
     expect(normalizePostgresConnectionString('')).toBe('');
     expect(normalizePostgresConnectionString('postgresql://localhost:5432/db')).toBe('postgresql://localhost:5432/db');
+  });
+
+  it('用户配置异步持久化与本地数据全量推送支持', async () => {
+    const res = await saveUserSearchConfigAsync('testuser', {
+      customSources: [{ key: 'custom_1', name: '测试源', url: 'https://test.com/vod' }],
+      selectedKeys: ['custom_1'],
+      subscriptions: [],
+    });
+    expect(res.username).toBe('testuser');
+    expect(res.customSources).toHaveLength(1);
+
+    // 未配置 DATABASE_URL 时 pushAllLocalDataToNeon 返回防御结果
+    const pushRes = await pushAllLocalDataToNeon();
+    expect(pushRes.success).toBe(false);
+    expect(pushRes.error).toContain('未配置 DATABASE_URL');
   });
 });

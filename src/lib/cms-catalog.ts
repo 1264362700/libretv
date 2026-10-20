@@ -13,9 +13,15 @@ export interface CmsClassItem {
   type_pid?: number;
 }
 
+export interface CmsSubCategory {
+  id: number;
+  name: string;
+}
+
 export interface CmsCatalogOptions {
   url: string;
   type: 'movie' | 'tv' | 'anime' | 'variety' | 'short_drama' | 'documentary' | 'all' | string;
+  typeId?: number; // 用户选中的具体二级子分类 ID
   page?: number;
   pageSize?: number;
   sourceKey?: string;
@@ -28,6 +34,7 @@ export interface CmsCatalogResult {
   pagecount: number;
   page: number;
   pageSize: number;
+  subCategories?: CmsSubCategory[];
 }
 
 /**
@@ -124,14 +131,63 @@ export function resolveCmsTypeId(
 }
 
 /**
- * 采集站原生全量分类片库查询（支持 500+ 页真分页、高可用、成人内容与短剧精准过滤）
+ * 从源站分类树中智能抽取当前频道的二级细分子类
+ */
+export function extractSubCategories(
+  type: string,
+  classes: CmsClassItem[]
+): CmsSubCategory[] {
+  if (type === 'all' || !Array.isArray(classes) || classes.length === 0) return [];
+
+  const parentId = resolveCmsTypeId(type, classes);
+  const cleanClasses = classes.filter((c) => !isAdultContent(c.type_name));
+
+  // 1. 优先按 type_pid 父级关联寻找子分类
+  if (parentId !== undefined) {
+    const directChildren = cleanClasses
+      .filter((c) => Number(c.type_pid) === Number(parentId) && Number(c.type_id) !== Number(parentId))
+      .map((c) => ({ id: Number(c.type_id), name: c.type_name.trim() }));
+
+    if (directChildren.length > 0) {
+      return directChildren;
+    }
+  }
+
+  // 2. 若源站未正确设置 type_pid（设为 0 或缺失），基于频道语义进行智能识别归集
+  let matcher: RegExp | null = null;
+  if (type === 'tv') {
+    matcher = /国产剧|华语剧|欧美剧|美剧|韩剧|韩国剧|日剧|日本剧|港剧|香港剧|台剧|台湾剧|泰剧|海外剧/;
+  } else if (type === 'movie') {
+    matcher = /动作片|喜剧片|爱情片|科幻片|恐怖片|剧情片|战争片|惊悚片|悬疑片|犯罪片|奇幻片|动画电影|纪录片/;
+  } else if (type === 'anime') {
+    matcher = /国产动漫|国漫|日韩动漫|日本动漫|欧美动漫|港台动漫|海外动漫/;
+  } else if (type === 'variety') {
+    matcher = /大陆综艺|内地综艺|港台综艺|日韩综艺|欧美综艺|真人秀|脱口秀/;
+  } else if (type === 'short_drama' || type === 'ai') {
+    matcher = /短剧|微短剧|爽文|现代都市|古代言情|玄幻武侠|重生逆袭/;
+  }
+
+  if (matcher) {
+    const matched = cleanClasses
+      .filter((c) => matcher.test(c.type_name) && Number(c.type_id) !== Number(parentId))
+      .map((c) => ({ id: Number(c.type_id), name: c.type_name.trim() }));
+    if (matched.length > 0) {
+      return matched;
+    }
+  }
+
+  return [];
+}
+
+/**
+ * 采集站原生全量分类片库查询（支持 500+ 页真分页、高可用、二级细分子类下钻与敏感过滤）
  */
 export async function fetchCmsCatalog(options: CmsCatalogOptions): Promise<CmsCatalogResult> {
-  const { url, type, page = 1, pageSize = 24, sourceKey, filterAdult = true } = options;
+  const { url, type, typeId, page = 1, pageSize = 24, sourceKey, filterAdult = true } = options;
   const cleanUrl = (url || '').trim().replace(/\/+$/, '');
 
   if (!cleanUrl || !/^https?:\/\//.test(cleanUrl)) {
-    return { items: [], total: 0, pagecount: 0, page, pageSize };
+    return { items: [], total: 0, pagecount: 0, page, pageSize, subCategories: [] };
   }
 
   // 安全审计：SSRF 检测
@@ -140,13 +196,14 @@ export async function fetchCmsCatalog(options: CmsCatalogOptions): Promise<CmsCa
     throw new Error(verdict.reason || '源地址不被允许访问');
   }
 
-  const cacheKey = `cms_catalog:${cleanUrl}:${type}:${page}:${pageSize}:${filterAdult ? 1 : 0}`;
+  // 1. 获取源站分类并匹配目标 type_id 与二级细分子分类
+  const classes = await fetchCmsClasses(cleanUrl);
+  const subCategories = extractSubCategories(type, classes);
+  const targetTypeId = typeId !== undefined ? typeId : resolveCmsTypeId(type, classes);
+
+  const cacheKey = `cms_catalog:${cleanUrl}:${type}:${targetTypeId ?? 'all'}:${page}:${pageSize}:${filterAdult ? 1 : 0}`;
   const cached = getCache<CmsCatalogResult>(cacheKey);
   if (cached) return cached;
-
-  // 1. 获取源站分类并匹配目标 type_id
-  const classes = await fetchCmsClasses(cleanUrl);
-  const targetTypeId = resolveCmsTypeId(type, classes);
 
   // 2. 请求 ?ac=videolist
   const params = new URLSearchParams({
@@ -247,6 +304,7 @@ export async function fetchCmsCatalog(options: CmsCatalogOptions): Promise<CmsCa
     pagecount,
     page,
     pageSize,
+    subCategories,
   };
 
   setCache(cacheKey, result, CATALOG_CACHE_TTL);

@@ -19,6 +19,8 @@ export async function GET(req: Request) {
   const pageSize = Math.min(50, Math.max(12, parseInt(url.searchParams.get('pagesize') || '24', 10) || 24));
   const sourceKey = url.searchParams.get('sourceKey') || undefined;
   const filterAdult = url.searchParams.get('filterAdult') !== '0';
+  const rawTypeId = url.searchParams.get('typeId');
+  const typeId = rawTypeId && !Number.isNaN(parseInt(rawTypeId, 10)) ? parseInt(rawTypeId, 10) : undefined;
 
   if (!sourceUrl || !/^https?:\/\//.test(sourceUrl)) {
     return NextResponse.json({ error: '无效的点播源地址' }, { status: 400 });
@@ -28,6 +30,7 @@ export async function GET(req: Request) {
     const result = await fetchCmsCatalog({
       url: sourceUrl,
       type,
+      typeId,
       page,
       pageSize,
       sourceKey,
@@ -48,6 +51,7 @@ export async function GET(req: Request) {
         pagecount: 1,
         page,
         pageSize,
+        subCategories: [],
         warning: err instanceof Error ? err.message : '采集站片库暂时不可用',
       },
       { status: 200 }

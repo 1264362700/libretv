@@ -170,6 +170,7 @@ function CatalogContent() {
 
   // 采集源快速切换与模式
   const rawCmsSourceKey = searchParams.get('cmsSource');
+  const rawCmsTypeId = searchParams.get('cmsTypeId') || '';
   const currentIqiyiMode = (searchParams.get('iqiyiMode') === 'latest' ? 'latest' : 'hot') as 'hot' | 'latest';
 
   // Bangumi 星期子选项
@@ -250,6 +251,7 @@ function CatalogContent() {
     type?: string;
     source?: string;
     cmsSource?: string;
+    cmsTypeId?: string;
     iqiyiMode?: 'hot' | 'latest';
     weekday?: string;
     subTab?: string;
@@ -267,6 +269,7 @@ function CatalogContent() {
       sp.delete('genre');
       sp.delete('weekday');
       sp.delete('subTab');
+      sp.delete('cmsTypeId');
       sp.delete('q');
       sp.set('page', '1');
       const validSources = CHANNEL_SOURCES[changes.type as ChannelType] || ['cms', 'iqiyi', '360', 'douban'];
@@ -276,11 +279,18 @@ function CatalogContent() {
     }
     if (changes.source !== undefined) {
       sp.set('source', changes.source);
+      sp.delete('cmsTypeId');
       sp.set('page', '1');
       sp.delete('q');
     }
     if (changes.cmsSource !== undefined) {
       sp.set('cmsSource', changes.cmsSource);
+      sp.delete('cmsTypeId');
+      sp.set('page', '1');
+    }
+    if (changes.cmsTypeId !== undefined) {
+      if (!changes.cmsTypeId) sp.delete('cmsTypeId');
+      else sp.set('cmsTypeId', changes.cmsTypeId);
       sp.set('page', '1');
     }
     if (changes.iqiyiMode !== undefined) {
@@ -369,6 +379,7 @@ function CatalogContent() {
       currentChannel,
       currentSource,
       activeCmsSource?.key,
+      rawCmsTypeId,
       currentIqiyiMode,
       currentWeekday,
       currentDoubanSubTab,
@@ -380,13 +391,15 @@ function CatalogContent() {
       currentPage,
     ],
     queryFn: async ({ signal }) => {
-      // 1. 点播采集源全量原生片库（TVBox / 影视仓标准，500+页真分页最新入库）
+      // 1. 点播采集源全量原生片库（TVBox / 影视仓标准，500+页真分页最新入库与细分子类下钻）
       if (currentSource === 'cms') {
         const sourceUrl = activeCmsSource?.url || 'https://cj.ffzyapi.com/api.php/provide/vod';
+        const typeIdNum = rawCmsTypeId && !Number.isNaN(parseInt(rawCmsTypeId, 10)) ? parseInt(rawCmsTypeId, 10) : undefined;
         const res = await api.cmsCatalog(
           {
             url: sourceUrl,
             type: currentChannel,
+            typeId: typeIdNum,
             page: currentPage,
             pageSize: PAGE_SIZE,
             sourceKey: activeCmsSource?.key,
@@ -394,7 +407,7 @@ function CatalogContent() {
           },
           signal
         );
-        return { items: res.items, total: res.total, pagecount: res.pagecount };
+        return { items: res.items, total: res.total, pagecount: res.pagecount, subCategories: res.subCategories };
       }
 
       // 2. 爱奇艺官方大厅（大厂官方片库，支持 100+ 页真分页与热播/最新切换）
@@ -492,6 +505,8 @@ function CatalogContent() {
     1,
     Math.min(500, catalogQuery.data?.pagecount ?? Math.ceil(total / PAGE_SIZE))
   );
+
+  const cmsSubCategories = catalogQuery.data?.subCategories || [];
 
   // 点击卡片直接进入播放前进行登录校验
   const handleCardClick = (title: string) => {
@@ -756,6 +771,54 @@ function CatalogContent() {
                 <span className="text-[11px] text-faint ml-auto hidden md:inline shrink-0">
                   💡 支持 500+ 页真分页，最新入库剧集实时同步
                 </span>
+              </div>
+            )}
+
+            {/* 采集站二级细分子分类下钻筛选栏 */}
+            {currentSource === 'cms' && cmsSubCategories.length > 0 && (
+              <div className="flex items-center gap-1.5 sm:gap-2 bg-chip/35 border border-line/50 rounded-xl p-2 sm:p-2.5 overflow-x-auto no-scrollbar">
+                <span className="text-xs font-semibold text-faint shrink-0 px-1">细分子类:</span>
+                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+                  <button
+                    type="button"
+                    onClick={() => updateFilters({ cmsTypeId: '' })}
+                    className={cn(
+                      'px-3 py-1 rounded-lg text-xs font-medium transition-all shrink-0 active:scale-95 cursor-pointer',
+                      !rawCmsTypeId
+                        ? 'bg-accent text-on-accent font-semibold shadow-xs'
+                        : 'text-muted hover:text-content bg-surface/60 hover:bg-surface border border-line/40'
+                    )}
+                  >
+                    全部
+                  </button>
+                  {cmsSubCategories.map((sub) => {
+                    const isSelected = rawCmsTypeId === String(sub.id);
+                    return (
+                      <button
+                        key={sub.id}
+                        type="button"
+                        onClick={() => updateFilters({ cmsTypeId: String(sub.id) })}
+                        className={cn(
+                          'px-3 py-1 rounded-lg text-xs font-medium transition-all shrink-0 active:scale-95 cursor-pointer',
+                          isSelected
+                            ? 'bg-accent text-on-accent font-semibold shadow-xs'
+                            : 'text-muted hover:text-content bg-surface/60 hover:bg-surface border border-line/40'
+                        )}
+                      >
+                        {sub.name}
+                      </button>
+                    );
+                  })}
+                </div>
+                {rawCmsTypeId && (
+                  <button
+                    type="button"
+                    onClick={() => updateFilters({ cmsTypeId: '' })}
+                    className="text-xs text-accent hover:underline shrink-0 ml-auto hidden sm:inline cursor-pointer"
+                  >
+                    重置为全部分类 ✕
+                  </button>
+                )}
               </div>
             )}
 
@@ -1099,7 +1162,13 @@ function CatalogContent() {
               '正在加载片单…'
             ) : items.length > 0 ? (
               <>
-                当前【{activeSourceMeta.label}】共展示 <span className="text-content font-bold">{items.length}</span> 部精选影片
+                当前【{activeSourceMeta.label}】
+                {currentSource === 'cms' && rawCmsTypeId && cmsSubCategories.length > 0 && (
+                  <span className="text-accent font-semibold ml-1">
+                    · {cmsSubCategories.find((c) => String(c.id) === rawCmsTypeId)?.name || ''}
+                  </span>
+                )}
+                共展示 <span className="text-content font-bold">{items.length}</span> 部精选影片
                 {currentSource !== 'bangumi' && `（第 ${currentPage}/${totalPages} 页${total > 0 ? `，共约 ${total.toLocaleString()} 部` : ''}）`}
               </>
             ) : (

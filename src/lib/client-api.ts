@@ -338,11 +338,12 @@ export const api = {
     return request<DoubanResponse>(`/api/hot-list?${sp.toString()}`, { signal });
   },
 
-  /** 采集站原生全量分类片库：直连 TVBox/影视仓标准点播源，500+页真分页最新入库 */
+  /** 采集站原生全量分类片库：直连 TVBox/影视仓标准点播源，500+页真分页与细分子类下钻 */
   cmsCatalog: (
     params: {
       url: string;
       type: string;
+      typeId?: number;
       page?: number;
       pageSize?: number;
       sourceKey?: string;
@@ -356,6 +357,7 @@ export const api = {
       pg: String(params.page || 1),
       pagesize: String(params.pageSize || 24),
     });
+    if (params.typeId !== undefined) sp.set('typeId', String(params.typeId));
     if (params.sourceKey) sp.set('sourceKey', params.sourceKey);
     if (params.filterAdult) sp.set('filterAdult', '1');
     return request<{
@@ -364,6 +366,7 @@ export const api = {
       pagecount: number;
       page: number;
       pageSize: number;
+      subCategories?: Array<{ id: number; name: string }>;
       warning?: string;
     }>(`/api/catalog/cms?${sp.toString()}`, { signal });
   },

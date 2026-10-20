@@ -1,6 +1,44 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { resolveCmsTypeId, fetchCmsCatalog } from './cms-catalog';
+import { resolveCmsTypeId, extractSubCategories, fetchCmsCatalog } from './cms-catalog';
 import * as fetchUtils from './fetch-utils';
+
+describe('extractSubCategories', () => {
+  it('优先通过 type_pid 抽取父分类下的所有二级子分类', () => {
+    const classes = [
+      { type_id: 2, type_name: '连续剧', type_pid: 0 },
+      { type_id: 13, type_name: '国产剧', type_pid: 2 },
+      { type_id: 14, type_name: '欧美剧', type_pid: 2 },
+      { type_id: 15, type_name: '韩剧', type_pid: 2 },
+      { type_id: 99, type_name: '福利伦理剧', type_pid: 2 }, // 敏感分类应被排除
+      { type_id: 1, type_name: '电影', type_pid: 0 },
+      { type_id: 6, type_name: '动作片', type_pid: 1 },
+    ];
+
+    const subs = extractSubCategories('tv', classes);
+    expect(subs).toEqual([
+      { id: 13, name: '国产剧' },
+      { id: 14, name: '欧美剧' },
+      { id: 15, name: '韩剧' },
+    ]);
+  });
+
+  it('当源站缺少 type_pid 时通过语义关键词智能归纳子分类', () => {
+    const classes = [
+      { type_id: 1, type_name: '电影' },
+      { type_id: 6, type_name: '动作片' },
+      { type_id: 7, type_name: '喜剧片' },
+      { type_id: 8, type_name: '科幻片' },
+      { type_id: 10, type_name: '国产剧' },
+    ];
+
+    const subs = extractSubCategories('movie', classes);
+    expect(subs).toEqual([
+      { id: 6, name: '动作片' },
+      { id: 7, name: '喜剧片' },
+      { id: 8, name: '科幻片' },
+    ]);
+  });
+});
 
 describe('resolveCmsTypeId', () => {
   const classes = [
@@ -136,5 +174,48 @@ describe('fetchCmsCatalog', () => {
       isTv: false,
     });
     expect(result.items[1].rating).toBe('更新至12集');
+  });
+
+  it('显式传入 typeId 时直接以指定细分子类参数发起请求', async () => {
+    let capturedUrl = '';
+    vi.spyOn(fetchUtils, 'fetchUpstream').mockImplementation((url) => {
+      capturedUrl = String(url);
+      if (capturedUrl.includes('ac=list')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              class: [
+                { type_id: 2, type_name: '连续剧', type_pid: 0 },
+                { type_id: 13, type_name: '国产剧', type_pid: 2 },
+              ],
+            }),
+            { status: 200 }
+          )
+        );
+      }
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            code: 1,
+            page: 1,
+            pagecount: 10,
+            total: 200,
+            list: [{ vod_id: 999, vod_name: '山花烂漫时', vod_pic: 'https://img.com/1.jpg', vod_remarks: '全23集' }],
+          }),
+          { status: 200 }
+        )
+      );
+    });
+
+    const result = await fetchCmsCatalog({
+      url: 'https://tv.example.com/api.php/provide/vod',
+      type: 'tv',
+      typeId: 13,
+      page: 1,
+    });
+
+    expect(capturedUrl).toContain('t=13');
+    expect(result.subCategories).toEqual([{ id: 13, name: '国产剧' }]);
+    expect(result.items[0].title).toBe('山花烂漫时');
   });
 });

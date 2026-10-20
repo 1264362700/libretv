@@ -79,7 +79,7 @@ function HomeContent() {
   const recentUpdatesQuery = useQuery({
     queryKey: ['recent-updates-syncer', masterSource?.key],
     queryFn: ({ signal }) => syncRecentUpdates(masterSource, signal),
-    staleTime: 5 * 60_000,
+    staleTime: 30 * 60_000,
     enabled: Boolean(masterSource?.url),
   });
 
@@ -91,26 +91,7 @@ function HomeContent() {
     return recentUpdatesQuery.data?.recentList ?? [];
   }, [recentUpdatesQuery.data]);
 
-  // 2. 首屏巨幕轮播大片 (Hero Billboard)
-  const heroQuery = useQuery({
-    queryKey: ['home-hero-billboard'],
-    queryFn: async ({ signal }): Promise<MediaItem[]> => {
-      try {
-        const [movies, tvs] = await Promise.all([
-          fetchDoubanCollectionItems('movie_hot', 0, 4, signal),
-          fetchDoubanCollectionItems('tv_hot', 0, 4, signal),
-        ]);
-        const combined = [...movies.items, ...tvs.items];
-        return combined.slice(0, 6);
-      } catch {
-        return [];
-      }
-    },
-    staleTime: 30 * 60_000,
-    enabled: !urlQuery,
-  });
-
-  // 3. Bangumi 每周放送日历 (追番新番表)
+  // 2. Bangumi 每周放送日历 (追番新番表)
   const bangumiQuery = useQuery({
     queryKey: ['home-bangumi-schedule'],
     queryFn: ({ signal }) => fetchBangumiSchedule(signal),
@@ -118,7 +99,7 @@ function HomeContent() {
     enabled: !urlQuery,
   });
 
-  // 4. 固定横向分类海报轨道数据
+  // 3. 固定横向分类海报轨道数据
   const hotMoviesQuery = useQuery({
     queryKey: ['home-hot-movies'],
     queryFn: ({ signal }) => fetchDoubanCollectionItems('movie_hot', 0, 14, signal),
@@ -132,6 +113,14 @@ function HomeContent() {
     staleTime: 30 * 60_000,
     enabled: !urlQuery,
   });
+
+  // 4. 首屏巨幕轮播大片：直接从已获取的热门电影/电视剧中截取，消除 2 次重复跨洋请求
+  const heroBillboardItems = useMemo(() => {
+    const movies = hotMoviesQuery.data?.items ?? [];
+    const tvs = hotTvsQuery.data?.items ?? [];
+    const combined = [...movies.slice(0, 3), ...tvs.slice(0, 3)];
+    return combined.slice(0, 6);
+  }, [hotMoviesQuery.data, hotTvsQuery.data]);
 
   const top250Query = useQuery({
     queryKey: ['home-top250-movies'],
@@ -307,7 +296,7 @@ function HomeContent() {
           <div className="space-y-10 animate-fade-in">
             {/* 2. 首屏巨幕轮播区 (Hero Billboard Banner) */}
             <HeroBillboardBanner
-              items={heroQuery.data ?? []}
+              items={heroBillboardItems}
               cmsRemarksMap={cmsRemarksMap}
               onPlay={handlePlayMedia}
               onDetail={handlePlayMedia}

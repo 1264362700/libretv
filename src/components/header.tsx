@@ -81,7 +81,7 @@ export function Header(_props?: { showSearch?: boolean }) {
           </button>
 
           {/* cl.tv 极简线条 SVG 品牌 Logo（带线条绘制与流光动画） */}
-          <Link href="/" aria-label="cl 首页" className="flex items-center gap-2 shrink-0 group select-none">
+          <Link href="/" prefetch={false} aria-label="cl 首页" className="flex items-center gap-2 shrink-0 group select-none">
             <svg
               className="w-7 h-7 sm:w-8 sm:h-8 text-accent cl-logo-svg transition-transform duration-300 group-hover:scale-105 shrink-0"
               viewBox="0 0 32 32"
@@ -293,6 +293,7 @@ function TabletMobileChannelBar() {
           <Link
             key={ch.id}
             href={ch.href}
+            prefetch={false}
             className={cn(
               'shrink-0 px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-full text-xs sm:text-sm font-medium transition-all active:scale-95 touch-manipulation whitespace-nowrap',
               isActive
@@ -495,6 +496,7 @@ function HeaderLink({ href, active, children }: { href: string; active: boolean;
   return (
     <Link
       href={href}
+      prefetch={false}
       className={cn(
         'px-2 xl:px-2.5 py-1 xl:py-1.5 rounded-lg text-xs xl:text-sm font-medium transition-all touch-manipulation active:scale-95 whitespace-nowrap shrink-0',
         active ? 'text-accent bg-accent/10 font-semibold' : 'text-muted hover:text-content hover:bg-hover'

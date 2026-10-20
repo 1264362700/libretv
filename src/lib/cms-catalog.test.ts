@@ -218,4 +218,129 @@ describe('fetchCmsCatalog', () => {
     expect(result.subCategories).toEqual([{ id: 13, name: '国产剧' }]);
     expect(result.items[0].title).toBe('山花烂漫时');
   });
+
+  it('当指定地区或年份过滤时，向上游扩大采样池并保证返回数量对齐 pageSize', async () => {
+    let requestedPageSize = '';
+    vi.spyOn(fetchUtils, 'fetchUpstream').mockImplementation((url) => {
+      const urlStr = String(url);
+      if (urlStr.includes('ac=list')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              class: [
+                { type_id: 1, type_name: '连续剧', type_pid: 0 },
+                { type_id: 20, type_name: '内地剧', type_pid: 1 },
+              ],
+            }),
+            { status: 200 }
+          )
+        );
+      }
+      const parsed = new URL(urlStr);
+      requestedPageSize = parsed.searchParams.get('pagesize') || '';
+      // 生成 30 条混合地区数据（其中大陆 24 条，其他 6 条）
+      const list = Array.from({ length: 30 }, (_, i) => ({
+        vod_id: i + 1,
+        vod_name: `影片_${i + 1}`,
+        vod_pic: `https://img.com/${i + 1}.jpg`,
+        vod_area: i < 24 ? '中国大陆' : '美国',
+        vod_year: '2026',
+        vod_time: `2026-10-${String((i % 20) + 1).padStart(2, '0')} 12:00:00`,
+      }));
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            code: 1,
+            page: 1,
+            pagecount: 5,
+            total: 150,
+            list,
+          }),
+          { status: 200 }
+        )
+      );
+    });
+
+    const result = await fetchCmsCatalog({
+      url: 'https://tv.example.com/api.php/provide/vod',
+      type: 'movie',
+      area: '大陆',
+      page: 1,
+      pageSize: 24,
+    });
+
+    // 向上游请求了扩容采样池（96~100条）
+    expect(Number(requestedPageSize)).toBeGreaterThanOrEqual(96);
+    // 过滤后精确对齐 pageSize 24 条
+    expect(result.items).toHaveLength(24);
+    expect(result.items.every((it) => it.title.startsWith('影片_'))).toBe(true);
+  });
+
+  it('热门推荐（recommend）按真实热度 vod_hits 加权降序，与最新上映（time）呈现显著差异', async () => {
+    const mockList = [
+      {
+        vod_id: 1,
+        vod_name: '新片但低热度',
+        vod_pic: 'https://img.com/1.jpg',
+        vod_year: '2026',
+        vod_time: '2026-10-20 12:00:00',
+        vod_hits: 50,
+        vod_hits_week: 10,
+        vod_up: 5,
+      },
+      {
+        vod_id: 2,
+        vod_name: '老片但超级大爆款',
+        vod_pic: 'https://img.com/2.jpg',
+        vod_year: '2024',
+        vod_time: '2026-10-01 12:00:00',
+        vod_hits: 9999,
+        vod_hits_week: 5000,
+        vod_up: 3000,
+      },
+    ];
+
+    vi.spyOn(fetchUtils, 'fetchUpstream').mockImplementation((url) => {
+      const urlStr = String(url);
+      if (urlStr.includes('ac=list')) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ class: [{ type_id: 1, type_name: '电影' }] }), { status: 200 })
+        );
+      }
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            code: 1,
+            page: 1,
+            pagecount: 1,
+            total: 2,
+            list: mockList,
+          }),
+          { status: 200 }
+        )
+      );
+    });
+
+    // 1. 热门推荐请求
+    const recommendRes = await fetchCmsCatalog({
+      url: 'https://movie.example.com/api.php/provide/vod',
+      type: 'movie',
+      sort: 'recommend',
+      page: 1,
+      pageSize: 10,
+    });
+    // 爆款置顶
+    expect(recommendRes.items[0].title).toBe('老片但超级大爆款');
+
+    // 2. 最新上映请求
+    const timeRes = await fetchCmsCatalog({
+      url: 'https://movie.example.com/api.php/provide/vod',
+      type: 'movie',
+      sort: 'time',
+      page: 1,
+      pageSize: 10,
+    });
+    // 2026 新片置顶
+    expect(timeRes.items[0].title).toBe('新片但低热度');
+  });
 });

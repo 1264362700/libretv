@@ -71,15 +71,66 @@ export async function fetchCmsClasses(sourceUrl: string): Promise<CmsClassItem[]
 }
 
 /**
- * 根据频道分类（电影/电视剧/动漫/综艺/短剧/纪录片）智能解析对应的 CMS type_id
+ * 根据频道分类与用户所选区域，智能解析对应的 CMS type_id（支持原生区域子类直达）
  */
 export function resolveCmsTypeId(
   type: string,
-  classes: CmsClassItem[]
+  classes: CmsClassItem[],
+  area?: string
 ): number | undefined {
   if (type === 'all') return undefined;
 
-  // 1. 短剧频道匹配（微短剧/短剧/爽文，内置天涯54、标准36/58等典型短剧分类）
+  // 1. 若指定了区域（大陆/欧美/港台/日韩等），优先直达上游采集站原生对应的区域分类
+  if (area && area !== '全部') {
+    if (type === 'tv') {
+      if (/大陆|内地|国产/.test(area)) {
+        const found = classes.find((c) => /内地|国产/.test(c.type_name));
+        if (found) return found.type_id;
+      } else if (/香港|港剧/.test(area)) {
+        const found = classes.find((c) => /香港|港剧/.test(c.type_name));
+        if (found) return found.type_id;
+      } else if (/台湾|台剧/.test(area)) {
+        const found = classes.find((c) => /台湾|台剧/.test(c.type_name));
+        if (found) return found.type_id;
+      } else if (/欧美|美剧/.test(area)) {
+        const found = classes.find((c) => /欧美/.test(c.type_name));
+        if (found) return found.type_id;
+      } else if (/韩剧|韩国/.test(area)) {
+        const found = classes.find((c) => /韩/.test(c.type_name));
+        if (found) return found.type_id;
+      } else if (/日剧|日本/.test(area)) {
+        const found = classes.find((c) => /日/.test(c.type_name));
+        if (found) return found.type_id;
+      }
+    } else if (type === 'anime') {
+      if (/大陆|国漫|中国/.test(area)) {
+        const found = classes.find((c) => /中国|国漫|国产/.test(c.type_name));
+        if (found) return found.type_id;
+      } else if (/日本|日漫/.test(area)) {
+        const found = classes.find((c) => /日本|日漫/.test(c.type_name));
+        if (found) return found.type_id;
+      } else if (/欧美/.test(area)) {
+        const found = classes.find((c) => /欧美/.test(c.type_name));
+        if (found) return found.type_id;
+      }
+    } else if (type === 'variety') {
+      if (/大陆|内地/.test(area)) {
+        const found = classes.find((c) => /大陆|内地|国产/.test(c.type_name));
+        if (found) return found.type_id;
+      } else if (/港台|香港|台湾/.test(area)) {
+        const found = classes.find((c) => /港台|香港|台湾/.test(c.type_name));
+        if (found) return found.type_id;
+      } else if (/日韩|韩国|日本/.test(area)) {
+        const found = classes.find((c) => /日韩|韩国|日本/.test(c.type_name));
+        if (found) return found.type_id;
+      } else if (/欧美/.test(area)) {
+        const found = classes.find((c) => /欧美/.test(c.type_name));
+        if (found) return found.type_id;
+      }
+    }
+  }
+
+  // 2. 短剧频道匹配（微短剧/短剧/爽文，内置天涯54、标准36/58等典型短剧分类）
   if (type === 'short_drama') {
     const found = classes.find((c) => /短剧|微短剧|爽文/.test(c.type_name));
     if (found) return found.type_id;
@@ -205,17 +256,21 @@ export async function fetchCmsCatalog(options: CmsCatalogOptions): Promise<CmsCa
   // 1. 获取源站分类并匹配目标 type_id 与二级细分子分类
   const classes = await fetchCmsClasses(cleanUrl);
   const subCategories = extractSubCategories(type, classes);
-  const targetTypeId = typeId !== undefined ? typeId : resolveCmsTypeId(type, classes);
+  const targetTypeId = typeId !== undefined ? typeId : resolveCmsTypeId(type, classes, area);
 
   const cacheKey = `cms_catalog:${cleanUrl}:${type}:${targetTypeId ?? 'all'}:${keyword || ''}:${typeId || ''}:${sort}:${year || ''}:${area || ''}:${page}:${pageSize}:${filterAdult ? 1 : 0}`;
   const cached = getCache<CmsCatalogResult>(cacheKey);
   if (cached) return cached;
 
+  // 当存在本地过滤（区域或年份）时，向上游扩大采样池（至多 96~100 条），防止本地过滤剔除非目标数据后单页数量残缺
+  const hasLocalFilter = Boolean((area && area !== '全部') || (year && year !== '全部'));
+  const upstreamPageSize = hasLocalFilter ? Math.min(100, Math.max(pageSize * 4, 96)) : pageSize;
+
   // 2. 请求 ?ac=videolist
   const params = new URLSearchParams({
     ac: 'videolist',
     pg: String(Math.max(1, page)),
-    pagesize: String(pageSize),
+    pagesize: String(upstreamPageSize),
   });
   if (targetTypeId !== undefined) {
     params.set('t', String(targetTypeId));
@@ -230,6 +285,8 @@ export async function fetchCmsCatalog(options: CmsCatalogOptions): Promise<CmsCa
   } else if (sort === 'recommend') {
     params.set('by', 'hits');
   }
+
+  let activeParams = params;
 
   const res = await fetchUpstream(`${cleanUrl}?${params.toString()}`, {
     timeoutMs: 8000,
@@ -254,6 +311,11 @@ export async function fetchCmsCatalog(options: CmsCatalogOptions): Promise<CmsCa
       vod_year?: string;
       vod_area?: string;
       vod_time?: string;
+      vod_hits?: number | string;
+      vod_hits_week?: number | string;
+      vod_up?: number | string;
+      vod_score?: number | string;
+      vod_douban_score?: number | string;
     }>;
   };
 
@@ -287,7 +349,7 @@ export async function fetchCmsCatalog(options: CmsCatalogOptions): Promise<CmsCa
     const fallbackParams = new URLSearchParams({
       ac: 'videolist',
       pg: String(Math.max(1, page)),
-      pagesize: String(pageSize),
+      pagesize: String(upstreamPageSize),
       t: String(fallbackSubId),
     });
     if (keyword && keyword.trim()) {
@@ -327,6 +389,7 @@ export async function fetchCmsCatalog(options: CmsCatalogOptions): Promise<CmsCa
             filteredList = fbFiltered;
             total = Number(fbData.total) || fbFiltered.length;
             pagecount = Number(fbData.pagecount) || 1;
+            activeParams = fallbackParams;
           }
         }
       }
@@ -349,8 +412,60 @@ export async function fetchCmsCatalog(options: CmsCatalogOptions): Promise<CmsCa
     });
   }
 
+  // 若本地区域/年份过滤后单页数量不足且源站仍有后续页，发起至多一次平滑补齐请求
+  if (hasLocalFilter && filteredList.length < pageSize && pagecount > page) {
+    const nextPageParams = new URLSearchParams(activeParams);
+    nextPageParams.set('pg', String(page + 1));
+    try {
+      const nextRes = await fetchUpstream(`${cleanUrl}?${nextPageParams.toString()}`, {
+        timeoutMs: 5000,
+        headers: cmsRequestHeaders(),
+      });
+      if (nextRes.ok) {
+        const nextData = (await nextRes.json()) as typeof data;
+        let nextRawList = Array.isArray(nextData.list) ? nextData.list : [];
+        if (filterAdult) {
+          nextRawList = nextRawList.filter(
+            (v) => !isAdultContent(v.type_name) && !isAdultContent(v.vod_name)
+          );
+        }
+        if (type !== 'short_drama') {
+          nextRawList = nextRawList.filter(
+            (v) =>
+              !isShortDramaTitle(v.vod_name || '') &&
+              !/短剧|微短剧|爽文/.test(v.type_name || '')
+          );
+        }
+        if (year && year !== '全部') {
+          nextRawList = nextRawList.filter((v) => String(v.vod_year || '').includes(year));
+        }
+        if (area && area !== '全部') {
+          nextRawList = nextRawList.filter((v) => String(v.vod_area || '').includes(area));
+        }
+        filteredList = [...filteredList, ...nextRawList];
+      }
+    } catch (e) {
+      console.warn('[CmsCatalog] 本地维度过滤补齐异常:', e);
+    }
+  }
+
   // 6. 排序规则归一化生效（解决上游采集源忽略 by 参数或乱序问题）
-  if (sort === 'time') {
+  if (sort === 'recommend') {
+    // 热门推荐：按热度加权排序（总播放量 + 周榜播放量*2 + 观众点赞*1.5）
+    filteredList = [...filteredList].sort((a, b) => {
+      const scoreA =
+        Number(a.vod_hits || 0) +
+        Number(a.vod_hits_week || 0) * 2 +
+        Number(a.vod_up || 0) * 1.5;
+      const scoreB =
+        Number(b.vod_hits || 0) +
+        Number(b.vod_hits_week || 0) * 2 +
+        Number(b.vod_up || 0) * 1.5;
+      if (scoreA !== scoreB) return scoreB - scoreA;
+
+      return 0;
+    });
+  } else if (sort === 'time') {
     // 最新上映：必须严格优先按公映年份 vod_year 降序（2026 > 2025 > 2024...），同一年份内按入库时间 vod_time 倒序
     filteredList = [...filteredList].sort((a, b) => {
       const yearA = parseInt(String(a.vod_year || '').match(/\b(19\d{2}|20\d{2})\b/)?.[1] || '0', 10);
@@ -394,8 +509,11 @@ export async function fetchCmsCatalog(options: CmsCatalogOptions): Promise<CmsCa
     });
   }
 
-  // 6. 映射为 DoubanItem
-  const mappedItems: DoubanItem[] = filteredList
+  // 7. 严格截断到当前请求的 pageSize，确保单页数量稳定对齐
+  const pagedList = filteredList.slice(0, pageSize);
+
+  // 8. 映射为 DoubanItem
+  const mappedItems: DoubanItem[] = pagedList
     .map((vod): DoubanItem | undefined => {
       const title = (vod.vod_name || '').trim();
       let cover = (vod.vod_pic || '').trim();
@@ -433,10 +551,17 @@ export async function fetchCmsCatalog(options: CmsCatalogOptions): Promise<CmsCa
     })
     .filter((x): x is DoubanItem => Boolean(x));
 
+  let adjustedPageCount = pagecount;
+  let adjustedTotal = total;
+  if (hasLocalFilter && rawPageCount > 1) {
+    adjustedPageCount = rawPageCount;
+    adjustedTotal = rawPageCount * pageSize;
+  }
+
   const result: CmsCatalogResult = {
     items: mappedItems,
-    total,
-    pagecount,
+    total: adjustedTotal,
+    pagecount: adjustedPageCount,
     page,
     pageSize,
     subCategories,

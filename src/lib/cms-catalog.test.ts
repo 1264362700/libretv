@@ -80,7 +80,7 @@ describe('resolveCmsTypeId', () => {
     expect(resolveCmsTypeId('tv', [])).toBe(2);
     expect(resolveCmsTypeId('anime', [])).toBe(4);
     expect(resolveCmsTypeId('variety', [])).toBe(3);
-    expect(resolveCmsTypeId('short_drama', [])).toBe(36);
+    expect(resolveCmsTypeId('short_drama', [])).toBe(54);
   });
 });
 

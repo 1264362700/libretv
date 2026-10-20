@@ -8,6 +8,26 @@ export interface SourceConfig {
   /** 可选：详情页根地址（部分源需要爬详情页提取 m3u8） */
   detail?: string;
   isAdult?: boolean;
+  /** 是否参与多源并发搜索（默认 true；设为 false 则仅用于播放线路解析，不参与并发搜索） */
+  searchEnabled?: boolean;
+  /** 单源超时时间（毫秒，默认 6000） */
+  timeoutMs?: number;
+  /** 搜索优先级（默认 10） */
+  priority?: number;
+  /** 支持的内容类别 */
+  categories?: string[];
+  /** 最近一次成功时间戳 */
+  lastSuccessAt?: number;
+  /** 最近一次错误信息 */
+  lastError?: string;
+}
+
+export interface MatchedSourceInfo {
+  sourceKey: string;
+  sourceName: string;
+  sourceVodId: string;
+  sourceUrl?: string;
+  remarks?: string;
 }
 
 export interface SearchResultItem {
@@ -23,6 +43,10 @@ export interface SearchResultItem {
   /** 自定义源的 API 地址，详情请求需要 */
   sourceUrl?: string;
   isAdult?: boolean;
+  /** 采集站更新时间（vod_time，不作为影视上映年份） */
+  updatedAt?: string;
+  /** 跨源聚合命中的其他来源信息 */
+  matchedSources?: MatchedSourceInfo[];
 }
 
 export interface VideoInfo {

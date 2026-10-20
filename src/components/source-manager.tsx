@@ -284,7 +284,11 @@ function VodSourcesPanel() {
     <section>
       <SectionTitle
         title="点播源"
-        hint={empty ? undefined : `共 ${all.length} 个 · 已启用 ${all.filter((s) => store.selectedKeys.includes(s.key)).length}`}
+        hint={
+          empty
+            ? undefined
+            : `共 ${all.length} 个 · 勾选 ${all.filter((s) => store.selectedKeys.includes(s.key)).length} 个参与多源聚合搜索（未勾选源仅在播放页作为备选线路）`
+        }
         extra={
           <button className="btn-primary btn-sm" onClick={() => setEditing('__new__')}>
             <Icon name="plus" className="w-3.5 h-3.5" />
@@ -478,7 +482,13 @@ function VodSourceRow({
           checked={selected}
           onChange={() => useAppStore.getState().toggleSourceSelected(api.key)}
           disabled={adultBlocked}
-          title={adultBlocked ? '成人内容过滤开启中，需先关闭过滤才能启用此源' : undefined}
+          title={
+            adultBlocked
+              ? '成人内容过滤开启中，需先关闭过滤才能启用此源'
+              : selected
+                ? '已勾选：参与全网多源聚合搜索；取消勾选后仅用于播放页备用线路'
+                : '未勾选：仅在播放页作为播放线路，不参与全网并发搜索'
+          }
           aria-label={`选择 ${api.name}`}
         />
         <div className="flex-1 min-w-0">

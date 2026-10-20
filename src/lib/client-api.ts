@@ -405,19 +405,20 @@ export const api = {
     wd: string,
     sources: SourceConfig[],
     filterAdult: boolean,
-    opts?: { signal?: AbortSignal; onSource?: (outcome: SourceSearchOutcome) => void }
+    opts?: { signal?: AbortSignal; onSource?: (outcome: SourceSearchOutcome) => void; page?: number }
   ): Promise<SearchResponse> => {
     const signal = opts?.signal;
     const onSource = opts?.onSource;
+    const page = opts?.page || 1;
     if (!onSource) {
       return request<SearchResponse>('/api/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ wd, sources, filterAdult }),
+        body: JSON.stringify({ wd, sources, filterAdult, page }),
         signal,
       });
     }
-    return searchStream(wd, sources, filterAdult, onSource, signal);
+    return searchStream(wd, sources, filterAdult, onSource, signal, page);
   },
 
   detail: (id: string, source: SourceConfig, signal?: AbortSignal) => {
@@ -610,12 +611,13 @@ async function searchStream(
   sources: SourceConfig[],
   filterAdult: boolean,
   onSource: (outcome: SourceSearchOutcome) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  page: number = 1
 ): Promise<SearchResponse> {
   const res = await fetch('/api/search?stream=1', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ wd, sources, filterAdult }),
+    body: JSON.stringify({ wd, sources, filterAdult, page }),
     signal,
   });
     throwForAuthStatus(res);

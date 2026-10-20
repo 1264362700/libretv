@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  aggregateAndDedupeSearchItems,
+  buildDeduplicationKey,
+  cleanTitleForDeduplication,
   extractEpisodesFromPlayUrl,
   extractM3u8FromText,
   filterAdultResults,
@@ -202,5 +205,78 @@ describe('filterRelevantResults', () => {
   it('全部不相关时回退为原列表', () => {
     const junk = [{ name: '爸爸当家' }, { name: '爸爸别走' }];
     expect(filterRelevantResults(junk, wd)).toEqual(junk);
+  });
+});
+
+describe('cleanTitleForDeduplication & buildDeduplicationKey', () => {
+  it('清洗画质标签与常见修饰词但保留季数与正片主标题', () => {
+    expect(cleanTitleForDeduplication('三体 [4K超清][全集]')).toBe('三体');
+    expect(cleanTitleForDeduplication('庆余年 第二季 【完结国语】')).toBe('庆余年 第二季');
+    expect(cleanTitleForDeduplication('流浪地球2 抢先版')).toBe('流浪地球2');
+    expect(cleanTitleForDeduplication('狂飙 (2023) [HD中字]')).toBe('狂飙');
+  });
+
+  it('生成精准去重候选键，严格区分不同季与不同年份作品', () => {
+    const s1 = { sourceKey: 'a', sourceName: 'A', vodId: '1', name: '庆余年 第一季', year: '2019', typeName: '国产剧' };
+    const s2 = { sourceKey: 'b', sourceName: 'B', vodId: '2', name: '庆余年 第二季', year: '2024', typeName: '国产剧' };
+    const m1 = { sourceKey: 'c', sourceName: 'C', vodId: '3', name: '英雄', year: '2002', typeName: '动作片' };
+    const m2 = { sourceKey: 'd', sourceName: 'D', vodId: '4', name: '英雄', year: '1992', typeName: '剧情片' };
+
+    expect(buildDeduplicationKey(s1)).not.toBe(buildDeduplicationKey(s2));
+    expect(buildDeduplicationKey(m1)).not.toBe(buildDeduplicationKey(m2));
+  });
+});
+
+describe('aggregateAndDedupeSearchItems', () => {
+  it('多源命中同一部作品时合并为一张主卡片，并在 matchedSources 中保留各源信息', () => {
+    const items = [
+      {
+        sourceKey: 'tianya',
+        sourceName: '天涯影视',
+        vodId: '1001',
+        name: '繁花 [4K超清]',
+        year: '2023',
+        pic: 'https://img/fan_hd.jpg',
+        remarks: '全30集',
+        typeName: '国产剧',
+      },
+      {
+        sourceKey: 'lz',
+        sourceName: '量子资源',
+        vodId: '2002',
+        name: '繁花',
+        year: '2023',
+        pic: 'https://img/fan.jpg',
+        remarks: '更新至30集',
+        typeName: '电视剧',
+      },
+      {
+        sourceKey: 'ff',
+        sourceName: '非凡资源',
+        vodId: '3003',
+        name: '繁花 沪语版',
+        year: '2023',
+        pic: undefined,
+        remarks: '30集全',
+        typeName: '华语剧',
+      },
+    ];
+
+    const aggregated = aggregateAndDedupeSearchItems(items, '繁花', false);
+    expect(aggregated).toHaveLength(1);
+    expect(aggregated[0].matchedSources).toHaveLength(3);
+    expect(aggregated[0].matchedSources?.map((s) => s.sourceKey)).toContain('tianya');
+    expect(aggregated[0].matchedSources?.map((s) => s.sourceKey)).toContain('lz');
+    expect(aggregated[0].matchedSources?.map((s) => s.sourceKey)).toContain('ff');
+  });
+
+  it('精确命中置顶排在最前', () => {
+    const items = [
+      { sourceKey: 'a', sourceName: 'A', vodId: '1', name: '狂飙少年', year: '2021' },
+      { sourceKey: 'b', sourceName: 'B', vodId: '2', name: '狂飙', year: '2023' },
+      { sourceKey: 'c', sourceName: 'C', vodId: '3', name: '狂飙之极限挑战', year: '2020' },
+    ];
+    const res = aggregateAndDedupeSearchItems(items, '狂飙', false);
+    expect(res[0].name).toBe('狂飙');
   });
 });

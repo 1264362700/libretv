@@ -423,6 +423,15 @@ function HomeContent() {
                       key={group.key}
                       group={group}
                       onOpen={(item) => {
+                        // 保存多源匹配信息至临时缓存，使播放页瞬间就绪所有备用播放线路
+                        if (typeof window !== 'undefined' && item.matchedSources && item.matchedSources.length > 0) {
+                          try {
+                            sessionStorage.setItem(
+                              `libretv:matched:${item.sourceKey}:${item.vodId}`,
+                              JSON.stringify(item.matchedSources)
+                            );
+                          } catch {}
+                        }
                         // 搜索页点击直接起播：默认第一条线路、第一集
                         router.push(
                           buildWatchUrl({

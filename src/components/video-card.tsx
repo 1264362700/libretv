@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { SearchResultItem } from '@/lib/types';
 import { useAppStore } from '@/lib/store';
-import { cn } from '@/lib/utils';
 import { SmartImage } from './smart-image';
 
 // —— 跨源同名聚合 ——
@@ -61,8 +60,7 @@ export function aggregateResults(list: SearchResultItem[]): AggregatedGroup[] {
 
 /**
  * 聚合影片卡片：
- * - 单源：点击直接打开该源详情（与旧体验一致）；
- * - 多源：显示「N 个来源」徽章，点击展开各源列表，选择具体源后打开详情。
+ * 纯粹直达设计：点击卡片任意位置直接秒开播放页起播（线路切换留在播放页面自由操作）。
  */
 export function AggregatedCard({
   group,
@@ -74,19 +72,19 @@ export function AggregatedCard({
   const imageProxyMode = useAppStore((s) => s.imageProxyMode);
   const customImageProxy = useAppStore((s) => s.customImageProxy);
   const [imgFailed, setImgFailed] = useState(false);
-  const [expanded, setExpanded] = useState(false);
   const showImg = !!group.pic && !imgFailed;
 
-  const multi = group.items.length > 1;
+  const primaryItem = group.items[0];
+  const sourceCount = Math.max(group.items.length, primaryItem?.matchedSources?.length || 1);
   const adult = useMemo(() => group.items.some((i) => i.isAdult), [group.items]);
 
   const activate = () => {
-    // 搜索页面点击直接播放：默认第一集、第一个线路
-    onOpen(group.items[0]);
+    // 搜索页面点击直接起播：默认第一集、最优线路
+    onOpen(primaryItem);
   };
 
   return (
-    <div className={cn('card group/item', !multi && 'hover:scale-[1.02] hover:shadow-md', multi && expanded && 'ring-1 ring-accent/40')}>
+    <div className="card group/item hover:scale-[1.02] hover:shadow-md transition-all">
       {/* 点击卡片主体直接起播 */}
       <div
         className="flex h-full cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/60"
@@ -111,9 +109,9 @@ export function AggregatedCard({
               onExhausted={() => setImgFailed(true)}
             />
             <div className="absolute inset-0 bg-gradient-to-r from-black/30 to-transparent" />
-            {multi && (
-              <span className="absolute top-1.5 left-1.5 tag bg-black/70 text-accent font-medium">
-                {group.items.length} 源
+            {sourceCount > 1 && (
+              <span className="absolute top-1.5 left-1.5 tag bg-black/75 backdrop-blur-sm text-accent font-semibold text-[11px] border border-accent/20">
+                {sourceCount} 源聚合
               </span>
             )}
           </div>
@@ -122,9 +120,9 @@ export function AggregatedCard({
             <svg className="w-8 h-8 text-faint" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 4v16m10-16v16M3 6a1 1 0 011-1h1a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V6zm4 0a1 1 0 011-1h1a1 1 0 011 1v12a1 1 0 01-1 1h-1a1 1 0 01-1-1V6zm8 0a1 1 0 011-1h1a1 1 0 011 1v12a1 1 0 01-1 1h-1a1 1 0 01-1-1V6zm4 0a1 1 0 011-1h1a1 1 0 011 1v12a1 1 0 01-1 1h-1a1 1 0 01-1-1V6z" />
             </svg>
-            {multi && (
-              <span className="absolute top-1.5 left-1.5 tag bg-black/70 text-accent font-medium">
-                {group.items.length} 源
+            {sourceCount > 1 && (
+              <span className="absolute top-1.5 left-1.5 tag bg-black/75 backdrop-blur-sm text-accent font-semibold text-[11px] border border-accent/20">
+                {sourceCount} 源聚合
               </span>
             )}
           </div>
@@ -143,70 +141,16 @@ export function AggregatedCard({
             <p className="text-xs text-muted line-clamp-2 mb-2">{group.remarks || '暂无介绍'}</p>
           </div>
           <div className="flex items-center justify-between mt-auto pt-1.5 border-t border-line">
-            <span className="tag bg-chip text-muted truncate max-w-[70%]">
-              {multi ? `${group.items.length} 个来源 · 默认线路1` : group.items[0].sourceName}
+            <span className="tag bg-chip text-muted truncate max-w-[75%]">
+              {sourceCount > 1 ? `${sourceCount} 家片源 · 线路秒播` : primaryItem.sourceName}
             </span>
-            {multi && (
-              <button
-                type="button"
-                className="p-1 -mr-1 rounded hover:bg-hover text-muted hover:text-content text-xs flex items-center gap-0.5"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setExpanded((v) => !v);
-                }}
-                title={expanded ? '收起源列表' : '展开其他来源'}
-                aria-expanded={expanded}
-              >
-                <span className="text-[10px] text-faint">选源</span>
-                <svg
-                  className={cn('w-3.5 h-3.5 text-faint transition-transform', expanded && 'rotate-180')}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                  aria-hidden
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-            )}
+            <span className="text-[11px] text-accent font-medium flex items-center gap-0.5 group-hover/item:translate-x-0.5 transition-transform">
+              <span>立即播放</span>
+              <span>›</span>
+            </span>
           </div>
         </div>
       </div>
-
-      {multi && expanded && (
-        <div className="border-t border-line p-2.5 animate-fade-in">
-          <p className="text-[10px] text-faint mb-1.5">选择来源播放</p>
-          <div className="flex flex-wrap gap-1.5">
-            {group.items.map((item) => (
-              <button
-                key={`${item.sourceKey}_${item.vodId}`}
-                className={cn(
-                  'group inline-flex items-center gap-1.5 max-w-full rounded-lg border px-2.5 py-1.5',
-                  'text-xs transition-all cursor-pointer',
-                  'border-line bg-chip hover:border-accent hover:bg-accent/10',
-                  item.isAdult && 'border-pink-500/30'
-                )}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpen(item);
-                }}
-                aria-label={`使用 ${item.sourceName} 播放`}
-              >
-                <span className="font-medium text-content truncate max-w-[9em]">{item.sourceName}</span>
-                <span className="text-faint truncate max-w-[7em]">{item.remarks || '暂无介绍'}</span>
-                <svg
-                  className="w-3.5 h-3.5 text-accent shrink-0 transition-transform group-hover:scale-110"
-                  fill="currentColor"
-                  viewBox="0 0 24 24"
-                  aria-hidden
-                >
-                  <path d="M8 5v14l11-7z" />
-                </svg>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

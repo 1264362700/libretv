@@ -150,17 +150,67 @@ function WatchContent() {
       const matched: CandidateItem[] = [];
       const seenKeys = new Set<string>();
 
+      // 0. 优先从聚合搜索暂存中瞬时秒级载入已知匹配线路
+      if (typeof window !== 'undefined' && sourceKey && vodId) {
+        try {
+          const cachedJson = sessionStorage.getItem(`libretv:matched:${sourceKey}:${vodId}`);
+          if (cachedJson) {
+            const preMatched = JSON.parse(cachedJson) as Array<{
+              sourceKey: string;
+              sourceName: string;
+              sourceVodId: string;
+              sourceUrl?: string;
+              remarks?: string;
+            }>;
+            for (const m of preMatched) {
+              const src = allCandidateSources.find((s) => s.key === m.sourceKey);
+              if (src && !seenKeys.has(src.key)) {
+                seenKeys.add(src.key);
+                matched.push({
+                  source: src,
+                  result: {
+                    sourceKey: src.key,
+                    sourceName: src.name,
+                    vodId: m.sourceVodId,
+                    name: videoTitle,
+                    sourceUrl: src.url,
+                    remarks: m.remarks,
+                  },
+                });
+              }
+            }
+          }
+        } catch {}
+      }
+
       try {
         const { list } = await api.search(title, allCandidateSources, store.yellowFilter, { signal });
         for (const s of allCandidateSources) {
           if (seenKeys.has(s.key)) continue;
-          const hits = list.filter((r) => r.sourceKey === s.key);
-          const exact =
-            hits.find((r) => (r.name || '').trim() === title) ??
-            hits.find((r) => (r.name || '').trim().startsWith(title));
-          if (exact) {
+          let hitItem: SearchResultItem | undefined;
+          for (const item of list) {
+            if (item.sourceKey === s.key) {
+              hitItem = item;
+              break;
+            }
+            if (item.matchedSources) {
+              const ms = item.matchedSources.find((m) => m.sourceKey === s.key);
+              if (ms) {
+                hitItem = {
+                  sourceKey: ms.sourceKey,
+                  sourceName: ms.sourceName,
+                  vodId: ms.sourceVodId,
+                  name: item.name,
+                  sourceUrl: ms.sourceUrl || s.url,
+                  remarks: ms.remarks,
+                };
+                break;
+              }
+            }
+          }
+          if (hitItem) {
             seenKeys.add(s.key);
-            matched.push({ source: s, result: exact });
+            matched.push({ source: s, result: hitItem });
           }
         }
       } catch {

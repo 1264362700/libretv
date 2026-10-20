@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { guardAdminRequest } from '@/lib/api-guard';
+import { testNeonConnection, isPostgresConfigured } from '@/lib/db-postgres';
 import {
   listInviteCodes,
   createInviteCodes,
@@ -38,6 +39,15 @@ export async function GET(req: Request) {
 
   if (type === 'gist_status') {
     return NextResponse.json({ success: true, status: getGistStatus() });
+  }
+
+  if (type === 'neon_status') {
+    const conn = await testNeonConnection();
+    return NextResponse.json({
+      success: true,
+      configured: isPostgresConfigured(),
+      neon: conn,
+    });
   }
 
   if (type === 'storage_info') {
@@ -94,14 +104,18 @@ export async function POST(req: Request) {
 
   const action = String(body.action || '');
 
-  // 0. Gist 手动同步与强制拉取
-  if (action === 'gist_sync') {
+  // 0. Gist 独立容灾导出与还原 (或旧版别名)
+  if (action === 'gist_sync' || action === 'backup_to_gist') {
     const res = await manualSyncGist();
     return NextResponse.json(res);
   }
-  if (action === 'gist_pull') {
+  if (action === 'gist_pull' || action === 'restore_from_gist') {
     const res = await manualPullGist();
     return NextResponse.json(res);
+  }
+  if (action === 'neon_test') {
+    const res = await testNeonConnection();
+    return NextResponse.json({ success: res.ok, ...res });
   }
 
   // 1. 生成邀请码

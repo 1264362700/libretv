@@ -5,62 +5,46 @@ import os from 'node:os';
 import { getEnvSources } from './env-sources';
 import { getEnvLiveSources } from './env-live-sources';
 import {
-  pullFromGist,
-  schedulePushToGist,
-  forcePushToGist,
-  getGistSyncState,
+  isPostgresConfigured,
+  initPostgresSchema,
+  fetchAllDataFromNeon,
+  dbUpsertUser,
+  dbUpdateSessionVersion,
+  dbUpsertInvite,
+  dbUpsertGlobalSource,
+  dbDeleteGlobalSource,
+  dbSaveUserConfig,
+  testNeonConnection,
+} from './db-postgres';
+import {
+  exportNeonToGist,
+  restoreGistToNeon,
+  getGistBackupStatus,
   setCustomGithubToken,
   getCustomGithubToken,
   testAndVerifyGithubToken,
-  registerRemoteHydrateCallback,
-  type GistSyncState,
-} from './gist-sync';
+  type GistBackupState,
+} from './gist-backup';
+import type {
+  UserRecord,
+  InviteCodeRecord,
+  GlobalSourceRecord,
+  UserConfigRecord,
+  AuthDataStore,
+  FullBackupPayload,
+} from './auth-store-types';
 
-/**
- * 账号系统与邀请码底层存储引擎（基于 JSON 文件，具备密码加盐 Hash、顶号版本号与动态加源）
- */
+export type {
+  UserRecord,
+  InviteCodeRecord,
+  GlobalSourceRecord,
+  UserConfigRecord,
+  AuthDataStore,
+  FullBackupPayload,
+};
 
-export interface UserRecord {
-  id: string;
-  username: string;
-  passwordHash: string;
-  salt: string;
-  role: 'admin' | 'user';
-  status: 'active' | 'banned';
-  /** 会话版本号：用于异地登录顶号互踢与强制下线 */
-  sessionVersion: number;
-  createdAt: number;
-  lastLoginAt?: number;
-}
-
-export interface InviteCodeRecord {
-  code: string;
-  createdBy: string;
-  maxUses: number;
-  useCount: number;
-  usedBy: string[];
-  active: boolean;
-  createdAt: number;
-}
-
-export interface GlobalSourceRecord {
-  key: string;
-  name: string;
-  url: string;
-  type: 'vod' | 'live';
-  createdAt: number;
-}
-
-interface AuthDataStore {
-  users: Record<string, UserRecord>;
-  invites: Record<string, InviteCodeRecord>;
-  globalSources: Record<string, GlobalSourceRecord>;
-  systemConfig?: {
-    githubToken?: string;
-    gistId?: string;
-    updatedAt?: number;
-  };
-}
+// 兼容别名
+export type GistSyncState = GistBackupState;
 
 let hasWarnedEphemeral = false;
 let isEphemeralDir = false;
@@ -95,8 +79,7 @@ export function atomicWriteJsonSync(filePath: string, data: unknown): void {
 }
 
 // 支持 DATA_DIR 环境变量并针对容器环境做权限容灾兜底
-function getDataDir(): string {
-  // 1. 优先使用自定义环境变量 DATA_DIR
+export function getDataDir(): string {
   const envDir = process.env.DATA_DIR?.trim();
   if (envDir) {
     try {
@@ -111,7 +94,6 @@ function getDataDir(): string {
     }
   }
 
-  // 2. 默认工作区目录 /app/data 或 ./data
   const defaultDir = path.join(process.cwd(), 'data');
   try {
     if (!fs.existsSync(defaultDir)) {
@@ -121,7 +103,6 @@ function getDataDir(): string {
     isEphemeralDir = false;
     return defaultDir;
   } catch {
-    // 3. 容灾降级：容器非 Root 用户在 /app 无权限时，平滑降级至 /tmp/libretv-data 避免 500 崩溃
     isEphemeralDir = true;
     const tmpDir = path.join(os.tmpdir(), 'libretv-data');
     if (!hasWarnedEphemeral) {
@@ -130,8 +111,6 @@ function getDataDir(): string {
         `\n================================================================================\n` +
         `[CRITICAL ALERT] 默认数据目录 '${defaultDir}' 权限不足 (EACCES)！\n` +
         `已平滑降级至临时易失目录: '${tmpDir}'\n` +
-        `警告：容器重启或镜像更新后，临时目录中的账号、邀请码等数据将会丢失！\n` +
-        `解决方案：请在宿主机执行 'chown -R 10001:10001 ./data' 或 'chmod -R 777 ./data' 以赋予写权限！\n` +
         `================================================================================\n`
       );
     }
@@ -146,129 +125,31 @@ function getDataDir(): string {
   }
 }
 
-function getStoreFilePath(): string {
+export function getStoreFilePath(): string {
   return path.join(getDataDir(), 'auth-store.json');
 }
 
-/** 顶级秒播蓝光 CMS 矩阵 + IPv4 高可用直播矩阵（全量实测存活，聚合 130 万+ 部海量影视库） */
+/** 顶级秒播蓝光 CMS 矩阵 + IPv4 高可用直播矩阵 */
 const CURATED_DEFAULT_SOURCES: { key: string; name: string; url: string; type: 'vod' | 'live' }[] = [
-  // —— 点播源矩阵（全站聚合片库，实测 100% 存活，超 130 万部海量片源） ——
-  {
-    key: 'curated_lzzy',
-    name: '量子资源 (蓝光秒开)',
-    url: 'https://cj.lziapi.com/api.php/provide/vod',
-    type: 'vod',
-  },
-  {
-    key: 'curated_ffzy',
-    name: '非凡资源 (极速秒播)',
-    url: 'https://cj.ffzyapi.com/api.php/provide/vod',
-    type: 'vod',
-  },
-  {
-    key: 'curated_snzy',
-    name: '索尼资源 (高清秒播)',
-    url: 'https://suoniapi.com/api.php/provide/vod',
-    type: 'vod',
-  },
-  {
-    key: 'curated_gszy',
-    name: '光速资源 (超低延迟)',
-    url: 'https://api.guangsuapi.com/api.php/provide/vod',
-    type: 'vod',
-  },
-  {
-    key: 'curated_hnzy',
-    name: '红牛资源 (综合大片)',
-    url: 'https://www.hongniuzy2.com/api.php/provide/vod',
-    type: 'vod',
-  },
-  {
-    key: 'curated_yyzy',
-    name: '丫丫资源 (日韩动漫)',
-    url: 'https://cj.yayazy.net/api.php/provide/vod',
-    type: 'vod',
-  },
-  {
-    key: 'curated_jyzy',
-    name: '金鹰资源 (院线热映)',
-    url: 'https://jyzyapi.com/api.php/provide/vod',
-    type: 'vod',
-  },
-  {
-    key: 'curated_jszy',
-    name: '极速资源 (海外综合)',
-    url: 'https://jszyapi.com/api.php/provide/vod',
-    type: 'vod',
-  },
-  {
-    key: 'curated_hhzy',
-    name: '豪华资源 (国内外热剧)',
-    url: 'https://hhzyapi.com/api.php/provide/vod',
-    type: 'vod',
-  },
-  {
-    key: 'curated_hyzy',
-    name: '虎牙资源 (精选大片)',
-    url: 'https://www.huyaapi.com/api.php/provide/vod',
-    type: 'vod',
-  },
-  {
-    key: 'curated_yhzy',
-    name: '樱花资源 (动漫番剧)',
-    url: 'https://m3u8.apiyhzy.com/api.php/provide/vod',
-    type: 'vod',
-  },
-  {
-    key: 'curated_mdzy',
-    name: '魔都资源 (热播大厅)',
-    url: 'https://caiji.moduapi.cc/api.php/provide/vod',
-    type: 'vod',
-  },
-  {
-    key: 'curated_bdzy',
-    name: '百度资源 (高速蓝光)',
-    url: 'https://api.apibdzy.com/api.php/provide/vod',
-    type: 'vod',
-  },
-
-  // —— 直播源矩阵（纯 IPv4 公网稳定直通、覆盖 CCTV 1~17、地方卫视与特色频道） ——
-  {
-    key: 'curated_live_cctv',
-    name: '央视高清合集 (CCTV 1-17 公网稳定)',
-    url: 'https://iptv-org.github.io/iptv/countries/cn.m3u',
-    type: 'live',
-  },
-  {
-    key: 'curated_live_freetv',
-    name: '国内电视精选 (央视+卫视综合)',
-    url: 'https://cdn.jsdelivr.net/gh/Free-TV/IPTV@master/playlists/playlist_china.m3u8',
-    type: 'live',
-  },
-  {
-    key: 'curated_live_special',
-    name: '央视特色与影视专线 (高画质)',
-    url: 'https://m3u.ibert.me/o_s_cn_cctv.m3u',
-    type: 'live',
-  },
-  {
-    key: 'curated_live_hk',
-    name: '港澳台精选专区 (TVB/美亚/凤凰)',
-    url: 'https://iptv-org.github.io/iptv/subdivisions/cn-hk.m3u',
-    type: 'live',
-  },
-  {
-    key: 'curated_live_movies',
-    name: '全球电影轮播频道',
-    url: 'https://iptv-org.github.io/iptv/categories/movies.m3u',
-    type: 'live',
-  },
-  {
-    key: 'curated_live_animation',
-    name: '全球少儿动漫频道',
-    url: 'https://iptv-org.github.io/iptv/categories/animation.m3u',
-    type: 'live',
-  },
+  { key: 'curated_lzzy', name: '量子资源 (蓝光秒开)', url: 'https://cj.lziapi.com/api.php/provide/vod', type: 'vod' },
+  { key: 'curated_ffzy', name: '非凡资源 (极速秒播)', url: 'https://cj.ffzyapi.com/api.php/provide/vod', type: 'vod' },
+  { key: 'curated_snzy', name: '索尼资源 (高清秒播)', url: 'https://suoniapi.com/api.php/provide/vod', type: 'vod' },
+  { key: 'curated_gszy', name: '光速资源 (超低延迟)', url: 'https://api.guangsuapi.com/api.php/provide/vod', type: 'vod' },
+  { key: 'curated_hnzy', name: '红牛资源 (综合大片)', url: 'https://www.hongniuzy2.com/api.php/provide/vod', type: 'vod' },
+  { key: 'curated_yyzy', name: '丫丫资源 (日韩动漫)', url: 'https://cj.yayazy.net/api.php/provide/vod', type: 'vod' },
+  { key: 'curated_jyzy', name: '金鹰资源 (院线热映)', url: 'https://jyzyapi.com/api.php/provide/vod', type: 'vod' },
+  { key: 'curated_jszy', name: '极速资源 (海外综合)', url: 'https://jszyapi.com/api.php/provide/vod', type: 'vod' },
+  { key: 'curated_hhzy', name: '豪华资源 (国内外热剧)', url: 'https://hhzyapi.com/api.php/provide/vod', type: 'vod' },
+  { key: 'curated_hyzy', name: '虎牙资源 (精选大片)', url: 'https://www.huyaapi.com/api.php/provide/vod', type: 'vod' },
+  { key: 'curated_yhzy', name: '樱花资源 (动漫番剧)', url: 'https://m3u8.apiyhzy.com/api.php/provide/vod', type: 'vod' },
+  { key: 'curated_mdzy', name: '魔都资源 (热播大厅)', url: 'https://caiji.moduapi.cc/api.php/provide/vod', type: 'vod' },
+  { key: 'curated_bdzy', name: '百度资源 (高速蓝光)', url: 'https://api.apibdzy.com/api.php/provide/vod', type: 'vod' },
+  { key: 'curated_live_cctv', name: '央视高清合集 (CCTV 1-17 公网稳定)', url: 'https://iptv-org.github.io/iptv/countries/cn.m3u', type: 'live' },
+  { key: 'curated_live_freetv', name: '国内电视精选 (央视+卫视综合)', url: 'https://cdn.jsdelivr.net/gh/Free-TV/IPTV@master/playlists/playlist_china.m3u8', type: 'live' },
+  { key: 'curated_live_special', name: '央视特色与影视专线 (高画质)', url: 'https://m3u.ibert.me/o_s_cn_cctv.m3u', type: 'live' },
+  { key: 'curated_live_hk', name: '港澳台精选专区 (TVB/美亚/凤凰)', url: 'https://iptv-org.github.io/iptv/subdivisions/cn-hk.m3u', type: 'live' },
+  { key: 'curated_live_movies', name: '全球电影轮播频道', url: 'https://iptv-org.github.io/iptv/categories/movies.m3u', type: 'live' },
+  { key: 'curated_live_animation', name: '全球少儿动漫频道', url: 'https://iptv-org.github.io/iptv/categories/animation.m3u', type: 'live' },
 ];
 
 let inMemoryStore: AuthDataStore | null = null;
@@ -300,7 +181,6 @@ export function saveGlobalSourcesBackup(store: AuthDataStore): void {
     const backupFile = getGlobalSourcesBackupFilePath();
     const sourcesList = Object.values(store.globalSources || {});
 
-    // 空写防熔断：如果当前传入的源列表为空，但磁盘上已有数据，拒绝清空覆盖物理备份
     if (sourcesList.length === 0) {
       const existing = loadGlobalSourcesBackup();
       if (existing.length > 0) {
@@ -331,7 +211,6 @@ export function saveUsersBackup(store: AuthDataStore): void {
     const currentUsersCount = Object.keys(store.users || {}).length;
     const currentInvitesCount = Object.keys(store.invites || {}).length;
 
-    // 空写防熔断：如果当前传入的 store 没有用户，但磁盘已有备份，拒绝清空覆盖物理备份
     if (currentUsersCount === 0 && currentInvitesCount === 0) {
       const existing = loadUsersBackup();
       if (existing && (Object.keys(existing.users).length > 0 || Object.keys(existing.invites).length > 0)) {
@@ -388,103 +267,6 @@ export function loadUsersBackup(): {
   return null;
 }
 
-/**
- * 环境变量预置账号注入支持：
- * PRESET_USERS 格式支持:
- * 1. "user1:pass1,user2:pass2"
- * 2. JSON 数组: [{"username":"u1","password":"p1","role":"admin"}]
- */
-function bootstrapPresetUsers(store: AuthDataStore): void {
-  const envPreset = process.env.PRESET_USERS?.trim();
-  if (!envPreset) return;
-
-  try {
-    if (envPreset.startsWith('[') || envPreset.startsWith('{')) {
-      const parsed = JSON.parse(envPreset);
-      const list = Array.isArray(parsed) ? parsed : [parsed];
-      for (const item of list) {
-        if (!item.username || !item.password) continue;
-        const uname = String(item.username).toLowerCase().trim();
-        if (!store.users[uname]) {
-          const salt = crypto.randomBytes(32).toString('hex');
-          store.users[uname] = {
-            id: crypto.randomUUID(),
-            username: uname,
-            passwordHash: hashPassword(String(item.password), salt),
-            salt,
-            role: item.role === 'admin' ? 'admin' : 'user',
-            status: 'active',
-            sessionVersion: 1,
-            createdAt: Date.now(),
-          };
-        }
-      }
-      return;
-    }
-
-    // 格式: user1:pass1,user2:pass2
-    const pairs = envPreset.split(',').map((p) => p.trim()).filter(Boolean);
-    for (const pair of pairs) {
-      const idx = pair.indexOf(':');
-      if (idx <= 0) continue;
-      const uname = pair.slice(0, idx).toLowerCase().trim();
-      const pwd = pair.slice(idx + 1).trim();
-      if (!store.users[uname]) {
-        const salt = crypto.randomBytes(32).toString('hex');
-        store.users[uname] = {
-          id: crypto.randomUUID(),
-          username: uname,
-          passwordHash: hashPassword(pwd, salt),
-          salt,
-          role: 'user',
-          status: 'active',
-          sessionVersion: 1,
-          createdAt: Date.now(),
-        };
-      }
-    }
-  } catch (err) {
-    console.warn('[LibreTV] PRESET_USERS 环境变量解析异常:', err);
-  }
-}
-
-/**
- * 启动时智能合并用户与邀请码：
- * 融合主存储、独立物理备份与环境变量预置账号，杜绝因文件损坏或容器更新导致的账号蒸发
- */
-export function bootstrapAndMergeUsers(store: AuthDataStore): void {
-  if (!store.users) store.users = {};
-  if (!store.invites) store.invites = {};
-
-  // 1. 从独立物理备份中找回可能丢失的存量用户与邀请码
-  const backup = loadUsersBackup();
-  if (backup) {
-    for (const [uname, u] of Object.entries(backup.users)) {
-      if (!store.users[uname] && u && u.username && u.passwordHash) {
-        store.users[uname] = u;
-      }
-    }
-    for (const [code, inv] of Object.entries(backup.invites)) {
-      if (!store.invites[code] && inv && inv.code) {
-        store.invites[code] = inv;
-      }
-    }
-  }
-
-  // 2. 注入环境变量配置的预设用户
-  bootstrapPresetUsers(store);
-
-  // 3. 确保初始管理员初始化
-  bootstrapAdmin(store);
-
-  // 4. 确保种子邀请码初始化
-  bootstrapSeedInvites(store);
-
-  // 5. 立即双写同步物理备份
-  saveUsersBackup(store);
-}
-
-/** 读取物理备份文件中的全局源列表（支持世代快照回退） */
 export function loadGlobalSourcesBackup(): GlobalSourceRecord[] {
   const tryFiles = [
     getGlobalSourcesBackupFilePath(),
@@ -494,211 +276,303 @@ export function loadGlobalSourcesBackup(): GlobalSourceRecord[] {
     try {
       if (!fs.existsSync(backupFile)) continue;
       const content = fs.readFileSync(backupFile, 'utf-8');
-      if (!content || content.trim().length <= 2) continue;
+      if (!content || content.trim().length <= 5) continue;
       const parsed = JSON.parse(content);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed as GlobalSourceRecord[];
       if (parsed && Array.isArray(parsed.sources) && parsed.sources.length > 0) {
         return parsed.sources as GlobalSourceRecord[];
       }
     } catch (err) {
-      console.warn(`[LibreTV] 全局源管理备份读取异常 (${backupFile}):`, err);
+      console.warn(`[LibreTV] 全局源物理备份读取异常 (${backupFile}):`, err);
     }
   }
   return [];
 }
 
-/**
- * 启动时智能合并引擎：
- * 同时读取物理备份文件、环境变量（DEFAULT_SOURCES / DEFAULT_LIVE_SOURCES）与内置高可用矩阵，
- * 智能按 URL 去重合并，并自动同步落盘备份，保障任何环境下零数据丢失。
- */
+/** 环境变量预置账号注入支持 */
+function bootstrapPresetUsers(store: AuthDataStore): void {
+  const envPreset = process.env.PRESET_USERS?.trim();
+  if (!envPreset) return;
+
+  try {
+    if (envPreset.startsWith('[') && envPreset.endsWith(']')) {
+      const parsed = JSON.parse(envPreset) as Array<{ username?: string; password?: string; role?: string }>;
+      for (const item of parsed) {
+        if (!item.username || !item.password) continue;
+        const uname = item.username.toLowerCase().trim();
+        if (!store.users[uname]) {
+          const salt = crypto.randomBytes(32).toString('hex');
+          store.users[uname] = {
+            id: crypto.randomUUID(),
+            username: uname,
+            passwordHash: hashPassword(item.password, salt),
+            salt,
+            role: item.role === 'admin' ? 'admin' : 'user',
+            status: 'active',
+            sessionVersion: 1,
+            createdAt: Date.now(),
+            lastLoginAt: Date.now(),
+          };
+        }
+      }
+      return;
+    }
+
+    const pairs = envPreset.split(',').map((p) => p.trim()).filter(Boolean);
+    for (const pair of pairs) {
+      const idx = pair.indexOf(':');
+      if (idx > 0) {
+        const uname = pair.slice(0, idx).toLowerCase().trim();
+        const pwd = pair.slice(idx + 1).trim();
+        if (uname && pwd && !store.users[uname]) {
+          const salt = crypto.randomBytes(32).toString('hex');
+          store.users[uname] = {
+            id: crypto.randomUUID(),
+            username: uname,
+            passwordHash: hashPassword(pwd, salt),
+            salt,
+            role: uname === 'admin' ? 'admin' : 'user',
+            status: 'active',
+            sessionVersion: 1,
+            createdAt: Date.now(),
+            lastLoginAt: Date.now(),
+          };
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[LibreTV] PRESET_USERS 解析失败:', err);
+  }
+}
+
+/** 用户与邀请码数据多源智能合并 */
+export function bootstrapAndMergeUsers(store: AuthDataStore): void {
+  if (!store.users) store.users = {};
+  if (!store.invites) store.invites = {};
+
+  const physicalBackup = loadUsersBackup();
+  if (physicalBackup) {
+    for (const [uname, u] of Object.entries(physicalBackup.users)) {
+      if (!store.users[uname] && u && u.username) {
+        store.users[uname] = u;
+      }
+    }
+    for (const [code, inv] of Object.entries(physicalBackup.invites)) {
+      if (!store.invites[code] && inv && inv.code) {
+        store.invites[code] = inv;
+      }
+    }
+  }
+
+  bootstrapAdmin(store);
+  bootstrapPresetUsers(store);
+  bootstrapSeedInvites(store);
+  saveUsersBackup(store);
+}
+
+/** 全局源多源智能合并 */
 export function bootstrapAndMergeGlobalSources(store: AuthDataStore): void {
   if (!store.globalSources) store.globalSources = {};
 
-  // 1. 建立以 URL 为核心的已存在索引
-  const existingMap = new Map<string, GlobalSourceRecord>();
+  const existingMap = new Map<string, string>();
   for (const s of Object.values(store.globalSources)) {
-    if (s && s.url) {
-      existingMap.set(`${s.type}:${normalizeSourceUrl(s.url)}`, s);
+    existingMap.set(normalizeSourceUrl(s.url), s.key);
+  }
+
+  const backupSources = loadGlobalSourcesBackup();
+  for (const b of backupSources) {
+    const norm = normalizeSourceUrl(b.url);
+    if (!existingMap.has(norm) && !store.globalSources[b.key]) {
+      store.globalSources[b.key] = b;
+      existingMap.set(norm, b.key);
     }
   }
 
-  // 2. 读取物理备份文件中的源（跨版本、跨容器迁移恢复）
-  const backupList = loadGlobalSourcesBackup();
-  for (const b of backupList) {
-    if (!b || !b.url) continue;
-    const keyTag = `${b.type}:${normalizeSourceUrl(b.url)}`;
-    if (!existingMap.has(keyTag)) {
-      const recordKey = b.key || `backup_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  const envVods = getEnvSources();
+  for (const envSrc of envVods) {
+    const norm = normalizeSourceUrl(envSrc.url);
+    if (!existingMap.has(norm)) {
       const rec: GlobalSourceRecord = {
-        key: recordKey,
-        name: b.name || b.url,
-        url: b.url,
-        type: b.type === 'live' ? 'live' : 'vod',
-        createdAt: b.createdAt || Date.now(),
+        key: envSrc.key,
+        name: envSrc.name,
+        url: envSrc.url,
+        type: 'vod',
+        createdAt: Date.now(),
       };
       store.globalSources[rec.key] = rec;
-      existingMap.set(keyTag, rec);
+      existingMap.set(norm, rec.key);
     }
   }
 
-  // 3. 读取环境变量 DEFAULT_SOURCES（点播）与 DEFAULT_LIVE_SOURCES（直播）合并注入
-  try {
-    const envVods = getEnvSources();
-    for (const v of envVods) {
-      if (!v || !v.url) continue;
-      const keyTag = `vod:${normalizeSourceUrl(v.url)}`;
-      if (!existingMap.has(keyTag)) {
-        const rec: GlobalSourceRecord = {
-          key: `env_merged_${v.key}`,
-          name: v.name,
-          url: v.url,
-          type: 'vod',
-          createdAt: Date.now(),
-        };
-        store.globalSources[rec.key] = rec;
-        existingMap.set(keyTag, rec);
-      }
-    }
-  } catch (err) {
-    console.warn('[LibreTV] 启动合并 DEFAULT_SOURCES 异常:', err);
-  }
-
-  try {
-    const envLives = getEnvLiveSources();
-    for (const l of envLives) {
-      if (!l || !l.url) continue;
-      const keyTag = `live:${normalizeSourceUrl(l.url)}`;
-      if (!existingMap.has(keyTag)) {
-        const rec: GlobalSourceRecord = {
-          key: `env_merged_${l.key}`,
-          name: l.name,
-          url: l.url,
-          type: 'live',
-          createdAt: Date.now(),
-        };
-        store.globalSources[rec.key] = rec;
-        existingMap.set(keyTag, rec);
-      }
-    }
-  } catch (err) {
-    console.warn('[LibreTV] 启动合并 DEFAULT_LIVE_SOURCES 异常:', err);
-  }
-
-  // 4. 内置顶级秒播 CMS 与高可用直播矩阵兜底
-  for (const src of CURATED_DEFAULT_SOURCES) {
-    const keyTag = `${src.type}:${normalizeSourceUrl(src.url)}`;
-    if (!existingMap.has(keyTag) && !store.globalSources[src.key]) {
+  const envLives = getEnvLiveSources();
+  for (const liveSrc of envLives) {
+    const norm = normalizeSourceUrl(liveSrc.url);
+    if (!existingMap.has(norm)) {
       const rec: GlobalSourceRecord = {
-        ...src,
+        key: liveSrc.key,
+        name: liveSrc.name,
+        url: liveSrc.url,
+        type: 'live',
+        createdAt: Date.now(),
+      };
+      store.globalSources[rec.key] = rec;
+      existingMap.set(norm, rec.key);
+    }
+  }
+
+  for (const src of CURATED_DEFAULT_SOURCES) {
+    const norm = normalizeSourceUrl(src.url);
+    if (!existingMap.has(norm) && !store.globalSources[src.key]) {
+      const rec: GlobalSourceRecord = {
+        key: src.key,
+        name: src.name,
+        url: src.url,
+        type: src.type,
         createdAt: Date.now(),
       };
       store.globalSources[src.key] = rec;
-      existingMap.set(keyTag, rec);
+      existingMap.set(norm, src.key);
     }
   }
 
-  // 5. 立即同步回写物理备份，确保最新合并成果稳固持久化
   saveGlobalSourcesBackup(store);
 }
 
-let isGistLoaded = false;
-let gistLoadingPromise: Promise<void> | null = null;
+// —— Neon PostgreSQL 与 Gist 容灾状态加载 ——
 
-export async function ensureGistLoaded(): Promise<void> {
-  if (isGistLoaded) return;
-  if (gistLoadingPromise) return gistLoadingPromise;
+let isNeonLoaded = false;
+let neonLoadingPromise: Promise<void> | null = null;
 
-  gistLoadingPromise = (async () => {
+/** 确保 Neon PostgreSQL 主库完成连接与数据同步 */
+export async function ensurePostgresLoaded(): Promise<void> {
+  if (!isPostgresConfigured()) {
+    loadStore();
+    return;
+  }
+  if (isNeonLoaded) return;
+  if (neonLoadingPromise) return neonLoadingPromise;
+
+  neonLoadingPromise = (async () => {
     try {
-      const current = loadStore();
-      const cloudData = await pullFromGist(current);
-      if (cloudData && typeof cloudData === 'object') {
-        const cd = cloudData as Partial<AuthDataStore>;
-        if (!inMemoryStore) inMemoryStore = { users: {}, invites: {}, globalSources: {} };
-        if (cd.users) inMemoryStore.users = { ...inMemoryStore.users, ...cd.users };
-        if (cd.invites) inMemoryStore.invites = { ...inMemoryStore.invites, ...cd.invites };
-        if (cd.globalSources) inMemoryStore.globalSources = { ...inMemoryStore.globalSources, ...cd.globalSources };
-        bootstrapAndMergeUsers(inMemoryStore);
-        bootstrapAndMergeGlobalSources(inMemoryStore);
-
-        const storeFile = getStoreFilePath();
-        atomicWriteJsonSync(storeFile, inMemoryStore);
-        saveUsersBackup(inMemoryStore);
-        saveGlobalSourcesBackup(inMemoryStore);
+      await initPostgresSchema();
+      const neonData = await fetchAllDataFromNeon();
+      if (!inMemoryStore) {
+        inMemoryStore = { users: {}, invites: {}, globalSources: {}, userConfigs: {} };
       }
-    } catch (e) {
-      console.error('[LibreTV] 加载 Gist 云端数据异常:', e);
-    } finally {
-      isGistLoaded = true;
-      gistLoadingPromise = null;
-    }
-  })();
-
-  return gistLoadingPromise;
-}
-
-export async function manualSyncGist(): Promise<{ success: boolean; error?: string; state: GistSyncState }> {
-  const store = loadStore();
-  const res = await forcePushToGist(store);
-  return { ...res, state: getGistSyncState() };
-}
-
-export async function manualPullGist(): Promise<{ success: boolean; error?: string; state: GistSyncState }> {
-  isGistLoaded = false;
-  await ensureGistLoaded();
-  return { success: true, state: getGistSyncState() };
-}
-
-export function getGistStatus(): GistSyncState {
-  return getGistSyncState();
-}
-
-// 服务端自动拉起云端同步探针
-if (typeof window === 'undefined' && (process.env.GITHUB_TOKEN || process.env.GH_TOKEN)) {
-  setTimeout(() => {
-    ensureGistLoaded().catch(() => {});
-  }, 50);
-}
-
-// 注册 Gist 远端账号反向水合回调：当远端发现本地缺失的账号时，无感写回本地物理文件
-registerRemoteHydrateCallback((mergedData) => {
-  if (inMemoryStore) {
-    let changed = false;
-    if (mergedData.users) {
-      for (const [u, r] of Object.entries(mergedData.users as Record<string, UserRecord>)) {
-        if (!inMemoryStore.users[u] && r && r.username) {
-          inMemoryStore.users[u] = r;
-          changed = true;
+      if (neonData) {
+        if (neonData.users && Object.keys(neonData.users).length > 0) {
+          inMemoryStore.users = { ...inMemoryStore.users, ...neonData.users };
+        }
+        if (neonData.invites && Object.keys(neonData.invites).length > 0) {
+          inMemoryStore.invites = { ...inMemoryStore.invites, ...neonData.invites };
+        }
+        if (neonData.globalSources && Object.keys(neonData.globalSources).length > 0) {
+          inMemoryStore.globalSources = { ...inMemoryStore.globalSources, ...neonData.globalSources };
+        }
+        if (neonData.userConfigs && Object.keys(neonData.userConfigs).length > 0) {
+          inMemoryStore.userConfigs = { ...inMemoryStore.userConfigs, ...neonData.userConfigs };
         }
       }
-    }
-    if (mergedData.invites) {
-      for (const [c, inv] of Object.entries(mergedData.invites as Record<string, InviteCodeRecord>)) {
-        if (!inMemoryStore.invites[c] && inv && inv.code) {
-          inMemoryStore.invites[c] = inv;
-          changed = true;
+
+      // 启动自愈合并
+      bootstrapAndMergeUsers(inMemoryStore);
+      bootstrapAndMergeGlobalSources(inMemoryStore);
+
+      // 若 Neon 表中缺失数据（如首次连接新库），幂等写回初始数据
+      for (const u of Object.values(inMemoryStore.users)) {
+        if (!neonData?.users[u.username]) {
+          dbUpsertUser(u).catch(() => {});
         }
       }
-    }
-    if (changed) {
+      for (const inv of Object.values(inMemoryStore.invites)) {
+        if (!neonData?.invites[inv.code]) {
+          dbUpsertInvite(inv).catch(() => {});
+        }
+      }
+      for (const s of Object.values(inMemoryStore.globalSources)) {
+        if (!neonData?.globalSources[s.key]) {
+          dbUpsertGlobalSource(s).catch(() => {});
+        }
+      }
+
+      // 双保险物理备份
       const storeFile = getStoreFilePath();
       atomicWriteJsonSync(storeFile, inMemoryStore);
       saveUsersBackup(inMemoryStore);
-      console.log('[LibreTV] Gist 云端账号数据已反向水合至本地物理备份');
+      saveGlobalSourcesBackup(inMemoryStore);
+      console.log(`[Neon PostgreSQL] 成功加载主库数据（用户: ${Object.keys(inMemoryStore.users).length}, 全局源: ${Object.keys(inMemoryStore.globalSources).length}）`);
+    } catch (err) {
+      console.error('[Neon PostgreSQL] 主库加载异常，已平滑回退至本地存储:', err);
+      loadStore();
+    } finally {
+      isNeonLoaded = true;
+      neonLoadingPromise = null;
     }
+  })();
+
+  return neonLoadingPromise;
+}
+
+/** 兼容性生命周期入口：确保主数据加载完毕 */
+export async function ensureGistLoaded(): Promise<void> {
+  if (isPostgresConfigured()) {
+    await ensurePostgresLoaded();
+  } else {
+    loadStore();
   }
-});
+}
+
+/** 手动导出冷备至 GitHub Gist */
+export async function manualSyncGist(): Promise<{
+  success: boolean;
+  error?: string;
+  gistId?: string;
+  gistUrl?: string;
+  stats?: GistBackupState['stats'];
+  state: GistBackupState;
+}> {
+  const store = loadStore();
+  const res = await exportNeonToGist(store);
+  return { ...res, state: getGistBackupStatus() };
+}
+
+/** 手动从 GitHub Gist 容灾恢复回 Neon 主库 */
+export async function manualPullGist(): Promise<{
+  success: boolean;
+  error?: string;
+  restoredStats?: { users: number; invites: number; sources: number; userConfigs: number };
+  gistUrl?: string;
+  state: GistBackupState;
+}> {
+  const res = await restoreGistToNeon();
+  if (res.success) {
+    isNeonLoaded = false;
+    await ensurePostgresLoaded();
+  }
+  return { ...res, state: getGistBackupStatus() };
+}
+
+export function getGistStatus(): GistBackupState {
+  return getGistBackupStatus();
+}
+
+// 服务端自动拉起 Neon 初始化探针
+if (typeof window === 'undefined' && isPostgresConfigured()) {
+  setTimeout(() => {
+    ensurePostgresLoaded().catch(() => {});
+  }, 50);
+}
 
 function loadStore(): AuthDataStore {
-  if (inMemoryStore) return inMemoryStore;
+  if (inMemoryStore) {
+    bootstrapAdmin(inMemoryStore);
+    return inMemoryStore;
+  }
 
   const storeFile = getStoreFilePath();
   const prevStoreFile = `${storeFile}.prev.json`;
 
   let loaded: AuthDataStore | null = null;
 
-  // 1. 优先尝试从主存储 auth-store.json 读取
   if (fs.existsSync(storeFile)) {
     try {
       const content = fs.readFileSync(storeFile, 'utf-8');
@@ -710,7 +584,6 @@ function loadStore(): AuthDataStore {
     }
   }
 
-  // 2. 若主存储损坏或不存在，自动从 auth-store.json.prev.json 世代物理快照恢复
   if (!loaded && fs.existsSync(prevStoreFile)) {
     try {
       const prevContent = fs.readFileSync(prevStoreFile, 'utf-8');
@@ -723,7 +596,7 @@ function loadStore(): AuthDataStore {
     }
   }
 
-  inMemoryStore = loaded || { users: {}, invites: {}, globalSources: {} };
+  inMemoryStore = loaded || { users: {}, invites: {}, globalSources: {}, userConfigs: {} };
 
   if (inMemoryStore.systemConfig?.githubToken) {
     setCustomGithubToken(inMemoryStore.systemConfig.githubToken);
@@ -732,10 +605,9 @@ function loadStore(): AuthDataStore {
   if (!inMemoryStore.globalSources) inMemoryStore.globalSources = {};
   if (!inMemoryStore.invites) inMemoryStore.invites = {};
   if (!inMemoryStore.users) inMemoryStore.users = {};
+  if (!inMemoryStore.userConfigs) inMemoryStore.userConfigs = {};
 
-  // 3. 确保用户与邀请码启动合并恢复（主文件 + users-backup.json + PRESET_USERS + 种子邀请码）
   bootstrapAndMergeUsers(inMemoryStore);
-  // 4. 同时读取物理备份(global-sources-backup.json) + 环境变量并智能合并与持久化备份
   bootstrapAndMergeGlobalSources(inMemoryStore);
 
   saveStore(inMemoryStore);
@@ -744,7 +616,6 @@ function loadStore(): AuthDataStore {
 
 function saveStore(store: AuthDataStore): void {
   try {
-    // 关键防丢保全：如果内存中当前用户数少于已有的独立备份（可能由于并发或初始化瞬态），优先并入备份
     const existingBackup = loadUsersBackup();
     if (existingBackup) {
       for (const [uname, u] of Object.entries(existingBackup.users)) {
@@ -761,11 +632,8 @@ function saveStore(store: AuthDataStore): void {
 
     const storeFile = getStoreFilePath();
     atomicWriteJsonSync(storeFile, store);
-    // 独立物理双备份：用户账号 + 全局源
     saveUsersBackup(store);
     saveGlobalSourcesBackup(store);
-    // 自动异步回写至 GitHub Gist 云存储
-    schedulePushToGist(store);
   } catch (err) {
     console.error('Failed to save auth-store.json:', err);
   }
@@ -787,6 +655,7 @@ function bootstrapAdmin(store: AuthDataStore) {
       status: 'active',
       sessionVersion: 1,
       createdAt: Date.now(),
+      lastLoginAt: Date.now(),
     };
   } else if (envPassword && hashPassword(envPassword, store.users[adminUsername].salt) !== store.users[adminUsername].passwordHash) {
     // 若环境变量显式配置了 ADMIN_PASSWORD 或 PASSWORD 且发生变更，平滑同步管理员密码
@@ -798,7 +667,6 @@ function bootstrapAdmin(store: AuthDataStore) {
 }
 
 function bootstrapSeedInvites(store: AuthDataStore) {
-  // 支持环境变量注入种子邀请码，如 INITIAL_INVITE_CODES=VIP666,LTV-FREE
   const envCodes = process.env.INITIAL_INVITE_CODES?.split(',').map((c) => c.trim()).filter(Boolean) || [];
   for (const code of envCodes) {
     if (!store.invites[code]) {
@@ -815,7 +683,7 @@ function bootstrapSeedInvites(store: AuthDataStore) {
   }
 }
 
-// —— 外部公开方法 ——
+// —— 外部公开方法（日常读写全面对接 Neon PostgreSQL） ——
 
 export function getUser(username: string): UserRecord | undefined {
   const store = loadStore();
@@ -858,10 +726,13 @@ export function verifyUserCredentials(username: string, password: string): {
     return { success: false, error: '密码错误', code: 'PASSWORD_WRONG' };
   }
 
-  // 登录成功更新活跃时间并递增会话版本号（顶号互踢核心：旧设备 Token 自动失效）
   user.lastLoginAt = Date.now();
   user.sessionVersion += 1;
   saveStore(store);
+
+  if (isPostgresConfigured()) {
+    dbUpsertUser(user).catch((e) => console.error('[Neon] 登录更新异常:', e));
+  }
 
   return { success: true, user };
 }
@@ -889,7 +760,6 @@ export function registerWithInvite(username: string, password: string, inviteCod
     return { success: false, error: '该用户名已被注册' };
   }
 
-  // 邀请码核验
   const invite = store.invites[codeStr];
   if (!invite || !invite.active) {
     return { success: false, error: '无效或已作废的邀请码' };
@@ -899,14 +769,12 @@ export function registerWithInvite(username: string, password: string, inviteCod
     return { success: false, error: '该邀请码已被使用完毕' };
   }
 
-  // 消费邀请码
   invite.useCount += 1;
   invite.usedBy.push(uname);
   if (invite.useCount >= invite.maxUses) {
     invite.active = false;
   }
 
-  // 创建用户
   const salt = crypto.randomBytes(32).toString('hex');
   const newUser: UserRecord = {
     id: crypto.randomUUID(),
@@ -922,6 +790,11 @@ export function registerWithInvite(username: string, password: string, inviteCod
 
   store.users[uname] = newUser;
   saveStore(store);
+
+  if (isPostgresConfigured()) {
+    dbUpsertUser(newUser).catch((e) => console.error('[Neon] 新用户写入异常:', e));
+    dbUpsertInvite(invite).catch((e) => console.error('[Neon] 邀请码核销异常:', e));
+  }
 
   return { success: true, user: newUser };
 }
@@ -955,6 +828,10 @@ export function createInviteCodes(options: {
     };
     store.invites[code] = record;
     newCodes.push(record);
+
+    if (isPostgresConfigured()) {
+      dbUpsertInvite(record).catch((e) => console.error('[Neon] 邀请码新增写入异常:', e));
+    }
   }
 
   saveStore(store);
@@ -971,6 +848,9 @@ export function revokeInviteCode(code: string): boolean {
   if (store.invites[code]) {
     store.invites[code].active = false;
     saveStore(store);
+    if (isPostgresConfigured()) {
+      dbUpsertInvite(store.invites[code]).catch((e) => console.error('[Neon] 邀请码废除异常:', e));
+    }
     return true;
   }
   return false;
@@ -982,8 +862,11 @@ export function banUser(username: string): boolean {
   const user = store.users[uname];
   if (user && user.role !== 'admin') {
     user.status = 'banned';
-    user.sessionVersion += 1; // 强制踢下线
+    user.sessionVersion += 1;
     saveStore(store);
+    if (isPostgresConfigured()) {
+      dbUpsertUser(user).catch((e) => console.error('[Neon] 封禁用户写入异常:', e));
+    }
     return true;
   }
   return false;
@@ -996,6 +879,9 @@ export function unbanUser(username: string): boolean {
   if (user) {
     user.status = 'active';
     saveStore(store);
+    if (isPostgresConfigured()) {
+      dbUpsertUser(user).catch((e) => console.error('[Neon] 解封用户写入异常:', e));
+    }
     return true;
   }
   return false;
@@ -1006,8 +892,11 @@ export function kickUser(username: string): boolean {
   const uname = username.toLowerCase().trim();
   const user = store.users[uname];
   if (user) {
-    user.sessionVersion += 1; // 会话版本递增，旧设备全部下线
+    user.sessionVersion += 1;
     saveStore(store);
+    if (isPostgresConfigured()) {
+      dbUpdateSessionVersion(user.username, user.sessionVersion).catch((e) => console.error('[Neon] 踢出用户异常:', e));
+    }
     return true;
   }
   return false;
@@ -1020,8 +909,11 @@ export function resetUserPassword(username: string, newPassword: string): boolea
   if (user && newPassword && newPassword.length >= 6) {
     user.salt = crypto.randomBytes(32).toString('hex');
     user.passwordHash = hashPassword(newPassword, user.salt);
-    user.sessionVersion += 1; // 改密后强制踢下线
+    user.sessionVersion += 1;
     saveStore(store);
+    if (isPostgresConfigured()) {
+      dbUpsertUser(user).catch((e) => console.error('[Neon] 重置密码写入异常:', e));
+    }
     return true;
   }
   return false;
@@ -1047,6 +939,11 @@ export function addGlobalSource(source: { name: string; url: string; type: 'vod'
   store.globalSources[key] = record;
   saveStore(store);
   saveGlobalSourcesBackup(store);
+
+  if (isPostgresConfigured()) {
+    dbUpsertGlobalSource(record).catch((e) => console.error('[Neon] 全局源写入异常:', e));
+  }
+
   return record;
 }
 
@@ -1056,6 +953,9 @@ export function removeGlobalSource(key: string): boolean {
     delete store.globalSources[key];
     saveStore(store);
     saveGlobalSourcesBackup(store);
+    if (isPostgresConfigured()) {
+      dbDeleteGlobalSource(key).catch((e) => console.error('[Neon] 全局源删除异常:', e));
+    }
     return true;
   }
   return false;
@@ -1104,6 +1004,9 @@ export function syncUserSessionVersion(username: string, sessionVersion: number)
   if (user && sessionVersion > user.sessionVersion) {
     user.sessionVersion = sessionVersion;
     saveStore(store);
+    if (isPostgresConfigured()) {
+      dbUpdateSessionVersion(user.username, sessionVersion).catch(() => {});
+    }
   }
 }
 
@@ -1119,11 +1022,13 @@ export function restoreUserSession(
     if (sessionVersion > store.users[uname].sessionVersion) {
       store.users[uname].sessionVersion = sessionVersion;
       saveStore(store);
+      if (isPostgresConfigured()) {
+        dbUpdateSessionVersion(store.users[uname].username, sessionVersion).catch(() => {});
+      }
     }
     return store.users[uname];
   }
 
-  // 容器重启恢复：为合法 HMAC 签名的用户恢复基础记录
   const salt = crypto.randomBytes(32).toString('hex');
   const record: UserRecord = {
     id: crypto.randomUUID(),
@@ -1138,7 +1043,53 @@ export function restoreUserSession(
   };
   store.users[uname] = record;
   saveStore(store);
+
+  if (isPostgresConfigured()) {
+    dbUpsertUser(record).catch(() => {});
+  }
   return record;
+}
+
+// —— 用户专属搜索源与订阅配置支持 ——
+
+export function getUserSearchConfig(username: string): UserConfigRecord | null {
+  const store = loadStore();
+  const uname = username.toLowerCase().trim();
+  return store.userConfigs?.[uname] || null;
+}
+
+export function saveUserSearchConfig(
+  username: string,
+  config: { customSources?: unknown[]; selectedKeys?: string[]; subscriptions?: unknown[] }
+): UserConfigRecord {
+  const store = loadStore();
+  const uname = username.toLowerCase().trim();
+  if (!store.userConfigs) store.userConfigs = {};
+
+  const existing = store.userConfigs[uname] || {
+    username: uname,
+    customSources: [],
+    selectedKeys: [],
+    subscriptions: [],
+    updatedAt: 0,
+  };
+
+  const updated: UserConfigRecord = {
+    username: uname,
+    customSources: config.customSources !== undefined ? config.customSources : existing.customSources,
+    selectedKeys: config.selectedKeys !== undefined ? config.selectedKeys : existing.selectedKeys,
+    subscriptions: config.subscriptions !== undefined ? config.subscriptions : existing.subscriptions,
+    updatedAt: Date.now(),
+  };
+
+  store.userConfigs[uname] = updated;
+  saveStore(store);
+
+  if (isPostgresConfigured()) {
+    dbSaveUserConfig(uname, config).catch((e) => console.error('[Neon] 用户源配置保存异常:', e));
+  }
+
+  return updated;
 }
 
 /** 保存并绑定自定义 GitHub Token */
@@ -1146,11 +1097,11 @@ export async function saveCustomGithubToken(token: string): Promise<{
   success: boolean;
   error?: string;
   username?: string;
-  gistState: GistSyncState;
+  gistState: GistBackupState;
 }> {
   const clean = token.trim();
   const test = await testAndVerifyGithubToken(clean);
-  if (!test.success) {
+  if (!test.ok) {
     return { success: false, error: test.error, gistState: getGistStatus() };
   }
 
@@ -1161,10 +1112,6 @@ export async function saveCustomGithubToken(token: string): Promise<{
   store.systemConfig.updatedAt = Date.now();
   saveStore(store);
 
-  // 立即重置并拉取云端 Gist
-  isGistLoaded = false;
-  await ensureGistLoaded();
-
   return {
     success: true,
     username: test.username,
@@ -1173,7 +1120,7 @@ export async function saveCustomGithubToken(token: string): Promise<{
 }
 
 /** 导出全量数据备份（供管理员离线下载） */
-export function exportFullBackup(): Record<string, unknown> {
+export function exportFullBackup(): FullBackupPayload {
   const store = loadStore();
   const now = Date.now();
   return {
@@ -1188,6 +1135,7 @@ export function exportFullBackup(): Record<string, unknown> {
     users: store.users || {},
     invites: store.invites || {},
     globalSources: store.globalSources || {},
+    userConfigs: store.userConfigs || {},
   };
 }
 
@@ -1219,6 +1167,7 @@ export function importFullBackup(payload: unknown): {
     users?: Record<string, UserRecord>;
     invites?: Record<string, InviteCodeRecord>;
     globalSources?: Record<string, GlobalSourceRecord>;
+    userConfigs?: Record<string, UserConfigRecord>;
   };
 
   if (!data.users && !data.invites && !data.globalSources) {
@@ -1244,6 +1193,9 @@ export function importFullBackup(payload: unknown): {
       if (u && u.username && u.passwordHash) {
         store.users[uname.toLowerCase().trim()] = u;
         userCount++;
+        if (isPostgresConfigured()) {
+          dbUpsertUser(u).catch(() => {});
+        }
       }
     }
   }
@@ -1253,6 +1205,9 @@ export function importFullBackup(payload: unknown): {
       if (inv && inv.code) {
         store.invites[code] = inv;
         inviteCount++;
+        if (isPostgresConfigured()) {
+          dbUpsertInvite(inv).catch(() => {});
+        }
       }
     }
   }
@@ -1262,6 +1217,21 @@ export function importFullBackup(payload: unknown): {
       if (s && s.url) {
         store.globalSources[k] = s;
         sourceCount++;
+        if (isPostgresConfigured()) {
+          dbUpsertGlobalSource(s).catch(() => {});
+        }
+      }
+    }
+  }
+
+  if (data.userConfigs && typeof data.userConfigs === 'object' && !Array.isArray(data.userConfigs)) {
+    if (!store.userConfigs) store.userConfigs = {};
+    for (const [u, conf] of Object.entries(data.userConfigs)) {
+      if (conf && conf.username) {
+        store.userConfigs[u] = conf;
+        if (isPostgresConfigured()) {
+          dbSaveUserConfig(u, conf).catch(() => {});
+        }
       }
     }
   }
@@ -1269,7 +1239,6 @@ export function importFullBackup(payload: unknown): {
   saveStore(store);
   saveUsersBackup(store);
   saveGlobalSourcesBackup(store);
-  schedulePushToGist(store);
 
   return {
     success: true,
@@ -1310,16 +1279,21 @@ export function getStorageDiagnostics() {
     exists: fileExists,
     storeSize: fileSize,
     lastModified,
+    database: {
+      type: isPostgresConfigured() ? 'neon_postgresql' : 'local_json_fallback',
+      configured: isPostgresConfigured(),
+    },
     userCount: Object.keys(store.users || {}).length,
     inviteCount: Object.keys(store.invites || {}).length,
     globalSourceCount: Object.keys(store.globalSources || {}).length,
+    userConfigsCount: Object.keys(store.userConfigs || {}).length,
     hasCustomGithubToken: Boolean(getCustomGithubToken()),
     gistConfigured: Boolean(getCustomGithubToken() || process.env.GITHUB_TOKEN || process.env.GH_TOKEN),
-    // 兼容字段
+    // 兼容历史字段
     usersCount: Object.keys(store.users || {}).length,
     invitesCount: Object.keys(store.invites || {}).length,
     sourcesCount: Object.keys(store.globalSources || {}).length,
     hasTokenConfigured: Boolean(getCustomGithubToken() || process.env.GITHUB_TOKEN || process.env.GH_TOKEN),
-    gist: getGistStatus(),
+    gist: getGistBackupStatus(),
   };
 }

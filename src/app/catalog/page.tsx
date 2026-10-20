@@ -16,6 +16,7 @@ import { isShortDramaTitle } from '@/lib/short-drama';
 import { useAppStore, resolveSource, isInDisabledSubscription, isSourceDisabled } from '@/lib/store';
 import type { SourceSearchOutcome, DoubanItem, SourceConfig } from '@/lib/types';
 import { fetchDoubanFilter } from '@/lib/douban-api';
+import { fetchDoubanCollectionItems } from '@/lib/media-library-service';
 
 type ChannelType = 'movie' | 'tv' | 'short_drama' | 'anime' | 'variety' | 'documentary';
 
@@ -401,7 +402,31 @@ function CatalogContent() {
       catalogKeyword,
     ],
     queryFn: async ({ signal }) => {
-      // 门面层：全面采用豆瓣官方多维分类筛选引擎，零采集站请求、零杂乱水印
+      // 1. 若用户选择直连采集源资料库 (类似 9zhoukj 原生分类片库)
+      if (currentSource === 'cms' && activeCmsSource) {
+        const q = new URLSearchParams({
+          url: activeCmsSource.url,
+          type: currentChannel,
+          pg: String(currentPage),
+          pagesize: String(PAGE_SIZE),
+          filterAdult: yellowFilter ? '1' : '0',
+        });
+        if (activeCmsSource.key) q.set('sourceKey', activeCmsSource.key);
+        if (rawCmsTypeId) q.set('typeId', rawCmsTypeId);
+        if (catalogKeyword) q.set('wd', catalogKeyword);
+
+        try {
+          const res = await fetch(`/api/catalog/cms?${q.toString()}`, { signal });
+          if (res.ok) {
+            return await res.json();
+          }
+        } catch {
+          // ignore
+        }
+        return { items: [], total: 0, pagecount: 1, subCategories: [] };
+      }
+
+      // 2. 门面层：采用豆瓣多维分类筛选引擎（带服务端自动 Rexxar 容灾降级）
       let tags = '电影';
       if (currentChannel === 'tv' || currentChannel === 'short_drama') tags = '电视剧';
       else if (currentChannel === 'anime') tags = '动漫';
@@ -452,7 +477,7 @@ function CatalogContent() {
           signal
         );
 
-        const mappedItems: DoubanItem[] = res.items.map((item) => ({
+        let mappedItems: DoubanItem[] = res.items.map((item) => ({
           id: item.id,
           title: item.title,
           cover: item.cover,
@@ -460,14 +485,39 @@ function CatalogContent() {
           year: item.year,
         }));
 
+        // 若结果为空，自动尝试热播榜单兜底保证有片可选
+        if (mappedItems.length === 0) {
+          const fallbackCollectionId =
+            currentChannel === 'movie'
+              ? 'movie_hot'
+              : currentChannel === 'anime'
+              ? 'tv_animation'
+              : currentChannel === 'variety'
+              ? 'tv_variety_show'
+              : 'tv_hot';
+          const fallbackRes = await fetchDoubanCollectionItems(
+            fallbackCollectionId,
+            start,
+            PAGE_SIZE,
+            signal
+          );
+          mappedItems = fallbackRes.items.map((it) => ({
+            id: it.id,
+            title: it.title,
+            cover: it.cover,
+            rating: it.rating,
+            year: it.year,
+          }));
+        }
+
         return {
           items: mappedItems,
-          total: 500, // 豆瓣多维分类支持多页深度浏览
+          total: 500,
           pagecount: 25,
           subCategories: [],
         };
       } catch (err) {
-        console.warn('[Catalog] 豆瓣多维筛选接口异常:', err);
+        console.warn('[Catalog] 豆瓣多维筛选接口异常，已启用保底:', err);
         return { items: [], total: 0, pagecount: 1, subCategories: [] };
       }
     },
@@ -475,10 +525,10 @@ function CatalogContent() {
     enabled: !urlQuery,
   });
 
-  const rawItems = catalogQuery.data?.items ?? [];
+  const rawItems: DoubanItem[] = (catalogQuery.data?.items as DoubanItem[]) ?? [];
   const items: DoubanItem[] = currentChannel === 'short_drama'
     ? rawItems
-    : rawItems.filter((item) => !isShortDramaTitle(item.title));
+    : rawItems.filter((item: DoubanItem) => !isShortDramaTitle(item.title));
 
   const total = catalogQuery.data?.total ?? (items.length > 0 ? items.length * 10 : 0);
   const totalPages = Math.max(

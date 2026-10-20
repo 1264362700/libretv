@@ -114,7 +114,7 @@ export async function fetchDoubanCollection(
   return { items, total };
 }
 
-/** 2. 多维分类筛选接口：片库多维联动 */
+/** 2. 多维分类筛选接口：片库多维联动（支持服务端自愈与客户端平滑降级） */
 export async function fetchDoubanFilter(
   params: DoubanFilterParams,
   signal?: AbortSignal
@@ -130,27 +130,60 @@ export async function fetchDoubanFilter(
   if (params.countries) q.set('countries', params.countries);
   if (params.yearRange) q.set('year_range', params.yearRange);
 
-  const res = await fetch(`/api/douban-proxy?${q.toString()}`, { signal });
-  if (!res.ok) {
-    throw new Error(`豆瓣分类筛选失败: HTTP ${res.status}`);
+  try {
+    const res = await fetch(`/api/douban-proxy?${q.toString()}`, { signal });
+    if (!res.ok) {
+      console.warn(`[DoubanAPI] 筛选代理返回 HTTP ${res.status}，尝试切换备用推荐通道`);
+      // 备用推荐通道兜底
+      const mediaType = params.tags?.includes('电视剧') ? 'tv' : 'movie';
+      const fallbackRes = await fetch(
+        `/api/douban-proxy?type=recommend&mediaType=${mediaType}&tags=${encodeURIComponent(
+          params.tags || '热门'
+        )}&start=${params.start || 0}&count=20`,
+        { signal }
+      );
+      if (fallbackRes.ok) {
+        const fbJson = await fallbackRes.json();
+        const fbList = Array.isArray(fbJson?.items) ? fbJson.items : [];
+        const fallbackItems: DoubanSubject[] = fbList.map((raw: Record<string, unknown>) => {
+          const ratingObj = raw?.rating as { value?: number } | undefined;
+          const rate = ratingObj?.value ? Number(ratingObj.value).toFixed(1) : '暂无评分';
+          const picObj = raw?.pic as { normal?: string; large?: string } | undefined;
+          const cover = picObj?.normal || picObj?.large || String(raw?.cover_url || '');
+          return {
+            id: String(raw?.id || ''),
+            title: String(raw?.title || '').trim(),
+            cover: formatDoubanCover(cover),
+            rate,
+            year: raw?.year ? String(raw.year) : undefined,
+          };
+        });
+        return { items: fallbackItems };
+      }
+      return { items: [] };
+    }
+
+    const json = await res.json();
+    const rawList = Array.isArray(json?.data) ? json.data : [];
+
+    const items: DoubanSubject[] = rawList.map((raw: Record<string, unknown>) => {
+      const rawRate = raw?.rate;
+      const rate = rawRate && rawRate !== '0' ? Number(rawRate).toFixed(1) : '暂无评分';
+      return {
+        id: String(raw?.id || ''),
+        title: String(raw?.title || '').trim(),
+        cover: formatDoubanCover(String(raw?.cover || '')),
+        rate,
+        year: raw?.year ? String(raw.year) : undefined,
+      };
+    });
+
+    return { items };
+  } catch (err) {
+    if (signal?.aborted) return { items: [] };
+    console.warn('[DoubanAPI] 分类筛选请求捕获异常，已优雅降级为空集:', err);
+    return { items: [] };
   }
-
-  const json = await res.json();
-  const rawList = Array.isArray(json?.data) ? json.data : [];
-
-  const items: DoubanSubject[] = rawList.map((raw: Record<string, unknown>) => {
-    const rawRate = raw?.rate;
-    const rate = rawRate && rawRate !== '0' ? Number(rawRate).toFixed(1) : '暂无评分';
-    return {
-      id: String(raw?.id || ''),
-      title: String(raw?.title || '').trim(),
-      cover: formatDoubanCover(String(raw?.cover || '')),
-      rate,
-      year: raw?.year ? String(raw.year) : undefined,
-    };
-  });
-
-  return { items };
 }
 
 /** 3. 单部影片详情接口：获取完整简介、演员、导演与类型 */

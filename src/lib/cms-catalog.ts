@@ -250,8 +250,8 @@ export async function fetchCmsCatalog(options: CmsCatalogOptions): Promise<CmsCa
   const rawList = Array.isArray(data.list) ? data.list : [];
   const rawPageCount = parseInt(String(data.pagecount || '1'), 10);
   const rawTotal = parseInt(String(data.total || '0'), 10);
-  const pagecount = Number.isFinite(rawPageCount) && rawPageCount > 0 ? rawPageCount : 1;
-  const total = Number.isFinite(rawTotal) && rawTotal > 0 ? rawTotal : rawList.length;
+  let pagecount = Number.isFinite(rawPageCount) && rawPageCount > 0 ? rawPageCount : 1;
+  let total = Number.isFinite(rawTotal) && rawTotal > 0 ? rawTotal : rawList.length;
 
   // 3. 成人与短剧严格隔离过滤（先对原始 vod 实体执行精准类型过滤）
   let filteredList = rawList;
@@ -269,7 +269,56 @@ export async function fetchCmsCatalog(options: CmsCatalogOptions): Promise<CmsCa
     );
   }
 
-  // 4. 映射为 DoubanItem
+  // 4. 苹果 CMS 虚父分类智能下钻自愈：
+  // 若未指定特定二级子类，且当前父级直属返回的数据极少（<= 1 条，如电影/电视剧仅为目录节点），
+  // 但源站存在该频道的细分子分类（subCategories.length > 0），自动下钻至首个有效子分类（如动作片、内地剧）重新获取
+  if (typeId === undefined && filteredList.length <= 1 && subCategories.length > 0) {
+    const fallbackSubId = subCategories[0].id;
+    const fallbackParams = new URLSearchParams({
+      ac: 'videolist',
+      pg: String(Math.max(1, page)),
+      pagesize: String(pageSize),
+      t: String(fallbackSubId),
+    });
+    if (keyword && keyword.trim()) {
+      fallbackParams.set('wd', keyword.trim().slice(0, 100));
+    }
+
+    try {
+      const fallbackRes = await fetchUpstream(`${cleanUrl}?${fallbackParams.toString()}`, {
+        timeoutMs: 6000,
+        headers: cmsRequestHeaders(),
+      });
+      if (fallbackRes.ok) {
+        const fbData = (await fallbackRes.json()) as typeof data;
+        const fbRawList = Array.isArray(fbData.list) ? fbData.list : [];
+        if (fbRawList.length > 0) {
+          let fbFiltered = fbRawList;
+          if (filterAdult) {
+            fbFiltered = fbFiltered.filter(
+              (v) => !isAdultContent(v.type_name) && !isAdultContent(v.vod_name)
+            );
+          }
+          if (type !== 'short_drama') {
+            fbFiltered = fbFiltered.filter(
+              (v) =>
+                !isShortDramaTitle(v.vod_name || '') &&
+                !/短剧|微短剧|爽文/.test(v.type_name || '')
+            );
+          }
+          if (fbFiltered.length > 0) {
+            filteredList = fbFiltered;
+            total = Number(fbData.total) || fbFiltered.length;
+            pagecount = Number(fbData.pagecount) || 1;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn(`[CmsCatalog] 虚父分类自动下钻重试异常 (t=${fallbackSubId}):`, e);
+    }
+  }
+
+  // 5. 映射为 DoubanItem
   const mappedItems: DoubanItem[] = filteredList
     .map((vod): DoubanItem | undefined => {
       const title = (vod.vod_name || '').trim();

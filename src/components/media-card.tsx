@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { MediaItem } from '@/lib/media-library-service';
 import { resolveEpisodeBadge } from '@/lib/media-library-service';
 import { cn } from '@/lib/utils';
@@ -29,16 +29,29 @@ export function MediaCard({
   className,
   showSubtitle = true,
 }: MediaCardProps) {
-  // 图片防裂图状态：0=直连, 1=weserv代理, 2=完全失效展示SVG兜底
-  const [imgStage, setImgStage] = useState<0 | 1 | 2>(0);
-
-  const imgSrc = useMemo(() => {
-    if (!item.cover || imgStage === 2) return '';
-    if (imgStage === 1) {
-      return `https://images.weserv.nl/?url=${encodeURIComponent(item.cover)}&w=400&q=80`;
+  // 构建高可用图片候选链，彻底规避豆瓣 418 / 403 防盗链拦截
+  const candidates = useMemo(() => {
+    const raw = item.cover || '';
+    if (!raw) return [];
+    if (raw.includes('doubanio.com')) {
+      // 优先级 1: 官方镜像加速（不带防盗链，秒开 200）
+      const mirror = raw.replace(/img\d+\.doubanio\.com/g, 'img.doubanio.cmliussss.net');
+      // 优先级 2: 服务端内置代理（自动注入 Referer: https://movie.douban.com/）
+      const proxy = `/api/proxy?url=${encodeURIComponent(raw)}`;
+      return [mirror, proxy];
     }
-    return item.cover;
-  }, [item.cover, imgStage]);
+    return [raw, `/api/proxy?url=${encodeURIComponent(raw)}`];
+  }, [item.cover]);
+
+  const [candidateIdx, setCandidateIdx] = useState(0);
+
+  // 当封面变化时重置索引
+  useEffect(() => {
+    setCandidateIdx(0);
+  }, [item.cover]);
+
+  const currentSrc = candidates[candidateIdx] || '';
+  const isFailed = candidateIdx >= candidates.length || !currentSrc;
 
   // 计算角标文本（优先级：采集源实时更新备注 > 豆瓣 episodes_info > 正则提取 > 年份）
   const episodeBadge = useMemo(() => {
@@ -89,14 +102,14 @@ export function MediaCard({
     >
       {/* 2:3 黄金比例海报容器 */}
       <div className="relative aspect-[2/3] w-full overflow-hidden bg-chip">
-        {imgSrc && imgStage !== 2 ? (
+        {currentSrc && !isFailed ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={imgSrc}
+            src={currentSrc}
             alt={item.title}
             loading="lazy"
             referrerPolicy="no-referrer"
-            onError={() => setImgStage((prev) => (prev === 0 ? 1 : 2))}
+            onError={() => setCandidateIdx((prev) => prev + 1)}
             className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
           />
         ) : (

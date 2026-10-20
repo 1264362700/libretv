@@ -115,12 +115,24 @@ const CHANNEL_SOURCES: Record<ChannelType, CatalogSourceId[]> = {
 };
 
 const FALLBACK_SEED_SOURCES: SourceConfig[] = [
+  { key: 'curated_tyyszy', name: '天涯资源 (蓝光秒播·短剧专区)', url: 'https://tyyszyapi.com/api.php/provide/vod' },
   { key: 'curated_ffzy', name: '非凡资源 (极速秒播)', url: 'https://cj.ffzyapi.com/api.php/provide/vod' },
   { key: 'curated_lzzy', name: '量子资源 (蓝光秒开)', url: 'https://cj.lziapi.com/api.php/provide/vod' },
   { key: 'curated_snzy', name: '索尼资源 (高清秒播)', url: 'https://suoniapi.com/api.php/provide/vod' },
   { key: 'curated_gszy', name: '光速资源 (超低延迟)', url: 'https://api.guangsuapi.com/api.php/provide/vod' },
   { key: 'curated_jyzy', name: '金鹰资源 (院线热映)', url: 'https://jyzyapi.com/api.php/provide/vod' },
 ];
+
+/** 天涯影视同款：各频道高频热门推荐搜索词 */
+const CHANNEL_HOT_KEYWORDS: Record<ChannelType, string[]> = {
+  movie: ['哪吒2', '热辣滚烫', '第二十条', '飞驰人生2', '沙丘2', '周处除三害', '奥本海默'],
+  tv: ['庆余年2', '繁花', '凡人修仙传', '边水往事', '大奉打更人', '唐朝诡事录', '我的阿勒泰'],
+  short_drama: ['战神归来', '龙王赘婿', '顾总太太', '无双世子', '重回1990', '天降神豪', '千金回归'],
+  ai: ['AIGC短剧', 'AI科幻', '数字生命', '赛博朋克', '未来世界', '机甲觉醒', '脑洞脑暴'],
+  anime: ['仙逆', '完美世界', '吞噬星空', '斗破苍穹', '咒术回战', '鬼灭之刃'],
+  variety: ['歌手2024', '乘风2024', '奔跑吧', '极速前进', '喜人奇妙夜'],
+  documentary: ['地球脉动', '蓝色星球', '如果国宝会说话', '舌尖上的中国', '航拍中国'],
+};
 
 const BANGUMI_WEEKDAYS = ['全部', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 const YEARS = ['全部', '2026', '2025', '2024', '2023', '2022', '2021', '2020', '2019', '2018', '2017', '2016', '2015', '2010', '2000'];
@@ -184,9 +196,15 @@ function CatalogContent() {
   const currentSort = (searchParams.get('sort') || 'recommend') as 'recommend' | 'time' | 'rank';
   const currentPage = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
 
-  // 片库搜索与筛选状态
+  // 片库搜索与筛选状态（q 为全网跨站直搜，wd 为当前频道分类深度搜索）
   const urlQuery = searchParams.get('q') || '';
-  const [filterKeyword, setFilterKeyword] = useState('');
+  const catalogKeyword = searchParams.get('wd') || '';
+  const [filterInput, setFilterInput] = useState(catalogKeyword);
+
+  useEffect(() => {
+    setFilterInput(catalogKeyword);
+  }, [catalogKeyword]);
+
   const [streamedOutcomes, setStreamedOutcomes] = useState<SourceSearchOutcome[]>([]);
   const [detailItem, setDetailItem] = useState<SearchResultItem | null>(null);
 
@@ -253,6 +271,7 @@ function CatalogContent() {
     sort?: string;
     page?: number;
     q?: string;
+    wd?: string;
   }) => {
     const sp = new URLSearchParams(searchParams.toString());
     if (changes.type !== undefined) {
@@ -263,6 +282,7 @@ function CatalogContent() {
       sp.delete('subTab');
       sp.delete('cmsTypeId');
       sp.delete('q');
+      sp.delete('wd');
       sp.set('page', '1');
       const validSources = CHANNEL_SOURCES[changes.type as ChannelType] || ['cms', 'iqiyi', '360', 'douban'];
       if (!validSources.includes(currentSource)) {
@@ -321,8 +341,19 @@ function CatalogContent() {
       sp.set('page', String(changes.page));
     }
     if (changes.q !== undefined) {
-      if (!changes.q) sp.delete('q');
-      else sp.set('q', changes.q);
+      if (!changes.q.trim()) sp.delete('q');
+      else {
+        sp.set('q', changes.q.trim());
+        sp.delete('wd');
+      }
+      sp.set('page', '1');
+    }
+    if (changes.wd !== undefined) {
+      if (!changes.wd.trim()) sp.delete('wd');
+      else {
+        sp.set('wd', changes.wd.trim());
+        sp.delete('q');
+      }
       sp.set('page', '1');
     }
     router.push(`/catalog?${sp.toString()}`, { scroll: false });
@@ -381,17 +412,19 @@ function CatalogContent() {
       currentYear,
       currentSort,
       currentPage,
+      catalogKeyword,
     ],
     queryFn: async ({ signal }) => {
       // 1. 点播采集源全量原生片库（TVBox / 影视仓标准，500+页真分页最新入库与细分子类下钻）
       if (currentSource === 'cms') {
-        const sourceUrl = activeCmsSource?.url || 'https://cj.ffzyapi.com/api.php/provide/vod';
+        const sourceUrl = activeCmsSource?.url || 'https://tyyszyapi.com/api.php/provide/vod';
         const typeIdNum = rawCmsTypeId && !Number.isNaN(parseInt(rawCmsTypeId, 10)) ? parseInt(rawCmsTypeId, 10) : undefined;
         const res = await api.cmsCatalog(
           {
             url: sourceUrl,
             type: currentChannel,
             typeId: typeIdNum,
+            keyword: catalogKeyword || undefined,
             page: currentPage,
             pageSize: PAGE_SIZE,
             sourceKey: activeCmsSource?.key,
@@ -455,16 +488,25 @@ function CatalogContent() {
         return { items: res.items, total: res.items.length, pagecount: 1 };
       }
 
-      // 5. 短剧或 AI 专区（在 360 来源下）
-      if ((currentChannel === 'short_drama' || currentChannel === 'ai') && currentSource === '360') {
+      // 5. 短剧与 AI 专区（在 360 来源下彻底解耦，杜绝同质化内容）
+      if (currentChannel === 'short_drama' && currentSource === '360') {
         const res = await api.hotList('short_drama', signal, pageStart, { page: currentPage });
-        const mapped = currentChannel === 'ai'
-          ? res.items.map((item) => ({
-              ...item,
-              rating: item.rating === '微短剧' ? 'AI精选' : item.rating,
-            }))
-          : res.items;
-        return { items: mapped, total: 500, pagecount: 25 };
+        return { items: res.items, total: 500, pagecount: 25 };
+      }
+      if (currentChannel === 'ai' && currentSource === '360') {
+        // AI 专区：在 360 模式下严格抓取带有科幻/未来/脑洞标签的剧集，绝不复用普通微短剧
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const res = await api.douban('movie' as any, '科幻', pageStart, PAGE_SIZE, signal, currentSort, {
+          area: currentRegion,
+          genre: '科幻',
+          year: currentYear,
+        });
+        const mapped = res.items.map((item) => ({
+          ...item,
+          rating: 'AIGC/科幻',
+        }));
+        const total = res.total ?? res.items.length;
+        return { items: mapped, total, pagecount: Math.ceil(total / PAGE_SIZE) };
       }
 
       // 6. 全网 360 多维分类片库
@@ -482,15 +524,9 @@ function CatalogContent() {
   });
 
   const rawItems = catalogQuery.data?.items ?? [];
-  const baseItems = currentChannel === 'short_drama' || currentChannel === 'ai'
+  const items: DoubanItem[] = currentChannel === 'short_drama' || currentChannel === 'ai'
     ? rawItems
     : rawItems.filter((item) => !isShortDramaTitle(item.title));
-
-  const items: DoubanItem[] = useMemo(() => {
-    if (!filterKeyword.trim()) return baseItems;
-    const kw = filterKeyword.trim().toLowerCase();
-    return baseItems.filter((item) => item.title.toLowerCase().includes(kw));
-  }, [baseItems, filterKeyword]);
 
   const total = catalogQuery.data?.total ?? (items.length > 0 ? items.length * 10 : 0);
   const totalPages = Math.max(
@@ -511,8 +547,8 @@ function CatalogContent() {
   };
 
   const handleClearSearch = () => {
-    setFilterKeyword('');
-    updateFilters({ q: '' });
+    setFilterInput('');
+    updateFilters({ q: '', wd: '' });
   };
 
   const hasActiveFilters =
@@ -544,38 +580,83 @@ function CatalogContent() {
             <p className="text-xs sm:text-sm text-muted mt-1">{activeChannelConfig.subTitle}</p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
-            {/* 优雅紧凑的片名快速过滤框（秒级过滤当前片库，不侵占版面） */}
-            <div className="relative flex items-center">
-              <span className="absolute left-2.5 text-xs text-muted pointer-events-none">🔍</span>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 self-start sm:self-auto w-full sm:w-auto">
+            {/* 天涯影视同款：分类大厅真深度搜索（直达 CMS 500+ 页片库） */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                updateFilters({ wd: filterInput.trim() });
+              }}
+              className="relative flex items-center w-full sm:w-72"
+            >
+              <span className="absolute left-3 text-xs text-muted pointer-events-none">🔍</span>
               <input
                 type="text"
-                value={filterKeyword}
-                onChange={(e) => setFilterKeyword(e.target.value)}
-                placeholder={`在当前【${activeChannelConfig.label}】中筛选片名...`}
-                className="pl-7 pr-7 py-1.5 rounded-xl bg-chip/60 hover:bg-chip focus:bg-surface border border-line focus:border-accent text-xs text-content placeholder:text-faint transition-all focus:outline-none w-48 sm:w-56"
+                value={filterInput}
+                onChange={(e) => setFilterInput(e.target.value)}
+                placeholder={`在【${activeChannelConfig.label}】全库中深度搜索...`}
+                className="pl-8 pr-16 py-1.5 rounded-xl bg-chip/60 hover:bg-chip focus:bg-surface border border-line focus:border-accent text-xs text-content placeholder:text-faint transition-all focus:outline-none w-full"
               />
-              {filterKeyword && (
+              {filterInput && (
                 <button
                   type="button"
-                  onClick={() => setFilterKeyword('')}
-                  className="absolute right-2 text-xs text-faint hover:text-content"
-                  title="清空筛选"
+                  onClick={() => {
+                    setFilterInput('');
+                    updateFilters({ wd: '' });
+                  }}
+                  className="absolute right-10 text-xs text-faint hover:text-content p-1"
+                  title="清空"
                 >
                   ✕
                 </button>
               )}
-            </div>
-
-            <span className="hidden sm:inline-flex text-xs text-faint bg-chip px-3 py-1.5 rounded-full border border-line/40">
-              💡 点击海报全网秒播 · 快捷搜索请按 ⌘K
-            </span>
+              <button
+                type="submit"
+                className="absolute right-1 px-2.5 py-1 rounded-lg bg-accent text-on-accent text-xs font-semibold hover:opacity-90 active:scale-95 transition-all cursor-pointer"
+              >
+                深搜
+              </button>
+            </form>
           </div>
         </div>
 
+        {/* 当存在分类深搜时展示专属搜索结果横幅与清除按钮 */}
+        {catalogKeyword && (
+          <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-accent/10 border border-accent/25 rounded-2xl text-xs animate-fade-in">
+            <div className="flex items-center gap-2 text-content font-medium">
+              <span className="text-sm">🔍</span>
+              <span>
+                正在【{activeChannelConfig.label}】全库深度搜索 “<strong className="text-accent">{catalogKeyword}</strong>”
+                {total > 0 && <span className="ml-1 text-muted">（找到约 {total.toLocaleString()} 部影片）</span>}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setFilterInput('');
+                  updateFilters({ wd: '' });
+                }}
+                className="btn-primary text-xs px-3 py-1 rounded-lg shrink-0 active:scale-95 cursor-pointer"
+              >
+                ✕ 清空返回片单
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  updateFilters({ q: catalogKeyword, wd: '' });
+                }}
+                className="text-xs px-3 py-1 rounded-lg bg-chip hover:bg-hover border border-line text-muted hover:text-content shrink-0 active:scale-95 cursor-pointer"
+              >
+                🌐 切换为全网聚合直搜
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* 当存在全网搜索词时展示专属搜索结果横幅与清除按钮 */}
         {urlQuery && (
-          <div className="flex items-center justify-between gap-2 p-3 bg-accent/10 border border-accent/25 rounded-2xl text-xs">
+          <div className="flex items-center justify-between gap-2 p-3 bg-accent/10 border border-accent/25 rounded-2xl text-xs animate-fade-in">
             <div className="flex items-center gap-2 text-content font-medium">
               <span className="text-sm">🔍</span>
               <span>
@@ -585,10 +666,38 @@ function CatalogContent() {
             <button
               type="button"
               onClick={handleClearSearch}
-              className="btn-primary text-xs px-3 py-1 rounded-lg shrink-0 active:scale-95"
+              className="btn-primary text-xs px-3 py-1 rounded-lg shrink-0 active:scale-95 cursor-pointer"
             >
               ✕ 返回片库大厅
             </button>
+          </div>
+        )}
+
+        {/* 天涯影视热搜词同款：本频道高频热门推荐搜索词 */}
+        {!urlQuery && (
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 text-xs">
+            <span className="text-[11px] text-muted/70 flex items-center gap-1 shrink-0">
+              <span>🔥</span>
+              <span>大家都在搜:</span>
+            </span>
+            {(CHANNEL_HOT_KEYWORDS[currentChannel] || CHANNEL_HOT_KEYWORDS.movie).map((kw) => (
+              <button
+                key={kw}
+                type="button"
+                onClick={() => {
+                  setFilterInput(kw);
+                  updateFilters({ wd: kw });
+                }}
+                className={cn(
+                  'px-2.5 py-0.5 rounded-full text-xs font-medium shrink-0 transition-all active:scale-95 cursor-pointer border select-none',
+                  catalogKeyword === kw
+                    ? 'bg-accent text-on-accent border-accent font-semibold shadow-xs'
+                    : 'bg-chip/50 hover:bg-accent/10 hover:text-accent hover:border-accent/40 border-line/60 text-muted'
+                )}
+              >
+                {kw}
+              </button>
+            ))}
           </div>
         )}
 
@@ -1040,8 +1149,8 @@ function CatalogContent() {
           </>
         )}
 
-        {/* 统计提示与换页状态：保证安全高度与间距，彻底防截断塌陷 */}
-        <div className="flex items-center justify-between text-xs text-muted py-2 px-1 min-h-[32px] border-b border-line/40">
+        {/* 统计提示与换页状态：保证安全高度与垂直间距，彻底防截断塌陷 */}
+        <div className="flex items-center justify-between text-xs text-muted py-2.5 px-1 min-h-[40px] border-b border-line/40 shrink-0 leading-normal">
           <span>
             {urlQuery ? (
               isVodSearching ? (
@@ -1049,6 +1158,19 @@ function CatalogContent() {
               ) : (
                 <>
                   全网聚合找到 <span className="text-content font-bold">{searchGroups.length}</span> 部匹配影片
+                </>
+              )
+            ) : catalogKeyword ? (
+              catalogQuery.isLoading ? (
+                '正在全库深度搜索…'
+              ) : items.length > 0 ? (
+                <>
+                  在【{activeChannelConfig.label}】全库深度搜到 “<span className="text-accent font-semibold">{catalogKeyword}</span>” 相关影片共 <span className="text-content font-bold">{items.length}</span> 部
+                  {`（第 ${currentPage}/${totalPages} 页${total > 0 ? `，共约 ${total.toLocaleString()} 部` : ''}）`}
+                </>
+              ) : (
+                <>
+                  在【{activeChannelConfig.label}】全库未找到与 “<span className="text-accent font-semibold">{catalogKeyword}</span>” 相关的影片
                 </>
               )
             ) : catalogQuery.isLoading ? (
@@ -1069,7 +1191,7 @@ function CatalogContent() {
             )}
           </span>
           {((catalogQuery.isFetching && !catalogQuery.isLoading) || isVodSearching) && (
-            <span className="text-accent flex items-center gap-1">
+            <span className="text-accent flex items-center gap-1 shrink-0 ml-2">
               <span className="w-2 h-2 rounded-full bg-accent animate-ping" />
               实时更新中…
             </span>
@@ -1109,24 +1231,35 @@ function CatalogContent() {
           catalogQuery.isLoading ? (
             <CatalogSkeleton />
           ) : items.length === 0 ? (
-            <div className="py-20 text-center space-y-3 border border-dashed border-line/60 rounded-2xl bg-surface/40">
+            <div className="py-20 text-center space-y-3 border border-dashed border-line/60 rounded-2xl bg-surface/40 animate-fade-in">
               <p className="text-4xl">🍿</p>
               <h3 className="text-base font-semibold text-content">
-                {filterKeyword ? `未找到与 “${filterKeyword}” 相关的影片` : '未找到符合条件的影片'}
+                {catalogKeyword ? `【${activeChannelConfig.label}】全库未找到与 “${catalogKeyword}” 相关的影片` : '未找到符合条件的影片'}
               </h3>
               <p className="text-xs text-muted">
-                {filterKeyword ? '请尝试清空搜索框或切换其他数据源' : '请尝试切换其他榜单或数据源'}
+                {catalogKeyword ? '请尝试更换关键词，或切换至全网跨站直搜' : '请尝试切换其他榜单或数据源'}
               </p>
-              <button
-                type="button"
-                onClick={() => {
-                  setFilterKeyword('');
-                  router.push(`/catalog?type=${currentChannel}`, { scroll: false });
-                }}
-                className="btn-primary text-xs px-4 py-1.5 rounded-lg active:scale-95"
-              >
-                重置查看热门
-              </button>
+              <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+                {catalogKeyword && (
+                  <button
+                    type="button"
+                    onClick={() => updateFilters({ q: catalogKeyword, wd: '' })}
+                    className="btn-primary text-xs px-3.5 py-1.5 rounded-xl active:scale-95 cursor-pointer"
+                  >
+                    🌐 切换全网直搜 “{catalogKeyword}”
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFilterInput('');
+                    updateFilters({ wd: '', page: 1 });
+                  }}
+                  className="px-3.5 py-1.5 rounded-xl bg-chip hover:bg-hover border border-line text-content text-xs font-semibold active:scale-95 cursor-pointer"
+                >
+                  重置查看精选
+                </button>
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3 sm:gap-4 md:gap-4.5">

@@ -7,6 +7,19 @@ import { cn } from '@/lib/utils';
 import { useToast } from './toast';
 import { Icon } from './icon';
 
+export const TRENDING_SEARCH_KEYWORDS = [
+  '庆余年2',
+  '繁花',
+  '凡人修仙传',
+  '边水往事',
+  '大奉打更人',
+  '战神归来',
+  '龙王赘婿',
+  '哪吒2',
+  '仙逆',
+  'AIGC脑洞短剧',
+];
+
 /** 下拉最多展示条数，与 db 层 MAX_SEARCH_HISTORY 保持一致 */
 const HISTORY_LIMIT = 10;
 
@@ -32,8 +45,8 @@ export function useSearchHistory(input: string) {
     return keyword ? all.filter((h) => h.text.toLowerCase().includes(keyword)) : all;
   }, [history.data, input]);
 
-  // 唯一命中项与输入内容完全一致时不展开：否则会盖住用户刚敲进去的内容
-  const visible = open && matches.length > 0 && !(matches.length === 1 && matches[0].text === input.trim());
+  // 聚焦时展开：若唯一命中项与输入内容完全一致时不展开，避免遮挡
+  const visible = open && !(matches.length === 1 && matches[0].text === input.trim() && input.trim().length > 0);
 
   // 点按下拉之外的任意位置收起
   useEffect(() => {
@@ -150,51 +163,75 @@ export function SearchHistoryDropdown({
         'rounded-b-xl border-x border-b border-accent bg-surface-raised shadow-2xl animate-fade-in'
       )}
     >
-      <div className="flex items-center justify-between pl-4 pr-2 py-2 border-b border-line">
-        <span className="flex items-center gap-1.5 text-xs text-faint">
-          <Icon name="clock" className="w-3.5 h-3.5" />
-          最近搜索
-        </span>
-        <button
-          type="button"
-          className="px-2 py-1 rounded-md text-xs text-faint hover:text-danger hover:bg-hover transition-colors"
-          onClick={onClearAll}
-        >
-          清空
-        </button>
-      </div>
-      <ul
-        id={id}
-        role="listbox"
-        aria-label="最近搜索"
-        className="max-h-[min(70vh,400px)] overflow-y-auto scrollbar-thin py-1"
-      >
-        {matches.map((h, i) => (
-          <li
-            key={h.text}
-            id={`${id}-${i}`}
-            role="option"
-            aria-selected={i === activeIndex}
-            className={cn('flex items-center hover:bg-hover', i === activeIndex && 'bg-hover')}
+      {matches.length > 0 && (
+        <>
+          <div className="flex items-center justify-between pl-4 pr-2 py-2 border-b border-line bg-surface/80">
+            <span className="flex items-center gap-1.5 text-xs text-faint">
+              <Icon name="clock" className="w-3.5 h-3.5" />
+              最近搜索
+            </span>
+            <button
+              type="button"
+              className="px-2 py-1 rounded-md text-xs text-faint hover:text-danger hover:bg-hover transition-colors cursor-pointer"
+              onClick={onClearAll}
+            >
+              清空
+            </button>
+          </div>
+          <ul
+            id={id}
+            role="listbox"
+            aria-label="最近搜索"
+            className="max-h-[min(35vh,220px)] overflow-y-auto scrollbar-thin py-1"
           >
+            {matches.map((h, i) => (
+              <li
+                key={h.text}
+                id={`${id}-${i}`}
+                role="option"
+                aria-selected={i === activeIndex}
+                className={cn('flex items-center hover:bg-hover', i === activeIndex && 'bg-hover')}
+              >
+                <button
+                  type="button"
+                  className="flex-1 min-w-0 pl-4 pr-2 py-2 text-left text-xs sm:text-sm text-content truncate cursor-pointer"
+                  onClick={() => onPick(h.text)}
+                >
+                  {h.text}
+                </button>
+                <button
+                  type="button"
+                  className="shrink-0 p-1 mr-2 rounded-md text-faint hover:text-danger hover:bg-chip transition-colors cursor-pointer"
+                  aria-label={`删除搜索记录 ${h.text}`}
+                  onClick={() => onRemove(h.text)}
+                >
+                  <Icon name="close" className="w-3.5 h-3.5" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      {/* 🔥 全网热门搜索推荐 */}
+      <div className="p-3 border-t border-line/60 bg-surface/60">
+        <div className="text-[11px] font-semibold text-muted flex items-center gap-1.5 mb-2">
+          <span>🔥</span>
+          <span>大家都在搜</span>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {TRENDING_SEARCH_KEYWORDS.map((kw) => (
             <button
+              key={kw}
               type="button"
-              className="flex-1 min-w-0 pl-4 pr-2 py-2.5 text-left text-sm text-content truncate"
-              onClick={() => onPick(h.text)}
+              onClick={() => onPick(kw)}
+              className="px-2.5 py-1 rounded-lg text-xs bg-chip/70 hover:bg-accent hover:text-on-accent text-content border border-line/40 transition-all active:scale-95 cursor-pointer"
             >
-              {h.text}
+              {kw}
             </button>
-            <button
-              type="button"
-              className="shrink-0 p-1.5 mr-2 rounded-md text-faint hover:text-danger hover:bg-chip transition-colors"
-              aria-label={`删除搜索记录 ${h.text}`}
-              onClick={() => onRemove(h.text)}
-            >
-              <Icon name="close" className="w-3.5 h-3.5" />
-            </button>
-          </li>
-        ))}
-      </ul>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

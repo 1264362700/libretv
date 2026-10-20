@@ -20,8 +20,9 @@ export interface CmsSubCategory {
 
 export interface CmsCatalogOptions {
   url: string;
-  type: 'movie' | 'tv' | 'anime' | 'variety' | 'short_drama' | 'documentary' | 'all' | string;
+  type: 'movie' | 'tv' | 'anime' | 'variety' | 'short_drama' | 'ai' | 'documentary' | 'all' | string;
   typeId?: number; // 用户选中的具体二级子分类 ID
+  keyword?: string; // 分类内深度搜索关键词
   page?: number;
   pageSize?: number;
   sourceKey?: string;
@@ -75,23 +76,21 @@ export function resolveCmsTypeId(
 ): number | undefined {
   if (type === 'all') return undefined;
 
-  // 1. AI 专区匹配（AI短剧 / AIGC / 科幻脑洞）
+  // 1. AI 专区匹配（AI短剧 / AIGC / 科幻脑洞，不回退普通电影）
   if (type === 'ai') {
     const aiFound = classes.find((c) => /ai|人工智能|aigc|脑洞/.test(c.type_name.toLowerCase()));
     if (aiFound) return aiFound.type_id;
-    const scifi = classes.find((c) => /科幻/.test(c.type_name));
-    if (scifi) return scifi.type_id;
     return undefined;
   }
 
-  // 2. 短剧频道匹配（微短剧/短剧/爽文）
+  // 2. 短剧频道匹配（微短剧/短剧/爽文，内置天涯54、标准36/58等典型短剧分类）
   if (type === 'short_drama') {
     const found = classes.find((c) => /短剧|微短剧|爽文/.test(c.type_name));
     if (found) return found.type_id;
-    // 常见 CMS 短剧固定分类 ID 备选
-    const candidateIds = [36, 58, 45, 23];
+    // 常见 CMS 短剧固定分类 ID 备选（54 为天涯影视等 MacCMS 标准，36/58/45 为常见源）
+    const candidateIds = [54, 36, 58, 45, 23];
     const cand = classes.find((c) => candidateIds.includes(Number(c.type_id)));
-    return cand ? cand.type_id : 36;
+    return cand ? cand.type_id : 54;
   }
 
   // 2. 电视剧/剧集匹配
@@ -146,7 +145,20 @@ export function extractSubCategories(
   type: string,
   classes: CmsClassItem[]
 ): CmsSubCategory[] {
-  if (type === 'all' || !Array.isArray(classes) || classes.length === 0) return [];
+  if (type === 'all') return [];
+
+  // AI 专区专属子类矩阵（AIGC短剧、AI科幻、数字生命、未来世界、赛博脑洞）
+  if (type === 'ai') {
+    return [
+      { id: 9001, name: 'AIGC短剧' },
+      { id: 9002, name: 'AI科幻' },
+      { id: 9003, name: '数字生命' },
+      { id: 9004, name: '未来世界' },
+      { id: 9005, name: '赛博脑洞' },
+    ];
+  }
+
+  if (!Array.isArray(classes) || classes.length === 0) return [];
 
   const parentId = resolveCmsTypeId(type, classes);
   const cleanClasses = classes.filter((c) => !isAdultContent(c.type_name));
@@ -194,7 +206,7 @@ export function extractSubCategories(
  * 采集站原生全量分类片库查询（支持 500+ 页真分页、高可用、二级细分子类下钻与敏感过滤）
  */
 export async function fetchCmsCatalog(options: CmsCatalogOptions): Promise<CmsCatalogResult> {
-  const { url, type, typeId, page = 1, pageSize = 24, sourceKey, filterAdult = true } = options;
+  const { url, type, typeId, keyword, page = 1, pageSize = 24, sourceKey, filterAdult = true } = options;
   const cleanUrl = (url || '').trim().replace(/\/+$/, '');
 
   if (!cleanUrl || !/^https?:\/\//.test(cleanUrl)) {
@@ -210,9 +222,10 @@ export async function fetchCmsCatalog(options: CmsCatalogOptions): Promise<CmsCa
   // 1. 获取源站分类并匹配目标 type_id 与二级细分子分类
   const classes = await fetchCmsClasses(cleanUrl);
   const subCategories = extractSubCategories(type, classes);
-  const targetTypeId = typeId !== undefined ? typeId : resolveCmsTypeId(type, classes);
+  const isAiVirtualSub = type === 'ai' && typeId && typeId >= 9000;
+  const targetTypeId = isAiVirtualSub ? undefined : (typeId !== undefined ? typeId : resolveCmsTypeId(type, classes));
 
-  const cacheKey = `cms_catalog:${cleanUrl}:${type}:${targetTypeId ?? 'all'}:${page}:${pageSize}:${filterAdult ? 1 : 0}`;
+  const cacheKey = `cms_catalog:${cleanUrl}:${type}:${targetTypeId ?? 'all'}:${keyword || ''}:${typeId || ''}:${page}:${pageSize}:${filterAdult ? 1 : 0}`;
   const cached = getCache<CmsCatalogResult>(cacheKey);
   if (cached) return cached;
 
@@ -224,8 +237,16 @@ export async function fetchCmsCatalog(options: CmsCatalogOptions): Promise<CmsCa
   });
   if (targetTypeId !== undefined) {
     params.set('t', String(targetTypeId));
+  }
+  if (keyword && keyword.trim()) {
+    params.set('wd', keyword.trim().slice(0, 100));
   } else if (type === 'ai') {
-    params.set('wd', 'AI');
+    if (typeId === 9001) params.set('wd', 'AIGC');
+    else if (typeId === 9002) params.set('wd', '科幻');
+    else if (typeId === 9003) params.set('wd', '数字');
+    else if (typeId === 9004) params.set('wd', '未来');
+    else if (typeId === 9005) params.set('wd', '赛博');
+    else params.set('wd', 'AI');
   }
 
   const res = await fetchUpstream(`${cleanUrl}?${params.toString()}`, {

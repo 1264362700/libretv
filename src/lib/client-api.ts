@@ -465,6 +465,7 @@ export const api = {
       url: string;
       type: string;
       typeId?: number;
+      keyword?: string;
       page?: number;
       pageSize?: number;
       sourceKey?: string;
@@ -479,6 +480,7 @@ export const api = {
       pagesize: String(params.pageSize || 24),
     });
     if (params.typeId !== undefined) sp.set('typeId', String(params.typeId));
+    if (params.keyword) sp.set('wd', params.keyword);
     if (params.sourceKey) sp.set('sourceKey', params.sourceKey);
     if (params.filterAdult) sp.set('filterAdult', '1');
     return request<{

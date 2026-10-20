@@ -11,7 +11,7 @@ import { AggregatedCard, aggregateResults } from '@/components/video-card';
 import { useAppStore, resolveSource, isInDisabledSubscription, isSourceDisabled } from '@/lib/store';
 import { api } from '@/lib/client-api';
 import type { SearchResultItem, SourceSearchOutcome } from '@/lib/types';
-import { SearchHistoryDropdown, useSearchHistory } from '@/components/search-history';
+import { SearchHistoryDropdown, useSearchHistory, TRENDING_SEARCH_KEYWORDS } from '@/components/search-history';
 import { cn, formatDisableTtl, validateSourceUrl, buildWatchUrl } from '@/lib/utils';
 import { useAuth } from '@/components/auth';
 import { useToast } from '@/components/toast';
@@ -342,6 +342,29 @@ function HomeContent() {
               />
             )}
           </div>
+
+          {/* 🔥 热门热搜关键词推荐 */}
+          {!urlQuery && (
+            <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2 mt-3.5 max-w-2xl text-xs">
+              <span className="text-muted/70 text-[11px] flex items-center gap-1 mr-0.5 shrink-0">
+                <span>🔥</span>
+                <span>热搜推荐:</span>
+              </span>
+              {TRENDING_SEARCH_KEYWORDS.slice(0, 8).map((kw) => (
+                <button
+                  key={kw}
+                  type="button"
+                  onClick={() => {
+                    setInput(kw);
+                    runSearch(kw);
+                  }}
+                  className="px-2.5 py-1 rounded-full bg-chip/50 hover:bg-accent/15 hover:text-accent hover:border-accent/40 border border-line/60 text-muted transition-all active:scale-95 text-xs cursor-pointer select-none"
+                >
+                  {kw}
+                </button>
+              ))}
+            </div>
+          )}
         </section>
 
         {/* 搜索结果 */}

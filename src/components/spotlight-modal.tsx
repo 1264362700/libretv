@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { db, addSearchHistory, removeSearchHistory, clearSearchHistory } from '@/lib/db';
+import { TRENDING_SEARCH_KEYWORDS } from './search-history';
 import { Icon } from './icon';
 import { cn } from '@/lib/utils';
 import { useTranslation } from '@/lib/i18n';
@@ -285,6 +286,28 @@ export function SpotlightModal({ open, onClose }: SpotlightModalProps) {
                   })}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* 🔥 全网热门搜索热榜推荐 */}
+          {!query.trim() && (
+            <div className="space-y-2.5">
+              <span className="text-xs font-semibold text-muted tracking-wide px-1 flex items-center gap-1.5">
+                <span>🔥</span>
+                <span>全网热门搜索榜</span>
+              </span>
+              <div className="flex flex-wrap gap-2 pt-0.5">
+                {TRENDING_SEARCH_KEYWORDS.map((kw) => (
+                  <button
+                    key={kw}
+                    type="button"
+                    onClick={() => submitSearch(kw)}
+                    className="px-3 py-1.5 rounded-xl border border-line/60 bg-surface hover:bg-accent hover:text-on-accent text-content hover:border-accent text-xs font-medium transition-all active:scale-95 cursor-pointer select-none"
+                  >
+                    {kw}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 

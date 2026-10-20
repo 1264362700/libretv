@@ -508,7 +508,7 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
         </div>
 
         {/* 选项卡导航栏（防塌陷与贴合对齐） */}
-        <div className="flex items-center gap-2 px-4 sm:px-6 pt-3 border-b border-line bg-surface/95 overflow-x-auto no-scrollbar whitespace-nowrap">
+        <div className="flex items-center gap-2 px-4 sm:px-6 py-2.5 border-b border-line bg-surface/95 shrink-0 overflow-x-auto no-scrollbar whitespace-nowrap">
           <TabButton
             active={tab === 'invites'}
             onClick={() => setTab('invites')}
@@ -1327,10 +1327,10 @@ function TabButton({
     <button
       type="button"
       className={cn(
-        'shrink-0 whitespace-nowrap px-4 py-2.5 rounded-t-xl text-xs sm:text-sm font-semibold flex items-center gap-2 transition-all -mb-[1px] border-b-2',
+        'shrink-0 whitespace-nowrap px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-2 transition-all cursor-pointer select-none',
         active
-          ? 'border-accent text-accent bg-accent/10 shadow-sm'
-          : 'border-transparent text-muted hover:text-content hover:bg-hover'
+          ? 'bg-accent text-on-accent shadow-xs'
+          : 'text-muted hover:text-content hover:bg-hover bg-chip/40'
       )}
       onClick={onClick}
     >
@@ -1339,8 +1339,10 @@ function TabButton({
       {badge !== undefined && (
         <span
           className={cn(
-            'text-[10px] px-1.5 py-0.5 rounded-full font-mono shrink-0',
-            badgeColor || (active ? 'bg-accent/20 text-accent font-bold' : 'bg-chip text-muted')
+            'text-[10px] px-1.5 py-0.5 rounded-full font-mono shrink-0 font-medium',
+            active
+              ? 'bg-white/25 text-on-accent font-bold'
+              : badgeColor || 'bg-surface text-faint border border-line/60'
           )}
         >
           {badge}

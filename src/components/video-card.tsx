@@ -273,8 +273,14 @@ export function VideoCard({ item, onClick }: { item: SearchResultItem; onClick: 
   );
 }
 
-/** 豆瓣推荐卡片（9zhoukj 影院级高质感：微浮起、景深阴影、磨砂金色角标） */
-export function DoubanCard({ item, onClick }: { item: { title: string; cover: string; rating?: string }; onClick: () => void }) {
+/** 豆瓣与片库推荐卡片（天涯影视+9zhoukj 影院级高质感：微浮起、景深阴影、剧集状态透出、悬浮立即播放） */
+export function DoubanCard({
+  item,
+  onClick,
+}: {
+  item: { title: string; cover: string; rating?: string; episodes_info?: string; year?: string };
+  onClick: () => void;
+}) {
   const imageProxyMode = useAppStore((s) => s.imageProxyMode);
   const customImageProxy = useAppStore((s) => s.customImageProxy);
   const [imgFailed, setImgFailed] = useState(false);
@@ -291,6 +297,14 @@ export function DoubanCard({ item, onClick }: { item: { title: string; cover: st
     }
     return null;
   }, [item.rating]);
+
+  // 非纯数字的角标状态（如“全80集”、“更新至12集”、“微短剧”、“AI精选”等）
+  const statusBadge = useMemo(() => {
+    if (numericRating) return null;
+    const text = (item.episodes_info || item.rating || '').trim();
+    if (!text || text === '0' || text === 'null') return null;
+    return text.length > 8 ? `${text.slice(0, 8)}…` : text;
+  }, [numericRating, item.episodes_info, item.rating]);
 
   return (
     <div
@@ -326,18 +340,30 @@ export function DoubanCard({ item, onClick }: { item: { title: string; cover: st
         {/* 底部微渐变暗影 */}
         <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/80 via-black/30 to-transparent pointer-events-none" />
 
-        {/* 右上角高质感金黄色评分角标：仅纯数字评分时展示 */}
-        {numericRating && (
-          <span className="absolute top-1.5 right-1.5 px-1.5 sm:px-2 py-0.5 rounded-md bg-black/75 backdrop-blur-md text-[10px] sm:text-xs text-amber-400 font-bold border border-white/10 shadow-sm flex items-center gap-0.5">
+        {/* 右上角高质感金黄色评分角标或集数状态角标 */}
+        {numericRating ? (
+          <span className="absolute top-1.5 right-1.5 px-1.5 sm:px-2 py-0.5 rounded-md bg-black/75 backdrop-blur-md text-[10px] sm:text-xs text-amber-400 font-bold border border-white/10 shadow-sm flex items-center gap-0.5 z-10">
             <span>★</span>
             <span>{numericRating}</span>
           </span>
-        )}
+        ) : statusBadge ? (
+          <span className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-md bg-black/75 backdrop-blur-md text-[10px] text-accent font-semibold border border-white/10 shadow-sm z-10">
+            {statusBadge}
+          </span>
+        ) : null}
 
         {/* 左上角轻量蓝光极速标签 */}
-        <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded-md bg-accent/80 text-[10px] text-white font-medium shadow-sm">
+        <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded-md bg-accent/80 text-[10px] text-white font-medium shadow-sm z-10">
           蓝光
         </span>
+
+        {/* 鼠标悬停时的「立即播放」微交互浮层 (天涯影视风格) */}
+        <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none z-10">
+          <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-accent text-white text-xs font-bold shadow-lg transform translate-y-2 group-hover:translate-y-0 transition-transform">
+            <span>▶</span>
+            <span>立即播放</span>
+          </span>
+        </div>
       </div>
 
       <div className="p-2 sm:p-2.5 flex flex-col flex-1 justify-between">
@@ -345,7 +371,8 @@ export function DoubanCard({ item, onClick }: { item: { title: string; cover: st
           {item.title}
         </div>
         <div className="flex items-center justify-between text-[11px] text-muted mt-1">
-          <span className="truncate">超清极速播放</span>
+          <span className="truncate">{statusBadge || '超清极速播放'}</span>
+          {item.year && <span className="font-mono shrink-0 ml-1 text-faint">{item.year}</span>}
         </div>
       </div>
     </div>

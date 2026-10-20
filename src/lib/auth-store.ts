@@ -131,6 +131,7 @@ export function getStoreFilePath(): string {
 
 /** 顶级秒播蓝光 CMS 矩阵 + IPv4 高可用直播矩阵 */
 const CURATED_DEFAULT_SOURCES: { key: string; name: string; url: string; type: 'vod' | 'live' }[] = [
+  { key: 'curated_tyyszy', name: '天涯资源 (蓝光秒播·短剧专区)', url: 'https://tyyszyapi.com/api.php/provide/vod', type: 'vod' },
   { key: 'curated_lzzy', name: '量子资源 (蓝光秒开)', url: 'https://cj.lziapi.com/api.php/provide/vod', type: 'vod' },
   { key: 'curated_ffzy', name: '非凡资源 (极速秒播)', url: 'https://cj.ffzyapi.com/api.php/provide/vod', type: 'vod' },
   { key: 'curated_snzy', name: '索尼资源 (高清秒播)', url: 'https://suoniapi.com/api.php/provide/vod', type: 'vod' },

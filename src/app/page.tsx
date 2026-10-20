@@ -251,9 +251,25 @@ function HomeContent() {
                       key={group.key}
                       group={group}
                       onOpen={() => {
+                        const primary = group.items[0];
+                        if (typeof window !== 'undefined' && primary?.sourceKey && primary?.vodId) {
+                          try {
+                            const cached = group.items.map((it) => ({
+                              sourceKey: it.sourceKey,
+                              sourceName: it.sourceName,
+                              sourceVodId: it.vodId,
+                              sourceUrl: it.sourceUrl,
+                              remarks: it.remarks,
+                            }));
+                            sessionStorage.setItem(`libretv:matched:${primary.sourceKey}:${primary.vodId}`, JSON.stringify(cached));
+                          } catch {}
+                        }
                         const watchUrl = buildWatchUrl({
                           title: group.name,
                           year: group.year,
+                          sourceKey: primary?.sourceKey,
+                          vodId: primary?.vodId,
+                          sourceUrl: primary?.sourceUrl,
                         });
                         if (!verified) {
                           router.push(`/login?redirect=${encodeURIComponent(watchUrl)}`);

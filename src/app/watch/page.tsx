@@ -128,6 +128,9 @@ function WatchContent() {
   const failedSourcesRef = useRef<Set<string>>(new Set());
   const [failedSources, setFailedSources] = useState<Set<string>>(new Set());
 
+  // 记录当前正在流式匹配的影片唯一特征，避免因首源秒播更新 URL 导致匹配器被重复打断重启
+  const matcherKeyRef = useRef<string>('');
+
   const source = resolveSource(store, sourceKey, {
     url: searchParams.get('sourceUrl') || undefined,
     detail: searchParams.get('detail') || undefined,
@@ -163,9 +166,8 @@ function WatchContent() {
   // 背景检索：在所有可用源中探测同名/前缀匹配资源，供播放页就地选源与自动换源
   const candidatesQuery = useQuery({
     queryKey: ['watch-sources', videoTitle, allCandidateSources.map((s) => s.key).join(',')],
-    queryFn: async ({ signal }): Promise<CandidateItem[]> => {
+    queryFn: async (): Promise<CandidateItem[]> => {
       if (!videoTitle || videoTitle === '未知视频' || allCandidateSources.length === 0) return [];
-      const title = videoTitle.trim();
       const matched: CandidateItem[] = [];
       const seenKeys = new Set<string>();
 
@@ -202,41 +204,7 @@ function WatchContent() {
         } catch {}
       }
 
-      try {
-        const { list } = await api.search(title, allCandidateSources, store.yellowFilter, { signal });
-        for (const s of allCandidateSources) {
-          if (seenKeys.has(s.key)) continue;
-          let hitItem: SearchResultItem | undefined;
-          for (const item of list) {
-            if (item.sourceKey === s.key) {
-              hitItem = item;
-              break;
-            }
-            if (item.matchedSources) {
-              const ms = item.matchedSources.find((m) => m.sourceKey === s.key);
-              if (ms) {
-                hitItem = {
-                  sourceKey: ms.sourceKey,
-                  sourceName: ms.sourceName,
-                  vodId: ms.sourceVodId,
-                  name: item.name,
-                  sourceUrl: ms.sourceUrl || s.url,
-                  remarks: ms.remarks,
-                };
-                break;
-              }
-            }
-          }
-          if (hitItem) {
-            seenKeys.add(s.key);
-            matched.push({ source: s, result: hitItem });
-          }
-        }
-      } catch {
-        // 搜索异常时不影响当前源正常播放
-      }
-
-      // 保证当前正在播放的源始终存在于候选列表中
+      // 保证当前正在播放的源始终存在于候选列表中（其余备选源由 StreamSourceMatcher 流式轻量异步补齐）
       if (source && vodId && !seenKeys.has(source.key)) {
         matched.unshift({
           source,
@@ -250,7 +218,7 @@ function WatchContent() {
       return matched;
     },
     enabled: Boolean(videoTitle && videoTitle !== '未知视频' && verified && allCandidateSources.length > 0),
-    staleTime: 5 * 60_000,
+    staleTime: 10 * 60_000,
   });
 
   const candidates = useMemo(() => {
@@ -581,38 +549,44 @@ function WatchContent() {
 
   const orderedEpisodes = reversed ? [...episodes].map((_, i) => episodes.length - 1 - i) : episodes.map((_, i) => i);
 
-  // 壳肉分离内核：当从豆瓣卡片直接点播进入（无 sourceKey 时），启动 StreamSourceMatcher 流式并发秒播
+  // 壳肉分离内核：启动 StreamSourceMatcher 流式并发秒播与备选线路流式补齐
   useEffect(() => {
-    if (sourceKey && vodId) return;
-    if (!titleParam || !verified || allCandidateSources.length === 0) return;
+    const targetTitle = titleParam || videoTitle;
+    if (!targetTitle || targetTitle === '未知视频' || !verified || allCandidateSources.length === 0) return;
+
+    const targetKey = `${targetTitle}:${doubanIdParam || ''}:${yearParam || ''}`;
+    if (matcherKeyRef.current === targetKey) return;
+    matcherKeyRef.current = targetKey;
 
     setIsMatching(true);
     setMatchingDone(false);
     setStreamMatchedList([]);
 
+    const hasInitialSource = Boolean(sourceKey && vodId);
+
     const matcher = new StreamSourceMatcher(
       {
-        title: titleParam,
+        title: targetTitle,
         doubanId: doubanIdParam || undefined,
         year: yearParam || undefined,
       },
       allCandidateSources,
       {
-        concurrency: 6,
-        timeoutMs: 5000,
+        concurrency: hasInitialSource ? 4 : 6,
+        timeoutMs: 3500,
         onSourceFound: (matched, isFirst) => {
           setStreamMatchedList((prev) => {
             if (prev.some((m) => m.source.key === matched.source.key)) return prev;
             return [...prev, matched];
           });
-          if (isFirst) {
-            // 首源秒播！立刻替换 URL 驱动播放器初始化，不阻塞其他源后台加载
+          // 仅在初始无确定源（豆瓣门面直跳入）且首次命中有效源时，触发首源秒播替换路由
+          if (isFirst && !hasInitialSource && !sourceKey) {
             router.replace(
               buildWatchUrl({
                 sourceKey: matched.source.key,
                 vodId: matched.vodId,
                 index: indexParam,
-                title: titleParam,
+                title: targetTitle,
                 doubanId: doubanIdParam || undefined,
                 year: yearParam || undefined,
                 sourceUrl: matched.source.url,
@@ -632,8 +606,10 @@ function WatchContent() {
     );
 
     matcher.start();
-    return () => matcher.abort();
-  }, [sourceKey, vodId, titleParam, doubanIdParam, yearParam, verified, allCandidateSources, router, indexParam]);
+    return () => {
+      matcher.abort();
+    };
+  }, [sourceKey, vodId, titleParam, videoTitle, doubanIdParam, yearParam, verified, allCandidateSources, router, indexParam]);
 
   if (!verified) {
     return (

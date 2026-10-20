@@ -245,6 +245,19 @@ export function parseEpisodesFromVod(item: Record<string, unknown>): MatchedEpis
   return episodes;
 }
 
+/** 高可用、毫秒级响应的主力极速源特征匹配正则（排在第一梯队优先探测） */
+const FAST_LANE_SOURCE_REGEX = /量子|非凡|红牛|极速|光速|金鹰|快车|暴风|天涯|优质|lzm3u8|ffm3u8|hnm3u8|gsm3u8|jyzy|kcm3u8/i;
+
+export function sortSourcesByPriority(sources: SourceConfig[]): SourceConfig[] {
+  return [...sources].sort((a, b) => {
+    const aFast = FAST_LANE_SOURCE_REGEX.test(`${a.name || ''} ${a.url || ''}`);
+    const bFast = FAST_LANE_SOURCE_REGEX.test(`${b.name || ''} ${b.url || ''}`);
+    if (aFast && !bFast) return -1;
+    if (!aFast && bFast) return 1;
+    return 0;
+  });
+}
+
 /**
  * 流式并发匹配引擎
  */
@@ -262,7 +275,7 @@ export class StreamSourceMatcher {
     this.sources = sources;
     this.options = {
       concurrency: 6,
-      timeoutMs: 5000,
+      timeoutMs: 3500,
       ...options,
     };
     this.abortController = new AbortController();
@@ -296,7 +309,9 @@ export class StreamSourceMatcher {
       year: this.target.year,
     };
 
-    const enabledSources = this.sources.filter((s) => s.url && s.searchEnabled !== false);
+    const enabledSources = sortSourcesByPriority(
+      this.sources.filter((s) => s.url && s.searchEnabled !== false)
+    );
     const total = enabledSources.length;
     if (total === 0) return [];
 

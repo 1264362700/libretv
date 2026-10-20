@@ -414,6 +414,7 @@ function CatalogContent() {
         if (activeCmsSource.key) q.set('sourceKey', activeCmsSource.key);
         if (rawCmsTypeId) q.set('typeId', rawCmsTypeId);
         if (catalogKeyword) q.set('wd', catalogKeyword);
+        if (currentSort) q.set('sort', currentSort);
 
         try {
           const res = await fetch(`/api/catalog/cms?${q.toString()}`, { signal });
@@ -510,6 +511,17 @@ function CatalogContent() {
           }));
         }
 
+        if (currentSort === 'rank') {
+          mappedItems.sort((a, b) => {
+            const rA = parseFloat(a.rating || '0') || 0;
+            const rB = parseFloat(b.rating || '0') || 0;
+            if (rA !== rB) return rB - rA;
+            return (parseInt(b.year || '0', 10) || 0) - (parseInt(a.year || '0', 10) || 0);
+          });
+        } else if (currentSort === 'time') {
+          mappedItems.sort((a, b) => (parseInt(b.year || '0', 10) || 0) - (parseInt(a.year || '0', 10) || 0));
+        }
+
         return {
           items: mappedItems,
           total: 500,
@@ -538,9 +550,34 @@ function CatalogContent() {
 
   const cmsSubCategories = (catalogQuery.data?.subCategories || []) as Array<{ id: string | number; name: string }>;
 
-  // 点击卡片直接进入播放前进行登录校验（透传 title, doubanId, year 激活流式秒播内核）
+  // 点击卡片直接进入播放前进行登录校验（CMS 原生卡片直传 sourceKey+vodId 秒播，豆瓣卡片走流式秒播）
   const handleCardClick = (title: string, doubanId?: string, year?: string) => {
-    const watchUrl = buildWatchUrl({ title, doubanId, year });
+    let targetSourceKey: string | undefined;
+    let targetVodId: string | undefined;
+    let targetSourceUrl: string | undefined;
+
+    if (doubanId?.startsWith('cms_')) {
+      const parts = doubanId.split('_');
+      if (parts.length >= 3) {
+        targetSourceKey = parts[1];
+        targetVodId = parts.slice(2).join('_');
+        if (targetSourceKey === activeCmsSource?.key) {
+          targetSourceUrl = activeCmsSource.url;
+        } else {
+          const matchedSrc = availableCmsSources.find((s) => s.key === targetSourceKey);
+          if (matchedSrc) targetSourceUrl = matchedSrc.url;
+        }
+      }
+    }
+
+    const watchUrl = buildWatchUrl({
+      title,
+      doubanId: doubanId?.startsWith('cms_') ? undefined : doubanId,
+      year,
+      sourceKey: targetSourceKey,
+      vodId: targetVodId,
+      sourceUrl: targetSourceUrl,
+    });
     if (!verified) {
       router.push(`/login?redirect=${encodeURIComponent(watchUrl)}`);
       return;
@@ -1006,7 +1043,33 @@ function CatalogContent() {
                 <AggregatedCard
                   key={group.key}
                   group={group}
-                  onOpen={() => handleCardClick(group.name, undefined, group.year)}
+                  onOpen={() => {
+                    const primary = group.items[0];
+                    if (typeof window !== 'undefined' && primary?.sourceKey && primary?.vodId) {
+                      try {
+                        const cached = group.items.map((it) => ({
+                          sourceKey: it.sourceKey,
+                          sourceName: it.sourceName,
+                          sourceVodId: it.vodId,
+                          sourceUrl: it.sourceUrl,
+                          remarks: it.remarks,
+                        }));
+                        sessionStorage.setItem(`libretv:matched:${primary.sourceKey}:${primary.vodId}`, JSON.stringify(cached));
+                      } catch {}
+                    }
+                    const watchUrl = buildWatchUrl({
+                      title: group.name,
+                      year: group.year,
+                      sourceKey: primary?.sourceKey,
+                      vodId: primary?.vodId,
+                      sourceUrl: primary?.sourceUrl,
+                    });
+                    if (!verified) {
+                      router.push(`/login?redirect=${encodeURIComponent(watchUrl)}`);
+                      return;
+                    }
+                    router.push(watchUrl);
+                  }}
                 />
               ))}
             </div>

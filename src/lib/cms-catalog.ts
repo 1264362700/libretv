@@ -23,6 +23,7 @@ export interface CmsCatalogOptions {
   type: 'movie' | 'tv' | 'anime' | 'variety' | 'short_drama' | 'documentary' | 'all' | string;
   typeId?: number; // 用户选中的具体二级子分类 ID
   keyword?: string; // 分类内深度搜索关键词
+  sort?: 'recommend' | 'time' | 'rank' | string; // 排序模式：recommend(热门推荐) | time(最新上映) | rank(豆瓣高分)
   page?: number;
   pageSize?: number;
   sourceKey?: string;
@@ -186,7 +187,7 @@ export function extractSubCategories(
  * 采集站原生全量分类片库查询（支持 500+ 页真分页、高可用、二级细分子类下钻与敏感过滤）
  */
 export async function fetchCmsCatalog(options: CmsCatalogOptions): Promise<CmsCatalogResult> {
-  const { url, type, typeId, keyword, page = 1, pageSize = 24, sourceKey, filterAdult = true } = options;
+  const { url, type, typeId, keyword, sort = 'recommend', page = 1, pageSize = 24, sourceKey, filterAdult = true } = options;
   const cleanUrl = (url || '').trim().replace(/\/+$/, '');
 
   if (!cleanUrl || !/^https?:\/\//.test(cleanUrl)) {
@@ -204,7 +205,7 @@ export async function fetchCmsCatalog(options: CmsCatalogOptions): Promise<CmsCa
   const subCategories = extractSubCategories(type, classes);
   const targetTypeId = typeId !== undefined ? typeId : resolveCmsTypeId(type, classes);
 
-  const cacheKey = `cms_catalog:${cleanUrl}:${type}:${targetTypeId ?? 'all'}:${keyword || ''}:${typeId || ''}:${page}:${pageSize}:${filterAdult ? 1 : 0}`;
+  const cacheKey = `cms_catalog:${cleanUrl}:${type}:${targetTypeId ?? 'all'}:${keyword || ''}:${typeId || ''}:${sort}:${page}:${pageSize}:${filterAdult ? 1 : 0}`;
   const cached = getCache<CmsCatalogResult>(cacheKey);
   if (cached) return cached;
 
@@ -219,6 +220,13 @@ export async function fetchCmsCatalog(options: CmsCatalogOptions): Promise<CmsCa
   }
   if (keyword && keyword.trim()) {
     params.set('wd', keyword.trim().slice(0, 100));
+  }
+  if (sort === 'time') {
+    params.set('by', 'time');
+  } else if (sort === 'rank') {
+    params.set('by', 'score');
+  } else if (sort === 'recommend') {
+    params.set('by', 'hits');
   }
 
   const res = await fetchUpstream(`${cleanUrl}?${params.toString()}`, {
@@ -283,6 +291,13 @@ export async function fetchCmsCatalog(options: CmsCatalogOptions): Promise<CmsCa
     if (keyword && keyword.trim()) {
       fallbackParams.set('wd', keyword.trim().slice(0, 100));
     }
+    if (sort === 'time') {
+      fallbackParams.set('by', 'time');
+    } else if (sort === 'rank') {
+      fallbackParams.set('by', 'score');
+    } else if (sort === 'recommend') {
+      fallbackParams.set('by', 'hits');
+    }
 
     try {
       const fallbackRes = await fetchUpstream(`${cleanUrl}?${fallbackParams.toString()}`, {
@@ -318,7 +333,50 @@ export async function fetchCmsCatalog(options: CmsCatalogOptions): Promise<CmsCa
     }
   }
 
-  // 5. 映射为 DoubanItem
+  // 5. 排序规则归一化生效（解决上游采集源忽略 by 参数或乱序问题）
+  if (sort === 'time') {
+    // 最新上映 / 最新更新：优先按 vod_time 倒序，其次按年份 vod_year 倒序，再次按 vod_id 倒序
+    filteredList = [...filteredList].sort((a, b) => {
+      const timeA = a.vod_time ? Date.parse(a.vod_time.replace(/-/g, '/')) || 0 : 0;
+      const timeB = b.vod_time ? Date.parse(b.vod_time.replace(/-/g, '/')) || 0 : 0;
+      if (timeA !== timeB) return timeB - timeA;
+      const yearA = parseInt(String(a.vod_year || '0'), 10) || 0;
+      const yearB = parseInt(String(b.vod_year || '0'), 10) || 0;
+      if (yearA !== yearB) return yearB - yearA;
+      return Number(b.vod_id || 0) - Number(a.vod_id || 0);
+    });
+  } else if (sort === 'rank') {
+    // 豆瓣高分：优先按评分倒序，其次按年份倒序，再次按更新时间倒序
+    filteredList = [...filteredList].sort((a, b) => {
+      const scoreA =
+        parseFloat(
+          String(
+            (a as Record<string, unknown>).vod_score ||
+              (a as Record<string, unknown>).vod_douban_score ||
+              (a as Record<string, unknown>).rate ||
+              0
+          )
+        ) || 0;
+      const scoreB =
+        parseFloat(
+          String(
+            (b as Record<string, unknown>).vod_score ||
+              (b as Record<string, unknown>).vod_douban_score ||
+              (b as Record<string, unknown>).rate ||
+              0
+          )
+        ) || 0;
+      if (scoreA !== scoreB) return scoreB - scoreA;
+      const yearA = parseInt(String(a.vod_year || '0'), 10) || 0;
+      const yearB = parseInt(String(b.vod_year || '0'), 10) || 0;
+      if (yearA !== yearB) return yearB - yearA;
+      const timeA = a.vod_time ? Date.parse(a.vod_time.replace(/-/g, '/')) || 0 : 0;
+      const timeB = b.vod_time ? Date.parse(b.vod_time.replace(/-/g, '/')) || 0 : 0;
+      return timeB - timeA;
+    });
+  }
+
+  // 6. 映射为 DoubanItem
   const mappedItems: DoubanItem[] = filteredList
     .map((vod): DoubanItem | undefined => {
       const title = (vod.vod_name || '').trim();
@@ -333,9 +391,13 @@ export async function fetchCmsCatalog(options: CmsCatalogOptions): Promise<CmsCa
       const typeName = (vod.type_name || '').trim();
       const year = (vod.vod_year || '').trim();
 
-      // 评分标/角标显示状态：优先更新集数（如 更新至28集），其次分类或年份
+      // 评分标/角标显示状态：若选高分排序且有评分数值，优先透出 ★评分；否则优先更新集数，其次分类或年份
       let ratingBadge: string | undefined = undefined;
-      if (remarks) {
+      const rawScore =
+        (vod as Record<string, unknown>).vod_score || (vod as Record<string, unknown>).vod_douban_score;
+      if (sort === 'rank' && rawScore && Number(rawScore) > 0) {
+        ratingBadge = `★${Number(rawScore).toFixed(1)}`;
+      } else if (remarks) {
         ratingBadge = remarks.length <= 10 ? remarks : remarks.slice(0, 10);
       } else if (typeName) {
         ratingBadge = typeName;

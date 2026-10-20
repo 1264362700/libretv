@@ -23,6 +23,7 @@ export async function GET(req: Request) {
   const typeId = rawTypeId && !Number.isNaN(parseInt(rawTypeId, 10)) ? parseInt(rawTypeId, 10) : undefined;
   const rawWd = url.searchParams.get('wd') || url.searchParams.get('keyword') || '';
   const keyword = rawWd.trim() || undefined;
+  const sort = url.searchParams.get('sort') || 'recommend';
 
   if (!sourceUrl || !/^https?:\/\//.test(sourceUrl)) {
     return NextResponse.json({ error: '无效的点播源地址' }, { status: 400 });
@@ -34,6 +35,7 @@ export async function GET(req: Request) {
       type,
       typeId,
       keyword,
+      sort,
       page,
       pageSize,
       sourceKey,

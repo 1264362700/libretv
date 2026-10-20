@@ -40,6 +40,7 @@ import { fetchDoubanDetail } from '@/lib/douban-api';
 interface CandidateItem {
   source: SourceConfig;
   result: SearchResultItem;
+  ms?: number;
 }
 
 /** 演员与主创姓名解析：按逗号/斜杠/顿号/空格拆分为纯净字符串数组 */
@@ -267,8 +268,9 @@ function WatchContent() {
             vodId: sm.vodId,
             name: sm.vodName || videoTitle,
             sourceUrl: sm.source.url,
-            remarks: sm.vodYear ? `${sm.vodYear} · 匹配度 ${sm.score}%` : `匹配度 ${sm.score}%`,
+            remarks: sm.remarks || (sm.vodYear ? `${sm.vodYear}` : undefined),
           } as SearchResultItem,
+          ms: sm.ms,
         });
       }
     }
@@ -779,7 +781,10 @@ function WatchContent() {
                 <div className="flex items-center gap-2 mt-1 text-xs text-muted">
                   <span className="tag bg-accent/15 text-accent font-medium">{source.name}</span>
                   {episodes.length > 0 && (
-                    <span>正在播放 第 {currentIndex + 1} 集（共 {episodes.length} 集）</span>
+                    <span>
+                      正在播放 第 {currentIndex + 1} 集（共 {episodes.length} 集
+                      {videoInfo?.remarks ? ` · ${videoInfo.remarks}` : ''}）
+                    </span>
                   )}
                 </div>
               </div>
@@ -866,6 +871,16 @@ function WatchContent() {
                         )}
                       />
                       <span>{c.source.name}</span>
+                      {c.result.remarks && (
+                        <span className="text-[10px] opacity-80 font-mono">
+                          ({c.result.remarks})
+                        </span>
+                      )}
+                      {c.ms ? (
+                        <span className="text-[10px] text-emerald-400 font-mono">
+                          · {c.ms}ms
+                        </span>
+                      ) : null}
                       {isCurrent && <span className="text-[10px] opacity-80 font-normal">（当前）</span>}
                       {isFailed && !isCurrent && <span className="text-[10px] text-danger">（受阻）</span>}
                     </button>

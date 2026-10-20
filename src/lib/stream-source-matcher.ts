@@ -25,6 +25,8 @@ export interface MatchedSource {
   episodes: MatchedEpisode[];
   episodeUrls: string[]; // 兼容旧版 string[] 格式
   rawVodItem?: Record<string, unknown>;
+  ms?: number; // 探测耗时毫秒数
+  remarks?: string; // 该源最新集数/状态备注（如 "更新至24集"）
 }
 
 export interface MatcherProgress {
@@ -340,6 +342,7 @@ export class StreamSourceMatcher {
       year?: string;
     }
   ): Promise<void> {
+    const startMs = Date.now();
     const singleController = new AbortController();
     const timeoutMs = this.options.timeoutMs || 5000;
     const timeoutTimer = setTimeout(() => {
@@ -419,6 +422,9 @@ export class StreamSourceMatcher {
 
       if (!bestItem || episodes.length === 0) return;
 
+      const elapsedMs = Date.now() - startMs;
+      const matchedRemarks = String(bestItem.vod_remarks || bestItem.remarks || '').trim();
+
       const matched: MatchedSource = {
         source,
         score: highestScore,
@@ -428,6 +434,8 @@ export class StreamSourceMatcher {
         episodes,
         episodeUrls: episodes.map((e) => e.url),
         rawVodItem: bestItem,
+        ms: elapsedMs,
+        remarks: matchedRemarks,
       };
 
       this.matchedResults.push(matched);

@@ -14,7 +14,6 @@ import { useTranslation } from '@/lib/i18n';
 import { buildWatchUrl, cn, validateSourceUrl } from '@/lib/utils';
 import { isShortDramaTitle } from '@/lib/short-drama';
 import { useAppStore, resolveSource, isInDisabledSubscription, isSourceDisabled } from '@/lib/store';
-import { useToast } from '@/components/toast';
 import type { SearchResultItem, SourceSearchOutcome, DoubanItem, SourceConfig } from '@/lib/types';
 
 type ChannelType = 'movie' | 'tv' | 'short_drama' | 'ai' | 'anime' | 'variety' | 'documentary';
@@ -50,16 +49,16 @@ const CHANNELS_CONFIG: ChannelConfig[] = [
     label: '短剧',
     icon: '📱',
     subTitle: '热门微短剧 · 爽文逆袭 · 全集秒播',
-    regions: ['全部', '都市', '古装', '战神', '甜宠', '逆袭', '重生', 'AI精选'],
-    genres: ['全部', '战神', '总裁', '甜宠', '重生', '神医', '穿越', '豪门', '赘婿'],
+    regions: ['全部', '都市', '古装', '战神', '甜宠', '逆袭', '重生'],
+    genres: ['全部', '战神', '总裁', '甜宠', '重生', '神医', '穿越', '豪门', '赘婿', '逆袭'],
   },
   {
     id: 'ai',
     label: 'AI专区',
     icon: '🤖',
-    subTitle: 'AI短剧 · 脑洞神作 · 未来科幻 · 智能精选',
-    regions: ['全部', 'AI短剧', '科幻脑洞', '数字人生', '未来世界', '硬核科技'],
-    genres: ['全部', 'AI精选', '战神', '逆袭', '悬疑', '修仙', '重生', '异能'],
+    subTitle: 'AIGC短剧 · 脑洞神作 · 未来科幻 · 数字生命',
+    regions: ['全部', 'AIGC短剧', '科幻脑洞', '数字生命', '未来世界', '星际探索', '机械机甲'],
+    genres: ['全部', 'AIGC精选', '脑洞科幻', '赛博朋克', '数字人', '未来纪元', '机甲觉醒', '硬核科技'],
   },
   {
     id: 'anime',
@@ -153,7 +152,6 @@ function CatalogContent() {
   const searchParams = useSearchParams();
   const { verified } = useAuth();
   const { t } = useTranslation();
-  const { toast } = useToast();
 
   // URL 参数优先，支持外部链接与浏览器前进后退
   const rawType = searchParams.get('type') || 'movie';
@@ -186,10 +184,8 @@ function CatalogContent() {
   const currentSort = (searchParams.get('sort') || 'recommend') as 'recommend' | 'time' | 'rank';
   const currentPage = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
 
-  // 片库内双模搜索状态
+  // 片库搜索与筛选状态
   const urlQuery = searchParams.get('q') || '';
-  const [searchInput, setSearchInput] = useState(urlQuery);
-  const [searchMode, setSearchMode] = useState<'vod' | 'filter'>('vod');
   const [filterKeyword, setFilterKeyword] = useState('');
   const [streamedOutcomes, setStreamedOutcomes] = useState<SourceSearchOutcome[]>([]);
   const [detailItem, setDetailItem] = useState<SearchResultItem | null>(null);
@@ -211,10 +207,6 @@ function CatalogContent() {
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
-
-  useEffect(() => {
-    setSearchInput(urlQuery);
-  }, [urlQuery]);
 
   const activeChannelConfig = useMemo(
     () => CHANNELS_CONFIG.find((c) => c.id === currentChannel) || CHANNELS_CONFIG[0],
@@ -518,26 +510,7 @@ function CatalogContent() {
     router.push(watchUrl);
   };
 
-  const handleExecuteSearch = (val: string) => {
-    const q = val.trim();
-    if (!q) {
-      updateFilters({ q: '' });
-      setFilterKeyword('');
-      return;
-    }
-    if (searchMode === 'vod') {
-      if (selectedSources.length === 0) {
-        toast('请先在全局设置中添加并勾选点播采集源', 'warning');
-        return;
-      }
-      updateFilters({ q });
-    } else {
-      setFilterKeyword(q);
-    }
-  };
-
   const handleClearSearch = () => {
-    setSearchInput('');
     setFilterKeyword('');
     updateFilters({ q: '' });
   };
@@ -559,7 +532,7 @@ function CatalogContent() {
       <Header showSearch />
 
       <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-5 space-y-4 pb-28 md:pb-8 overflow-x-hidden">
-        {/* 频道大横幅与引导标语 */}
+        {/* 频道大横幅与引导标语：沉浸式呈现当前频道，不再上下重复分类 */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-line/60">
           <div>
             <div className="flex items-center gap-2">
@@ -571,133 +544,53 @@ function CatalogContent() {
             <p className="text-xs sm:text-sm text-muted mt-1">{activeChannelConfig.subTitle}</p>
           </div>
 
-          <div className="flex items-center gap-2 self-start sm:self-auto">
-            <span className="text-xs text-faint bg-chip px-3 py-1.5 rounded-full border border-line/40">
-              💡 点击任意海报立即全网匹配首集秒播
-            </span>
-          </div>
-        </div>
-
-        {/* 片库内双模即时搜索栏 */}
-        <div className="bg-surface border border-line rounded-2xl p-3 sm:p-3.5 shadow-xs space-y-2">
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleExecuteSearch(searchInput);
-            }}
-            className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2"
-          >
-            {/* 搜索模式切换 */}
-            <div className="flex items-center p-0.5 bg-chip/60 border border-line/60 rounded-xl shrink-0 self-start sm:self-auto">
-              <button
-                type="button"
-                onClick={() => setSearchMode('vod')}
-                className={cn(
-                  'px-2.5 py-1 text-xs rounded-lg font-medium transition-all',
-                  searchMode === 'vod'
-                    ? 'bg-accent text-on-accent font-semibold shadow-xs'
-                    : 'text-muted hover:text-content'
-                )}
-                title="实时向所有勾选的真实采集站并发检索最新资源"
-              >
-                🌐 全网直搜
-              </button>
-              <button
-                type="button"
-                onClick={() => setSearchMode('filter')}
-                className={cn(
-                  'px-2.5 py-1 text-xs rounded-lg font-medium transition-all',
-                  searchMode === 'filter'
-                    ? 'bg-accent text-on-accent font-semibold shadow-xs'
-                    : 'text-muted hover:text-content'
-                )}
-                title="秒级在当前片库/热榜中按片名筛选"
-              >
-                ⚡ 榜单过滤
-              </button>
-            </div>
-
-            {/* 输入框 */}
-            <div className="relative flex-1 flex items-center">
-              <span className="absolute left-3 text-muted pointer-events-none text-xs">🔍</span>
+          <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+            {/* 优雅紧凑的片名快速过滤框（秒级过滤当前片库，不侵占版面） */}
+            <div className="relative flex items-center">
+              <span className="absolute left-2.5 text-xs text-muted pointer-events-none">🔍</span>
               <input
                 type="text"
-                value={searchInput}
-                onChange={(e) => {
-                  setSearchInput(e.target.value);
-                  if (searchMode === 'filter') {
-                    setFilterKeyword(e.target.value);
-                  }
-                }}
-                placeholder={
-                  searchMode === 'vod'
-                    ? `在全网采集源中实时直搜最新${activeChannelConfig.label}（按回车搜索）...`
-                    : `在当前【${activeSourceMeta.label}】中快速过滤片名...`
-                }
-                className="w-full pl-8 pr-8 py-2 rounded-xl bg-chip/50 hover:bg-chip focus:bg-surface border border-line/60 focus:border-accent text-xs sm:text-sm text-content placeholder:text-faint transition-all focus:outline-none"
+                value={filterKeyword}
+                onChange={(e) => setFilterKeyword(e.target.value)}
+                placeholder={`在当前【${activeChannelConfig.label}】中筛选片名...`}
+                className="pl-7 pr-7 py-1.5 rounded-xl bg-chip/60 hover:bg-chip focus:bg-surface border border-line focus:border-accent text-xs text-content placeholder:text-faint transition-all focus:outline-none w-48 sm:w-56"
               />
-              {searchInput && (
+              {filterKeyword && (
                 <button
                   type="button"
-                  onClick={handleClearSearch}
-                  className="absolute right-2.5 text-xs text-faint hover:text-content p-1"
+                  onClick={() => setFilterKeyword('')}
+                  className="absolute right-2 text-xs text-faint hover:text-content"
+                  title="清空筛选"
                 >
                   ✕
                 </button>
               )}
             </div>
 
-            <button
-              type="submit"
-              className="btn-primary py-2 px-4 text-xs font-semibold rounded-xl shrink-0 active:scale-95 shadow-xs"
-            >
-              {searchMode === 'vod' ? '全网直搜' : '过滤片名'}
-            </button>
-          </form>
-
-          {/* 搜索提示或快捷热搜词 */}
-          <div className="flex items-center justify-between text-[11px] text-faint px-1">
-            <span className="truncate">
-              {urlQuery ? (
-                <span className="text-accent font-medium">
-                  正在查看全网聚合搜索 “{urlQuery}” 的结果
-                </span>
-              ) : (
-                <span>
-                  🔥 热门推荐: <button type="button" onClick={() => handleExecuteSearch('凡人修仙传')} className="hover:text-accent underline ml-1">凡人修仙传</button> · <button type="button" onClick={() => handleExecuteSearch('庆余年')} className="hover:text-accent underline ml-1">庆余年</button> · <button type="button" onClick={() => handleExecuteSearch('热辣滚烫')} className="hover:text-accent underline ml-1">热辣滚烫</button> · <button type="button" onClick={() => handleExecuteSearch('咒术回战')} className="hover:text-accent underline ml-1">咒术回战</button>
-                </span>
-              )}
+            <span className="hidden sm:inline-flex text-xs text-faint bg-chip px-3 py-1.5 rounded-full border border-line/40">
+              💡 点击海报全网秒播 · 快捷搜索请按 ⌘K
             </span>
-            {urlQuery && (
-              <button
-                type="button"
-                onClick={handleClearSearch}
-                className="text-accent hover:underline shrink-0 ml-2"
-              >
-                ✕ 清除搜索返回片库
-              </button>
-            )}
           </div>
         </div>
 
-        {/* 一级分类频道大标签切换 */}
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
-          {CHANNELS_CONFIG.map((c) => (
+        {/* 当存在全网搜索词时展示专属搜索结果横幅与清除按钮 */}
+        {urlQuery && (
+          <div className="flex items-center justify-between gap-2 p-3 bg-accent/10 border border-accent/25 rounded-2xl text-xs">
+            <div className="flex items-center gap-2 text-content font-medium">
+              <span className="text-sm">🔍</span>
+              <span>
+                正在查看全网聚合搜索 “<strong className="text-accent">{urlQuery}</strong>” 的跨站结果
+              </span>
+            </div>
             <button
-              key={c.id}
-              onClick={() => updateFilters({ type: c.id })}
-              className={cn(
-                'px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-200 shrink-0 flex items-center gap-2 active:scale-95 touch-manipulation',
-                currentChannel === c.id
-                  ? 'bg-accent text-on-accent shadow-sm'
-                  : 'bg-chip/60 text-muted hover:text-content hover:bg-chip border border-line/50'
-              )}
+              type="button"
+              onClick={handleClearSearch}
+              className="btn-primary text-xs px-3 py-1 rounded-lg shrink-0 active:scale-95"
             >
-              <span>{c.icon}</span>
-              <span>{c.label}</span>
+              ✕ 返回片库大厅
             </button>
-          ))}
-        </div>
+          </div>
+        )}
 
         {/* 二级数据源与榜单引擎切换器 */}
         {!urlQuery && (
@@ -1147,8 +1040,8 @@ function CatalogContent() {
           </>
         )}
 
-        {/* 统计提示与换页状态 */}
-        <div className="flex items-center justify-between text-xs text-muted px-1">
+        {/* 统计提示与换页状态：保证安全高度与间距，彻底防截断塌陷 */}
+        <div className="flex items-center justify-between text-xs text-muted py-2 px-1 min-h-[32px] border-b border-line/40">
           <span>
             {urlQuery ? (
               isVodSearching ? (
@@ -1228,7 +1121,6 @@ function CatalogContent() {
                 type="button"
                 onClick={() => {
                   setFilterKeyword('');
-                  setSearchInput('');
                   router.push(`/catalog?type=${currentChannel}`, { scroll: false });
                 }}
                 className="btn-primary text-xs px-4 py-1.5 rounded-lg active:scale-95"

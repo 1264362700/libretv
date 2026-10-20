@@ -75,8 +75,17 @@ export function resolveCmsTypeId(
 ): number | undefined {
   if (type === 'all') return undefined;
 
-  // 1. 短剧频道匹配（微短剧/短剧/爽文）
-  if (type === 'short_drama' || type === 'ai') {
+  // 1. AI 专区匹配（AI短剧 / AIGC / 科幻脑洞）
+  if (type === 'ai') {
+    const aiFound = classes.find((c) => /ai|人工智能|aigc|脑洞/.test(c.type_name.toLowerCase()));
+    if (aiFound) return aiFound.type_id;
+    const scifi = classes.find((c) => /科幻/.test(c.type_name));
+    if (scifi) return scifi.type_id;
+    return undefined;
+  }
+
+  // 2. 短剧频道匹配（微短剧/短剧/爽文）
+  if (type === 'short_drama') {
     const found = classes.find((c) => /短剧|微短剧|爽文/.test(c.type_name));
     if (found) return found.type_id;
     // 常见 CMS 短剧固定分类 ID 备选
@@ -163,7 +172,9 @@ export function extractSubCategories(
     matcher = /国产动漫|国漫|日韩动漫|日本动漫|欧美动漫|港台动漫|海外动漫/;
   } else if (type === 'variety') {
     matcher = /大陆综艺|内地综艺|港台综艺|日韩综艺|欧美综艺|真人秀|脱口秀/;
-  } else if (type === 'short_drama' || type === 'ai') {
+  } else if (type === 'ai') {
+    matcher = /ai|人工智能|科幻|脑洞|未来|数字人|元宇宙/;
+  } else if (type === 'short_drama') {
     matcher = /短剧|微短剧|爽文|现代都市|古代言情|玄幻武侠|重生逆袭/;
   }
 
@@ -213,6 +224,8 @@ export async function fetchCmsCatalog(options: CmsCatalogOptions): Promise<CmsCa
   });
   if (targetTypeId !== undefined) {
     params.set('t', String(targetTypeId));
+  } else if (type === 'ai') {
+    params.set('wd', 'AI');
   }
 
   const res = await fetchUpstream(`${cleanUrl}?${params.toString()}`, {

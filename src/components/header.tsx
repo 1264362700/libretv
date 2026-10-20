@@ -25,7 +25,6 @@ export const CHANNELS = [
   { id: 'anime', label: '动漫', href: '/catalog?type=anime' },
   { id: 'variety', label: '综艺', href: '/catalog?type=variety' },
   { id: 'documentary', label: '纪录片', href: '/catalog?type=documentary' },
-  { id: 'catalog', label: '片库', href: '/catalog' },
   { id: 'live', label: '直播', href: '/live' },
 ];
 
@@ -259,7 +258,7 @@ function useCurrentChannelId(): string {
     if (t === 'anime') return 'anime';
     if (t === 'variety') return 'variety';
     if (t === 'documentary') return 'documentary';
-    return 'catalog';
+    return 'movie';
   }
   if (pathname === '/') return 'home';
   return '';

@@ -3,6 +3,7 @@ import {
   isPostgresConfigured,
   testNeonConnection,
   getPostgresPool,
+  normalizePostgresConnectionString,
 } from './db-postgres';
 import {
   exportNeonToGist,
@@ -117,5 +118,20 @@ describe('Neon PostgreSQL & Decoupled Gist Architecture', () => {
     if (adminUser) {
       expect(typeof adminUser.isSuperAdmin).toBe('boolean');
     }
+  });
+
+  it('PostgreSQL 连接串自动规整并消除 sslmode 安全警告', () => {
+    const rawUrl = 'postgresql://user:secret@ep-xyz.tech/neondb?sslmode=require';
+    const normalized = normalizePostgresConnectionString(rawUrl);
+    expect(normalized).toContain('uselibpqcompat=true');
+    expect(normalized).toContain('sslmode=require');
+
+    // 已具备 uselibpqcompat=true 时不重复添加
+    const alreadyNormalized = normalizePostgresConnectionString('postgresql://user:pass@host/db?sslmode=require&uselibpqcompat=true');
+    expect(alreadyNormalized).toBe('postgresql://user:pass@host/db?sslmode=require&uselibpqcompat=true');
+
+    // 空串或非 ssl 保持防御
+    expect(normalizePostgresConnectionString('')).toBe('');
+    expect(normalizePostgresConnectionString('postgresql://localhost:5432/db')).toBe('postgresql://localhost:5432/db');
   });
 });

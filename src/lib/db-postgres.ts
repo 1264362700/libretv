@@ -31,6 +31,32 @@ export function isPostgresConfigured(): boolean {
   return Boolean(url && (url.startsWith('postgres://') || url.startsWith('postgresql://')));
 }
 
+/**
+ * 规整 PostgreSQL 连接串，消除 pg / pg-connection-string 在 Node.js 运行时报出的：
+ * "SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'"
+ * 自动补全 uselibpqcompat=true，保持生产与云端兼容性并杜绝控制台警告
+ */
+export function normalizePostgresConnectionString(rawUrl: string): string {
+  if (!rawUrl || typeof rawUrl !== 'string') return '';
+  const trimmed = rawUrl.trim();
+  try {
+    const parsed = new URL(trimmed);
+    const sslmode = parsed.searchParams.get('sslmode')?.toLowerCase();
+    if (sslmode && ['require', 'prefer', 'verify-ca'].includes(sslmode)) {
+      if (!parsed.searchParams.has('uselibpqcompat')) {
+        parsed.searchParams.set('uselibpqcompat', 'true');
+      }
+    }
+    return parsed.toString();
+  } catch {
+    if (/([?&])sslmode=(require|prefer|verify-ca)(?:&|$)/i.test(trimmed) && !trimmed.includes('uselibpqcompat=')) {
+      const joiner = trimmed.includes('?') ? '&' : '?';
+      return `${trimmed}${joiner}uselibpqcompat=true`;
+    }
+    return trimmed;
+  }
+}
+
 export function getPostgresPool(): Pool | null {
   if (!isPostgresConfigured()) return null;
 
@@ -38,8 +64,9 @@ export function getPostgresPool(): Pool | null {
     return globalThis.__libretv_pg_pool__;
   }
 
-  const connectionString = process.env.DATABASE_URL?.trim() || '';
-  const isSsl = connectionString.includes('sslmode=require') || process.env.NODE_ENV === 'production';
+  const rawUrl = process.env.DATABASE_URL?.trim() || '';
+  const connectionString = normalizePostgresConnectionString(rawUrl);
+  const isSsl = connectionString.includes('sslmode=') || process.env.NODE_ENV === 'production';
 
   const pool = new Pool({
     connectionString,

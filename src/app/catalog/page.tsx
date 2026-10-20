@@ -415,6 +415,8 @@ function CatalogContent() {
         if (rawCmsTypeId) q.set('typeId', rawCmsTypeId);
         if (catalogKeyword) q.set('wd', catalogKeyword);
         if (currentSort) q.set('sort', currentSort);
+        if (currentYear && currentYear !== '全部') q.set('year', currentYear);
+        if (currentRegion && currentRegion !== '全部') q.set('area', currentRegion);
 
         try {
           const res = await fetch(`/api/catalog/cms?${q.toString()}`, { signal });
@@ -516,10 +518,16 @@ function CatalogContent() {
             const rA = parseFloat(a.rating || '0') || 0;
             const rB = parseFloat(b.rating || '0') || 0;
             if (rA !== rB) return rB - rA;
-            return (parseInt(b.year || '0', 10) || 0) - (parseInt(a.year || '0', 10) || 0);
+            const yA = parseInt(String(a.year || '').match(/\b(19\d{2}|20\d{2})\b/)?.[1] || '0', 10);
+            const yB = parseInt(String(b.year || '').match(/\b(19\d{2}|20\d{2})\b/)?.[1] || '0', 10);
+            return yB - yA;
           });
         } else if (currentSort === 'time') {
-          mappedItems.sort((a, b) => (parseInt(b.year || '0', 10) || 0) - (parseInt(a.year || '0', 10) || 0));
+          mappedItems.sort((a, b) => {
+            const yA = parseInt(String(a.year || '').match(/\b(19\d{2}|20\d{2})\b/)?.[1] || '0', 10);
+            const yB = parseInt(String(b.year || '').match(/\b(19\d{2}|20\d{2})\b/)?.[1] || '0', 10);
+            return yB - yA;
+          });
         }
 
         return {

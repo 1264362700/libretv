@@ -29,18 +29,15 @@ export function MediaCard({
   className,
   showSubtitle = true,
 }: MediaCardProps) {
-  // 构建高可用图片候选链，彻底规避豆瓣 418 / 403 防盗链拦截
+  // 构建免代理高可用图片候选链，绝不向自身服务器发起图片代理
   const candidates = useMemo(() => {
     const raw = item.cover || '';
     if (!raw) return [];
     if (raw.includes('doubanio.com')) {
-      // 优先级 1: 官方镜像加速（不带防盗链，秒开 200）
-      const mirror = raw.replace(/img\d+\.doubanio\.com/g, 'img.doubanio.cmliussss.net');
-      // 优先级 2: 服务端内置代理（自动注入 Referer: https://movie.douban.com/）
-      const proxy = `/api/proxy?url=${encodeURIComponent(raw)}`;
-      return [mirror, proxy];
+      const weserv = `https://images.weserv.nl/?url=${encodeURIComponent(raw)}`;
+      return [raw, weserv];
     }
-    return [raw, `/api/proxy?url=${encodeURIComponent(raw)}`];
+    return [raw];
   }, [item.cover]);
 
   const [candidateIdx, setCandidateIdx] = useState(0);

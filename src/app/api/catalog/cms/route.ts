@@ -24,6 +24,8 @@ export async function GET(req: Request) {
   const rawWd = url.searchParams.get('wd') || url.searchParams.get('keyword') || '';
   const keyword = rawWd.trim() || undefined;
   const sort = url.searchParams.get('sort') || 'recommend';
+  const year = url.searchParams.get('year') || undefined;
+  const area = url.searchParams.get('area') || undefined;
 
   if (!sourceUrl || !/^https?:\/\//.test(sourceUrl)) {
     return NextResponse.json({ error: '无效的点播源地址' }, { status: 400 });
@@ -36,6 +38,8 @@ export async function GET(req: Request) {
       typeId,
       keyword,
       sort,
+      year,
+      area,
       page,
       pageSize,
       sourceKey,

@@ -24,6 +24,8 @@ export interface CmsCatalogOptions {
   typeId?: number; // 用户选中的具体二级子分类 ID
   keyword?: string; // 分类内深度搜索关键词
   sort?: 'recommend' | 'time' | 'rank' | string; // 排序模式：recommend(热门推荐) | time(最新上映) | rank(豆瓣高分)
+  year?: string; // 年份筛选（如 2026、2025）
+  area?: string; // 地区筛选（如 大陆、香港）
   page?: number;
   pageSize?: number;
   sourceKey?: string;
@@ -187,7 +189,7 @@ export function extractSubCategories(
  * 采集站原生全量分类片库查询（支持 500+ 页真分页、高可用、二级细分子类下钻与敏感过滤）
  */
 export async function fetchCmsCatalog(options: CmsCatalogOptions): Promise<CmsCatalogResult> {
-  const { url, type, typeId, keyword, sort = 'recommend', page = 1, pageSize = 24, sourceKey, filterAdult = true } = options;
+  const { url, type, typeId, keyword, sort = 'recommend', year, area, page = 1, pageSize = 24, sourceKey, filterAdult = true } = options;
   const cleanUrl = (url || '').trim().replace(/\/+$/, '');
 
   if (!cleanUrl || !/^https?:\/\//.test(cleanUrl)) {
@@ -205,7 +207,7 @@ export async function fetchCmsCatalog(options: CmsCatalogOptions): Promise<CmsCa
   const subCategories = extractSubCategories(type, classes);
   const targetTypeId = typeId !== undefined ? typeId : resolveCmsTypeId(type, classes);
 
-  const cacheKey = `cms_catalog:${cleanUrl}:${type}:${targetTypeId ?? 'all'}:${keyword || ''}:${typeId || ''}:${sort}:${page}:${pageSize}:${filterAdult ? 1 : 0}`;
+  const cacheKey = `cms_catalog:${cleanUrl}:${type}:${targetTypeId ?? 'all'}:${keyword || ''}:${typeId || ''}:${sort}:${year || ''}:${area || ''}:${page}:${pageSize}:${filterAdult ? 1 : 0}`;
   const cached = getCache<CmsCatalogResult>(cacheKey);
   if (cached) return cached;
 
@@ -333,16 +335,32 @@ export async function fetchCmsCatalog(options: CmsCatalogOptions): Promise<CmsCa
     }
   }
 
-  // 5. 排序规则归一化生效（解决上游采集源忽略 by 参数或乱序问题）
+  // 5. 年份与地区维度精细过滤（解决采集站不响应特定筛选参数问题）
+  if (year && year !== '全部') {
+    filteredList = filteredList.filter((v) => {
+      const yStr = String(v.vod_year || '');
+      return yStr.includes(year);
+    });
+  }
+  if (area && area !== '全部') {
+    filteredList = filteredList.filter((v) => {
+      const aStr = String(v.vod_area || '');
+      return aStr.includes(area);
+    });
+  }
+
+  // 6. 排序规则归一化生效（解决上游采集源忽略 by 参数或乱序问题）
   if (sort === 'time') {
-    // 最新上映 / 最新更新：优先按 vod_time 倒序，其次按年份 vod_year 倒序，再次按 vod_id 倒序
+    // 最新上映：必须严格优先按公映年份 vod_year 降序（2026 > 2025 > 2024...），同一年份内按入库时间 vod_time 倒序
     filteredList = [...filteredList].sort((a, b) => {
+      const yearA = parseInt(String(a.vod_year || '').match(/\b(19\d{2}|20\d{2})\b/)?.[1] || '0', 10);
+      const yearB = parseInt(String(b.vod_year || '').match(/\b(19\d{2}|20\d{2})\b/)?.[1] || '0', 10);
+      if (yearA !== yearB) return yearB - yearA;
+
       const timeA = a.vod_time ? Date.parse(a.vod_time.replace(/-/g, '/')) || 0 : 0;
       const timeB = b.vod_time ? Date.parse(b.vod_time.replace(/-/g, '/')) || 0 : 0;
       if (timeA !== timeB) return timeB - timeA;
-      const yearA = parseInt(String(a.vod_year || '0'), 10) || 0;
-      const yearB = parseInt(String(b.vod_year || '0'), 10) || 0;
-      if (yearA !== yearB) return yearB - yearA;
+
       return Number(b.vod_id || 0) - Number(a.vod_id || 0);
     });
   } else if (sort === 'rank') {

@@ -13,11 +13,7 @@ export interface HeroBillboardBannerProps {
 }
 
 /**
- * 专为 Banner 设计的防盗链降级图片组件
- * 豆瓣图床默认会触发 418 / 403 拦截，通过多级候选链顺次降级：
- * 1. 公共加速镜像 (img.doubanio.cmliussss.net)
- * 2. 站点内置代理 (/api/proxy?url=...)
- * 3. 原始原站地址
+ * 专为 Banner 设计的防盗链降级图片组件（纯前端/公共CDN，绝不占用本站服务器算力）
  */
 function BannerImage({ cover, title }: { cover?: string; title: string }) {
   const [candidateIdx, setCandidateIdx] = useState(0);
@@ -25,11 +21,10 @@ function BannerImage({ cover, title }: { cover?: string; title: string }) {
   const candidates: string[] = (() => {
     if (!cover) return [];
     if (cover.includes('doubanio.com')) {
-      const mirror = cover.replace(/img\d+\.doubanio\.com/g, 'img.doubanio.cmliussss.net');
-      const proxy = `/api/proxy?url=${encodeURIComponent(cover)}`;
-      return [mirror, proxy, cover];
+      const weserv = `https://images.weserv.nl/?url=${encodeURIComponent(cover)}`;
+      return [cover, weserv];
     }
-    return [cover, `/api/proxy?url=${encodeURIComponent(cover)}`];
+    return [cover];
   })();
 
   const currentSrc = candidates[candidateIdx] || cover;

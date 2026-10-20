@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { buildImageCandidates, buildImageUrl } from './utils';
 
 describe('buildImageUrl', () => {
-  it('proxy 模式走查询串形式（路径形式会被 EdgeOne 等网关归一化破坏）', () => {
+  it('proxy 模式使用公共免费图片 CDN 节点（绝不打爆本站轻量容器）', () => {
     expect(buildImageUrl('https://img3.doubanio.com/a.jpg', 'proxy', '')).toBe(
-      '/api/proxy?url=' + encodeURIComponent('https://img3.doubanio.com/a.jpg')
+      'https://images.weserv.nl/?url=' + encodeURIComponent('https://img3.doubanio.com/a.jpg')
     );
   });
 
@@ -19,20 +19,18 @@ describe('buildImageUrl', () => {
 
 describe('buildImageCandidates', () => {
   const DOUBAN = 'https://img3.doubanio.com/view/photo/m/poster.jpg';
+  const WESERV = `https://images.weserv.nl/?url=${encodeURIComponent(DOUBAN)}`;
 
-  it('direct 模式豆瓣图：直连 → 双镜像 → 内置代理', () => {
+  it('direct 模式豆瓣图：直连 → 第三方公共 CDN 兜底（绝不经过本站）', () => {
     expect(buildImageCandidates(DOUBAN, 'direct', '')).toEqual([
       DOUBAN,
-      'https://img.doubanio.cmliussss.net/view/photo/m/poster.jpg',
-      'https://img.doubanio.cmliussss.com/view/photo/m/poster.jpg',
-      '/api/proxy?url=' + encodeURIComponent(DOUBAN),
+      WESERV,
     ]);
   });
 
-  it('direct 模式非豆瓣图：直连 → 内置代理（无镜像候选）', () => {
+  it('direct 模式非豆瓣图：原站直连（无防盗链限制，秒开）', () => {
     expect(buildImageCandidates('https://bdstatic.com/x.jpg', 'direct', '')).toEqual([
       'https://bdstatic.com/x.jpg',
-      '/api/proxy?url=' + encodeURIComponent('https://bdstatic.com/x.jpg'),
     ]);
   });
 
@@ -42,18 +40,15 @@ describe('buildImageCandidates', () => {
     expect(cands[0]).toBe('https://doubanio.com/a.jpg');
   });
 
-  it('proxy 模式豆瓣图：内置代理 → 双镜像 → 直连（代理故障可回退）', () => {
+  it('proxy 模式豆瓣图：公共 CDN → 直连', () => {
     expect(buildImageCandidates(DOUBAN, 'proxy', '')).toEqual([
-      '/api/proxy?url=' + encodeURIComponent(DOUBAN),
-      'https://img.doubanio.cmliussss.net/view/photo/m/poster.jpg',
-      'https://img.doubanio.cmliussss.com/view/photo/m/poster.jpg',
+      WESERV,
       DOUBAN,
     ]);
   });
 
-  it('proxy 模式非豆瓣图：内置代理 → 直连', () => {
+  it('proxy 模式非豆瓣图：直连', () => {
     expect(buildImageCandidates('https://bdstatic.com/x.jpg', 'proxy', '')).toEqual([
-      '/api/proxy?url=' + encodeURIComponent('https://bdstatic.com/x.jpg'),
       'https://bdstatic.com/x.jpg',
     ]);
   });

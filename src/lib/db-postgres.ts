@@ -22,9 +22,7 @@ export interface FullDbSnapshot {
 
 // 缓存全局单例 Pool，避免 Next.js 开发模式热重载频繁创建连接池
 declare global {
-  // eslint-disable-next-line no-var
   var __libretv_pg_pool__: Pool | undefined;
-  // eslint-disable-next-line no-var
   var __libretv_schema_initialized__: boolean | undefined;
 }
 

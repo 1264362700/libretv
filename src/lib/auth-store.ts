@@ -14,7 +14,6 @@ import {
   dbUpsertGlobalSource,
   dbDeleteGlobalSource,
   dbSaveUserConfig,
-  testNeonConnection,
 } from './db-postgres';
 import {
   exportNeonToGist,

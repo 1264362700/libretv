@@ -1,6 +1,6 @@
 'use client';
 
-import type { SearchResponse, SearchStreamEvent, SourceSearchOutcome, VideoDetail, DoubanResponse, BangumiCalendarResponse, AuthStatusResponse, SourceConfig, SearchResultItem, LivePlaylistResponse, LiveEpgResponse, SourceListPayload } from './types';
+import type { SearchResponse, SearchStreamEvent, SourceSearchOutcome, VideoDetail, DoubanResponse, BangumiCalendarResponse, AuthStatusResponse, SourceConfig, SearchResultItem, LivePlaylistResponse, LiveEpgResponse, SourceListPayload, DoubanItem } from './types';
 
 /**
  * 客户端 API 封装。401 时触发全局事件打开登录框，
@@ -324,11 +324,48 @@ export const api = {
   /** Bangumi 每日放送（免 key），首页推荐的另一数据源 */
   bangumiCalendar: (signal?: AbortSignal) => request<BangumiCalendarResponse>('/api/bangumi/calendar', { signal }),
 
-  /** 影视热榜与全网实时大盘：豆瓣周榜/百度榜/Top250/360热榜/猫眼大盘 */
-  hotList: (id: string, signal?: AbortSignal, pageStart?: number) => {
+  /** 影视热榜与全网实时大盘：爱奇艺大厅/豆瓣周榜/Top250/360热榜/微短剧大厅（支持真分页） */
+  hotList: (
+    id: string,
+    signal?: AbortSignal,
+    pageStart?: number,
+    options?: { page?: number; mode?: 'hot' | 'latest' }
+  ) => {
     const sp = new URLSearchParams({ id });
     if (typeof pageStart === 'number' && pageStart > 0) sp.set('pageStart', String(pageStart));
+    if (options?.page && options.page > 0) sp.set('page', String(options.page));
+    if (options?.mode) sp.set('mode', options.mode);
     return request<DoubanResponse>(`/api/hot-list?${sp.toString()}`, { signal });
+  },
+
+  /** 采集站原生全量分类片库：直连 TVBox/影视仓标准点播源，500+页真分页最新入库 */
+  cmsCatalog: (
+    params: {
+      url: string;
+      type: string;
+      page?: number;
+      pageSize?: number;
+      sourceKey?: string;
+      filterAdult?: boolean;
+    },
+    signal?: AbortSignal
+  ) => {
+    const sp = new URLSearchParams({
+      url: params.url,
+      type: params.type,
+      pg: String(params.page || 1),
+      pagesize: String(params.pageSize || 24),
+    });
+    if (params.sourceKey) sp.set('sourceKey', params.sourceKey);
+    if (params.filterAdult) sp.set('filterAdult', '1');
+    return request<{
+      items: DoubanItem[];
+      total: number;
+      pagecount: number;
+      page: number;
+      pageSize: number;
+      warning?: string;
+    }>(`/api/catalog/cms?${sp.toString()}`, { signal });
   },
 
   /** 换源：按标题跨源搜索并取详情，附带接口耗时（测速）；支持 signal 以便关闭弹窗时中止在途请求 */

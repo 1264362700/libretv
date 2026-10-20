@@ -15,7 +15,7 @@ import { buildWatchUrl, cn, validateSourceUrl } from '@/lib/utils';
 import { isShortDramaTitle } from '@/lib/short-drama';
 import { useAppStore, resolveSource, isInDisabledSubscription, isSourceDisabled } from '@/lib/store';
 import { useToast } from '@/components/toast';
-import type { SearchResultItem, SourceSearchOutcome, DoubanItem } from '@/lib/types';
+import type { SearchResultItem, SourceSearchOutcome, DoubanItem, SourceConfig } from '@/lib/types';
 
 type ChannelType = 'movie' | 'tv' | 'short_drama' | 'ai' | 'anime' | 'variety' | 'documentary';
 
@@ -87,7 +87,7 @@ const CHANNELS_CONFIG: ChannelConfig[] = [
   },
 ];
 
-export type CatalogSourceId = 'iqiyi' | 'baidu' | 'maoyan' | 'bangumi' | '360' | 'douban';
+export type CatalogSourceId = 'cms' | 'iqiyi' | '360' | 'douban' | 'bangumi';
 
 interface CatalogSourceMeta {
   id: CatalogSourceId;
@@ -98,23 +98,30 @@ interface CatalogSourceMeta {
 }
 
 const CATALOG_SOURCES: CatalogSourceMeta[] = [
-  { id: 'iqiyi', label: '爱奇艺热榜', icon: '💚', badge: '实时热度', subTitle: '官方全端热播榜 · 实时爆款剧集与新片' },
-  { id: 'baidu', label: '百度风云榜', icon: '📈', badge: '全网热搜', subTitle: '全网综合搜索大盘 · 实时各大平台热度' },
-  { id: 'maoyan', label: '猫眼院线榜', icon: '🎟️', badge: '票房大盘', subTitle: '影院正在热映 · 实时票房排片大盘' },
+  { id: 'cms', label: '点播源片库', icon: '🎬', badge: '500+页·秒播', subTitle: 'TVBox/影视仓标准采集源 · 每日海量新片全集入库 · 100%可播' },
+  { id: 'iqiyi', label: '爱奇艺大厅', icon: '💚', badge: '官方真分页', subTitle: '官方全量大厂片库 · 100+页真分页 · 支持最新与热播切换' },
+  { id: '360', label: '全网多维片库', icon: '🔥', badge: '多维细选', subTitle: '按地区、年份、类型自由筛选海量片库 · 真分页' },
+  { id: 'douban', label: '豆瓣口碑高分', icon: '🏆', badge: '影史经典', subTitle: '影史高分 Top250 与每周口碑新片榜 · 真分页' },
   { id: 'bangumi', label: '新番周历', icon: '✨', badge: '连载放送', subTitle: '当季最新连载动漫 · 每日更新时间表' },
-  { id: '360', label: '全网片库', icon: '🔥', badge: '多维细选', subTitle: '按地区、年份、类型自由筛选海量片库' },
-  { id: 'douban', label: '豆瓣高分榜', icon: '🏆', badge: '口碑经典', subTitle: '每周口碑新片榜 · 影史高分 Top250' },
 ];
 
 const CHANNEL_SOURCES: Record<ChannelType, CatalogSourceId[]> = {
-  movie: ['iqiyi', 'baidu', 'maoyan', '360', 'douban'],
-  tv: ['iqiyi', 'baidu', '360', 'douban'],
-  short_drama: ['360', 'iqiyi'],
-  ai: ['360', 'iqiyi'],
-  anime: ['bangumi', 'iqiyi', 'baidu', '360'],
-  variety: ['iqiyi', '360', 'douban', 'baidu'],
-  documentary: ['360', 'douban'],
+  movie: ['cms', 'iqiyi', '360', 'douban'],
+  tv: ['cms', 'iqiyi', '360', 'douban'],
+  short_drama: ['cms', '360'],
+  ai: ['cms', '360'],
+  anime: ['cms', 'bangumi', 'iqiyi', '360'],
+  variety: ['cms', 'iqiyi', '360', 'douban'],
+  documentary: ['cms', 'iqiyi', '360', 'douban'],
 };
+
+const FALLBACK_SEED_SOURCES: SourceConfig[] = [
+  { key: 'curated_ffzy', name: '非凡资源 (极速秒播)', url: 'https://cj.ffzyapi.com/api.php/provide/vod' },
+  { key: 'curated_lzzy', name: '量子资源 (蓝光秒开)', url: 'https://cj.lziapi.com/api.php/provide/vod' },
+  { key: 'curated_snzy', name: '索尼资源 (高清秒播)', url: 'https://suoniapi.com/api.php/provide/vod' },
+  { key: 'curated_gszy', name: '光速资源 (超低延迟)', url: 'https://api.guangsuapi.com/api.php/provide/vod' },
+  { key: 'curated_jyzy', name: '金鹰资源 (院线热映)', url: 'https://jyzyapi.com/api.php/provide/vod' },
+];
 
 const BANGUMI_WEEKDAYS = ['全部', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 const YEARS = ['全部', '2026', '2025', '2024', '2023', '2022', '2021', '2020', '2019', '2018', '2017', '2016', '2015', '2010', '2000'];
@@ -156,10 +163,14 @@ function CatalogContent() {
 
   // 数据源切换
   const rawSource = searchParams.get('source') as CatalogSourceId | null;
-  const availableSources = CHANNEL_SOURCES[currentChannel] || ['360'];
+  const availableSources = CHANNEL_SOURCES[currentChannel] || ['cms', 'iqiyi', '360', 'douban'];
   const currentSource: CatalogSourceId = rawSource && availableSources.includes(rawSource)
     ? rawSource
     : availableSources[0];
+
+  // 采集源快速切换与模式
+  const rawCmsSourceKey = searchParams.get('cmsSource');
+  const currentIqiyiMode = (searchParams.get('iqiyiMode') === 'latest' ? 'latest' : 'hot') as 'hot' | 'latest';
 
   // Bangumi 星期子选项
   const currentWeekday = searchParams.get('weekday') || '全部';
@@ -222,9 +233,24 @@ function CatalogContent() {
       .filter((s) => !isInDisabledSubscription({ subscriptions }, s.key));
   }, [customAPIs, envSources, selectedKeys, sourceHealth, subscriptions]);
 
+  const availableCmsSources = useMemo(() => {
+    if (selectedSources.length > 0) return selectedSources;
+    return FALLBACK_SEED_SOURCES;
+  }, [selectedSources]);
+
+  const activeCmsSource = useMemo(() => {
+    if (rawCmsSourceKey) {
+      const found = availableCmsSources.find((s) => s.key === rawCmsSourceKey);
+      if (found) return found;
+    }
+    return availableCmsSources[0];
+  }, [availableCmsSources, rawCmsSourceKey]);
+
   const updateFilters = (changes: {
     type?: string;
     source?: string;
+    cmsSource?: string;
+    iqiyiMode?: 'hot' | 'latest';
     weekday?: string;
     subTab?: string;
     region?: string;
@@ -243,7 +269,7 @@ function CatalogContent() {
       sp.delete('subTab');
       sp.delete('q');
       sp.set('page', '1');
-      const validSources = CHANNEL_SOURCES[changes.type as ChannelType] || ['360'];
+      const validSources = CHANNEL_SOURCES[changes.type as ChannelType] || ['cms', 'iqiyi', '360', 'douban'];
       if (!validSources.includes(currentSource)) {
         sp.set('source', validSources[0]);
       }
@@ -252,6 +278,14 @@ function CatalogContent() {
       sp.set('source', changes.source);
       sp.set('page', '1');
       sp.delete('q');
+    }
+    if (changes.cmsSource !== undefined) {
+      sp.set('cmsSource', changes.cmsSource);
+      sp.set('page', '1');
+    }
+    if (changes.iqiyiMode !== undefined) {
+      sp.set('iqiyiMode', changes.iqiyiMode);
+      sp.set('page', '1');
     }
     if (changes.weekday !== undefined) {
       if (changes.weekday === '全部') sp.delete('weekday');
@@ -334,6 +368,8 @@ function CatalogContent() {
       'catalog',
       currentChannel,
       currentSource,
+      activeCmsSource?.key,
+      currentIqiyiMode,
       currentWeekday,
       currentDoubanSubTab,
       queryTag,
@@ -344,90 +380,97 @@ function CatalogContent() {
       currentPage,
     ],
     queryFn: async ({ signal }) => {
-      // 1. 短剧或 AI 专区
-      if (currentChannel === 'short_drama' || currentChannel === 'ai') {
-        const res = await api.hotList('short_drama', signal, pageStart);
-        const mapped = currentChannel === 'ai'
-          ? res.items.map((item) => ({
-              ...item,
-              rating: item.rating === '微短剧' ? 'AI精选' : item.rating,
-            }))
-          : res.items;
-        return { items: mapped, total: 200 };
+      // 1. 点播采集源全量原生片库（TVBox / 影视仓标准，500+页真分页最新入库）
+      if (currentSource === 'cms') {
+        const sourceUrl = activeCmsSource?.url || 'https://cj.ffzyapi.com/api.php/provide/vod';
+        const res = await api.cmsCatalog(
+          {
+            url: sourceUrl,
+            type: currentChannel,
+            page: currentPage,
+            pageSize: PAGE_SIZE,
+            sourceKey: activeCmsSource?.key,
+            filterAdult: yellowFilter,
+          },
+          signal
+        );
+        return { items: res.items, total: res.total, pagecount: res.pagecount };
       }
 
-      // 2. Bangumi 新番周历
-      if (currentSource === 'bangumi' && currentChannel === 'anime') {
-        const calendar = await api.bangumiCalendar(signal);
-        if (!calendar?.days) return { items: [], total: 0 };
-        const dayIdx = BANGUMI_WEEKDAYS.indexOf(currentWeekday);
-        if (currentWeekday === '全部' || dayIdx <= 0) {
-          const allItems = calendar.days.flatMap((d) => d.items);
-          return { items: allItems, total: allItems.length };
-        }
-        const targetDay = calendar.days.find((d) => d.weekday === dayIdx);
-        const dayItems = targetDay?.items || [];
-        return { items: dayItems, total: dayItems.length };
-      }
-
-      // 3. 爱奇艺官方实时榜
+      // 2. 爱奇艺官方大厅（大厂官方片库，支持 100+ 页真分页与热播/最新切换）
       if (currentSource === 'iqiyi') {
         let hotKey: 'iqiyi_tv' | 'iqiyi_movie' | 'iqiyi_anime' | 'iqiyi_variety' = 'iqiyi_movie';
         if (currentChannel === 'tv') hotKey = 'iqiyi_tv';
         else if (currentChannel === 'anime') hotKey = 'iqiyi_anime';
         else if (currentChannel === 'variety') hotKey = 'iqiyi_variety';
         else hotKey = 'iqiyi_movie';
-        const res = await api.hotList(hotKey, signal);
-        return { items: res.items, total: res.items.length };
+        const res = await api.hotList(hotKey, signal, pageStart, {
+          page: currentPage,
+          mode: currentIqiyiMode,
+        });
+        const total = res.total || 2400;
+        return { items: res.items, total, pagecount: Math.ceil(total / PAGE_SIZE) };
       }
 
-      // 4. 百度风云榜
-      if (currentSource === 'baidu') {
-        let hotKey: 'baidu_movie' | 'baidu_teleplay' | 'baidu_anime' = 'baidu_movie';
-        if (currentChannel === 'tv') hotKey = 'baidu_teleplay';
-        else if (currentChannel === 'anime') hotKey = 'baidu_anime';
-        else hotKey = 'baidu_movie';
-        const res = await api.hotList(hotKey, signal);
-        return { items: res.items, total: res.items.length };
+      // 3. Bangumi 新番周历
+      if (currentSource === 'bangumi' && currentChannel === 'anime') {
+        const calendar = await api.bangumiCalendar(signal);
+        if (!calendar?.days) return { items: [], total: 0, pagecount: 1 };
+        const dayIdx = BANGUMI_WEEKDAYS.indexOf(currentWeekday);
+        if (currentWeekday === '全部' || dayIdx <= 0) {
+          const allItems = calendar.days.flatMap((d) => d.items);
+          return { items: allItems, total: allItems.length, pagecount: 1 };
+        }
+        const targetDay = calendar.days.find((d) => d.weekday === dayIdx);
+        const dayItems = targetDay?.items || [];
+        return { items: dayItems, total: dayItems.length, pagecount: 1 };
       }
 
-      // 5. 猫眼院线票房榜
-      if (currentSource === 'maoyan') {
-        const res = await api.hotList('maoyan_movie', signal);
-        return { items: res.items, total: res.items.length };
-      }
-
-      // 6. 豆瓣高分与周榜
+      // 4. 豆瓣影史高分与口碑周榜
       if (currentSource === 'douban') {
         if (currentChannel === 'movie') {
           if (currentDoubanSubTab === 'top250' || currentSort === 'rank') {
-            const res = await api.hotList('douban_top250', signal, pageStart);
-            return { items: res.items, total: 250 };
+            const res = await api.hotList('douban_top250', signal, pageStart, { page: currentPage });
+            return { items: res.items, total: 250, pagecount: Math.ceil(250 / PAGE_SIZE) };
           }
           const res = await api.hotList('douban_movie_weekly', signal);
-          return { items: res.items, total: res.items.length };
+          return { items: res.items, total: res.items.length, pagecount: 1 };
         }
         if (currentChannel === 'tv') {
           const listId = currentDoubanSubTab === 'global' ? 'douban_tv_global' : 'douban_tv_chinese';
           const res = await api.hotList(listId, signal);
-          return { items: res.items, total: res.items.length };
+          return { items: res.items, total: res.items.length, pagecount: 1 };
         }
         if (currentChannel === 'variety') {
           const listId = currentDoubanSubTab === 'global' ? 'douban_show_global' : 'douban_show_chinese';
           const res = await api.hotList(listId, signal);
-          return { items: res.items, total: res.items.length };
+          return { items: res.items, total: res.items.length, pagecount: 1 };
         }
         const res = await api.hotList('douban_movie_weekly', signal);
-        return { items: res.items, total: res.items.length };
+        return { items: res.items, total: res.items.length, pagecount: 1 };
       }
 
-      // 7. 默认 360 全网片库多维筛选
+      // 5. 短剧或 AI 专区（在 360 来源下）
+      if ((currentChannel === 'short_drama' || currentChannel === 'ai') && currentSource === '360') {
+        const res = await api.hotList('short_drama', signal, pageStart, { page: currentPage });
+        const mapped = currentChannel === 'ai'
+          ? res.items.map((item) => ({
+              ...item,
+              rating: item.rating === '微短剧' ? 'AI精选' : item.rating,
+            }))
+          : res.items;
+        return { items: mapped, total: 500, pagecount: 25 };
+      }
+
+      // 6. 全网 360 多维分类片库
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return api.douban(currentChannel as any, queryTag, pageStart, PAGE_SIZE, signal, currentSort, {
+      const res = await api.douban(currentChannel as any, queryTag, pageStart, PAGE_SIZE, signal, currentSort, {
         area: currentRegion,
         genre: currentGenre,
         year: currentYear,
       });
+      const total = res.total ?? res.items.length;
+      return { items: res.items, total, pagecount: Math.ceil(total / PAGE_SIZE) };
     },
     staleTime: 5 * 60_000,
     enabled: !urlQuery,
@@ -445,7 +488,10 @@ function CatalogContent() {
   }, [baseItems, filterKeyword]);
 
   const total = catalogQuery.data?.total ?? (items.length > 0 ? items.length * 10 : 0);
-  const totalPages = Math.max(1, Math.min(500, Math.ceil(total / PAGE_SIZE)));
+  const totalPages = Math.max(
+    1,
+    Math.min(500, catalogQuery.data?.pagecount ?? Math.ceil(total / PAGE_SIZE))
+  );
 
   // 点击卡片直接进入播放前进行登录校验
   const handleCardClick = (title: string) => {
@@ -678,6 +724,76 @@ function CatalogContent() {
                 <span>⚡ {activeSourceMeta.subTitle}</span>
               </div>
             </div>
+
+            {/* 点播源专属：采集站切换器 */}
+            {currentSource === 'cms' && availableCmsSources.length > 0 && (
+              <div className="flex items-center gap-1.5 sm:gap-2 bg-chip/40 border border-line/60 rounded-xl p-2 sm:p-2.5 overflow-x-auto no-scrollbar">
+                <div className="flex items-center gap-1 text-xs font-semibold text-faint shrink-0 px-1">
+                  <span>📡</span>
+                  <span>点播源:</span>
+                </div>
+                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+                  {availableCmsSources.map((s) => {
+                    const isSelected = activeCmsSource.key === s.key;
+                    return (
+                      <button
+                        key={s.key}
+                        type="button"
+                        onClick={() => updateFilters({ cmsSource: s.key, page: 1 })}
+                        className={cn(
+                          'px-3 py-1 rounded-lg text-xs font-medium transition-all shrink-0 active:scale-95 cursor-pointer flex items-center gap-1',
+                          isSelected
+                            ? 'bg-accent text-on-accent font-semibold shadow-xs'
+                            : 'text-muted hover:text-content bg-surface/60 hover:bg-surface border border-line/40'
+                        )}
+                      >
+                        <span>{isSelected ? '⚡' : '📺'}</span>
+                        <span className="truncate max-w-[130px] sm:max-w-none">{s.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <span className="text-[11px] text-faint ml-auto hidden md:inline shrink-0">
+                  💡 支持 500+ 页真分页，最新入库剧集实时同步
+                </span>
+              </div>
+            )}
+
+            {/* 爱奇艺大厅专属：最热 / 最新上线排期切换 */}
+            {currentSource === 'iqiyi' && (
+              <div className="flex items-center gap-2 bg-chip/40 border border-line/60 rounded-xl p-2 sm:p-2.5 overflow-x-auto no-scrollbar">
+                <span className="text-xs font-semibold text-faint shrink-0 px-1">排序模式:</span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => updateFilters({ iqiyiMode: 'hot', page: 1 })}
+                    className={cn(
+                      'px-3 py-1 rounded-lg text-xs font-medium transition-all shrink-0 active:scale-95 cursor-pointer',
+                      currentIqiyiMode === 'hot'
+                        ? 'bg-accent text-on-accent font-semibold shadow-xs'
+                        : 'text-muted hover:text-content bg-surface/60 hover:bg-surface border border-line/40'
+                    )}
+                  >
+                    🔥 实时热播大盘
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => updateFilters({ iqiyiMode: 'latest', page: 1 })}
+                    className={cn(
+                      'px-3 py-1 rounded-lg text-xs font-medium transition-all shrink-0 active:scale-95 cursor-pointer',
+                      currentIqiyiMode === 'latest'
+                        ? 'bg-accent text-on-accent font-semibold shadow-xs'
+                        : 'text-muted hover:text-content bg-surface/60 hover:bg-surface border border-line/40'
+                    )}
+                  >
+                    ⏰ 最新上线排期
+                  </button>
+                </div>
+                <span className="text-[11px] text-faint ml-auto hidden md:inline shrink-0">
+                  官方大厂接口 · 100+ 页真分页
+                </span>
+              </div>
+            )}
 
             {/* Bangumi 专属星期选择器 */}
             {currentSource === 'bangumi' && currentChannel === 'anime' && (
@@ -984,7 +1100,7 @@ function CatalogContent() {
             ) : items.length > 0 ? (
               <>
                 当前【{activeSourceMeta.label}】共展示 <span className="text-content font-bold">{items.length}</span> 部精选影片
-                {currentSource === '360' && `（第 ${currentPage}/${totalPages} 页，共 ${total.toLocaleString()} 部）`}
+                {currentSource !== 'bangumi' && `（第 ${currentPage}/${totalPages} 页${total > 0 ? `，共约 ${total.toLocaleString()} 部` : ''}）`}
               </>
             ) : (
               '暂无影片'
@@ -1064,8 +1180,8 @@ function CatalogContent() {
           )
         )}
 
-        {/* 分页导航条（仅在片库多页源下展示） */}
-        {!urlQuery && (currentSource === '360' || (currentSource === 'douban' && currentDoubanSubTab === 'top250') || currentChannel === 'short_drama') && totalPages > 1 && (
+        {/* 分页导航条（除连载周历外全源支持真分页） */}
+        {!urlQuery && currentSource !== 'bangumi' && totalPages > 1 && (
           <div className="pt-6 pb-8">
             {/* 移动端大按键上一页 / 下一页 */}
             <div className="sm:hidden flex items-center justify-between w-full gap-3">

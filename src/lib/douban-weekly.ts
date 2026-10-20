@@ -169,20 +169,34 @@ export async function fetch360Rank(type: 'teleplay' | 'movie' | 'variety' | 'ani
   return [];
 }
 
+export interface IqiyiRankResult {
+  items: DoubanItem[];
+  total: number;
+}
+
 /**
- * 爱奇艺官方实时热播榜（官方开放免 Key 接口，超高热度、真实官方海报）：
- * channel_id: 2=电视剧, 1=电影, 6=综艺, 4=动漫
+ * 爱奇艺全量大厂分类大厅（官方开放免 Key 接口，支持真分页与最新/热播切换）：
+ * channel_id: 1=电影, 2=电视剧, 4=动漫, 6=综艺, 3=纪录片
+ * mode: 11=实时热播, 4=最新上线
  */
-export async function fetchIqiyiRank(type: 'tv' | 'movie' | 'variety' | 'anime'): Promise<DoubanItem[]> {
-  const channelMap = { movie: 1, tv: 2, variety: 6, anime: 4 };
+export async function fetchIqiyiRank(
+  type: 'tv' | 'movie' | 'variety' | 'anime' | 'documentary',
+  page = 1,
+  pageSize = 24,
+  mode: 'hot' | 'latest' = 'hot'
+): Promise<IqiyiRankResult> {
+  const channelMap: Record<string, number> = { movie: 1, tv: 2, variety: 6, anime: 4, documentary: 3 };
   const channelId = channelMap[type] || 2;
-  const cacheKey = `iqiyi_rank:${type}`;
-  const cached = getCache<DoubanItem[]>(cacheKey);
-  if (cached && cached.length > 0) return cached;
+  const modeParam = mode === 'latest' ? 4 : 11;
+  const safePage = Math.max(1, page);
+  const safeSize = Math.min(50, Math.max(12, pageSize));
+  const cacheKey = `iqiyi_rank:v2:${type}:${modeParam}:${safePage}:${safeSize}`;
+  const cached = getCache<IqiyiRankResult>(cacheKey);
+  if (cached && cached.items.length > 0) return cached;
 
   try {
     const res = await fetchUpstream(
-      `https://pcw-api.iqiyi.com/search/recommend/list?channel_id=${channelId}&data_type=1&mode=11&page_id=1&ret_num=30`,
+      `https://pcw-api.iqiyi.com/search/recommend/list?channel_id=${channelId}&data_type=1&mode=${modeParam}&page_id=${safePage}&ret_num=${safeSize}`,
       {
         timeoutMs: 6000,
         headers: { Accept: 'application/json', 'User-Agent': UA },
@@ -191,12 +205,14 @@ export async function fetchIqiyiRank(type: 'tv' | 'movie' | 'variety' | 'anime')
     if (res.ok) {
       const data = (await res.json()) as {
         data?: {
+          total?: number;
           list?: Array<{
             name?: string;
             title?: string;
             imageUrl?: string;
             score?: number | string;
             description?: string;
+            period?: string;
           }>;
         };
       };
@@ -214,8 +230,11 @@ export async function fetchIqiyiRank(type: 'tv' | 'movie' | 'variety' | 'anime')
               const num = parseFloat(String(item.score));
               if (!Number.isNaN(num) && num > 0 && num <= 10) score = num.toFixed(1);
             }
+            if (!score && item.period) {
+              score = item.period.length <= 8 ? item.period : item.period.slice(0, 8);
+            }
             return {
-              id: `iqiyi_${type}_${idx}_${title.slice(0, 10)}`,
+              id: `iqiyi_${type}_${safePage}_${idx}_${title.slice(0, 10)}`,
               title,
               cover,
               rating: score,
@@ -226,18 +245,21 @@ export async function fetchIqiyiRank(type: 'tv' | 'movie' | 'variety' | 'anime')
           .filter((item) => Boolean(item.title && item.cover) && !isShortDramaTitle(item.title));
 
         if (items.length > 0) {
-          setCache(cacheKey, items, CACHE_TTL);
-          return items;
+          const total = typeof data.data?.total === 'number' && data.data.total > 0 ? data.data.total : 2400;
+          const result: IqiyiRankResult = { items, total };
+          setCache(cacheKey, result, CACHE_TTL);
+          return result;
         }
       }
     }
   } catch (err) {
-    console.warn(`[HotList] 爱奇艺热榜(${type})异常，准备降级:`, err);
+    console.warn(`[HotList] 爱奇艺片库(${type})异常，准备降级:`, err);
   }
 
   // 平滑容灾兜底：降级至 360 榜对应的分类
-  const fallback360Type = type === 'tv' ? 'teleplay' : type;
-  return fetch360Rank(fallback360Type);
+  const fallback360Type = type === 'tv' ? 'teleplay' : type === 'documentary' ? 'movie' : type;
+  const fallbackItems = await fetch360Rank(fallback360Type as 'teleplay' | 'movie' | 'variety' | 'anime');
+  return { items: fallbackItems, total: fallbackItems.length };
 }
 
 /**
@@ -531,22 +553,28 @@ async function fetchJson(path: string): Promise<unknown> {
 }
 
 /** 统一榜单拉取主入口（全网高可用，永不返回空列表，绝不抛出 502） */
-export async function fetchHotList(id: HotListId, pageStart = 0): Promise<DoubanItem[]> {
-  const cacheKey = `hot-list:${id}:${pageStart}`;
+export async function fetchHotList(
+  id: HotListId,
+  pageStart = 0,
+  options?: { page?: number; pageSize?: number; mode?: 'hot' | 'latest' }
+): Promise<DoubanItem[]> {
+  const page = options?.page ?? (Math.floor(pageStart / 24) + 1);
+  const mode = options?.mode ?? 'hot';
+  const cacheKey = `hot-list:${id}:${pageStart}:${page}:${mode}`;
   const cached = getCache<DoubanItem[]>(cacheKey);
   if (cached && cached.length > 0) return cached;
 
   let items: DoubanItem[] = [];
 
-  // 1. 爱奇艺官方热播榜（电视剧/电影/综艺/动漫）
+  // 1. 爱奇艺官方热播榜（电视剧/电影/综艺/动漫，支持真分页与最新/热播）
   if (id === 'iqiyi_tv') {
-    items = await fetchIqiyiRank('tv');
+    items = (await fetchIqiyiRank('tv', page, 24, mode)).items;
   } else if (id === 'iqiyi_movie') {
-    items = await fetchIqiyiRank('movie');
+    items = (await fetchIqiyiRank('movie', page, 24, mode)).items;
   } else if (id === 'iqiyi_variety') {
-    items = await fetchIqiyiRank('variety');
+    items = (await fetchIqiyiRank('variety', page, 24, mode)).items;
   } else if (id === 'iqiyi_anime') {
-    items = await fetchIqiyiRank('anime');
+    items = (await fetchIqiyiRank('anime', page, 24, mode)).items;
   }
 
   // 2. 热门微短剧/爽文独立专区
@@ -575,7 +603,7 @@ export async function fetchHotList(id: HotListId, pageStart = 0): Promise<Douban
   } else if (id === 'baidu_anime') {
     items = await fetchBaiduBoard('anime');
     if (items.length === 0) {
-      items = await fetchIqiyiRank('anime');
+      items = (await fetchIqiyiRank('anime', page, 24, mode)).items;
     }
   }
 

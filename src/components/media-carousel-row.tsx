@@ -47,19 +47,19 @@ export function MediaCarouselRow({
   return (
     <section className="space-y-3 pt-3 group/row">
       {/* 轨道头部栏 */}
-      <div className="flex items-center justify-between pb-2 border-b border-slate-800/80">
+      <div className="flex items-center justify-between pb-2 border-b border-line">
         <div className="flex items-center gap-2">
           {icon && <span className="text-xl sm:text-2xl shrink-0">{icon}</span>}
           <div>
-            <h2 className="text-base sm:text-lg font-extrabold tracking-tight text-slate-100 flex items-center gap-2">
+            <h2 className="text-base sm:text-lg font-extrabold tracking-tight text-content flex items-center gap-2">
               <span>{title}</span>
               {badge && (
-                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-accent/20 text-accent border border-accent/30">
                   {badge}
                 </span>
               )}
             </h2>
-            {subTitle && <p className="text-[11px] text-slate-400">{subTitle}</p>}
+            {subTitle && <p className="text-[11px] text-muted">{subTitle}</p>}
           </div>
         </div>
 
@@ -68,7 +68,7 @@ export function MediaCarouselRow({
           <button
             type="button"
             onClick={() => scroll('left')}
-            className="w-8 h-8 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition-all opacity-0 group-hover/row:opacity-100 cursor-pointer hidden sm:flex"
+            className="w-8 h-8 rounded-full bg-chip hover:bg-hover text-muted hover:text-content border border-line/60 flex items-center justify-center transition-all opacity-0 group-hover/row:opacity-100 cursor-pointer hidden sm:flex"
             title="向左滚动"
           >
             ‹
@@ -76,7 +76,7 @@ export function MediaCarouselRow({
           <button
             type="button"
             onClick={() => scroll('right')}
-            className="w-8 h-8 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition-all opacity-0 group-hover/row:opacity-100 cursor-pointer hidden sm:flex"
+            className="w-8 h-8 rounded-full bg-chip hover:bg-hover text-muted hover:text-content border border-line/60 flex items-center justify-center transition-all opacity-0 group-hover/row:opacity-100 cursor-pointer hidden sm:flex"
             title="向右滚动"
           >
             ›
@@ -85,7 +85,7 @@ export function MediaCarouselRow({
           {moreHref && (
             <Link
               href={moreHref}
-              className="flex items-center gap-1 text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors p-1 group"
+              className="flex items-center gap-1 text-xs font-semibold text-accent hover:text-accent-hover transition-colors p-1 group"
             >
               <span>更多</span>
               <span className="transition-transform group-hover:translate-x-0.5">›</span>
@@ -100,7 +100,7 @@ export function MediaCarouselRow({
           {Array.from({ length: 6 }).map((_, i) => (
             <div
               key={i}
-              className="w-[140px] sm:w-[170px] md:w-[190px] shrink-0 aspect-[2/3] rounded-xl bg-slate-800/60 animate-pulse border border-slate-700/40"
+              className="w-[140px] sm:w-[170px] md:w-[190px] shrink-0 aspect-[2/3] rounded-xl bg-chip animate-pulse border border-line/40"
             />
           ))}
         </div>
@@ -123,7 +123,7 @@ export function MediaCarouselRow({
           ))}
         </div>
       ) : (
-        <div className="py-8 text-center text-xs text-slate-500 border border-dashed border-slate-800 rounded-xl bg-slate-900/30">
+        <div className="py-8 text-center text-xs text-muted border border-dashed border-line/60 rounded-xl bg-surface/30">
           暂无影片更新…
         </div>
       )}

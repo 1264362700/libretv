@@ -94,22 +94,29 @@ export async function switchTheme(options: SwitchThemeOptions): Promise<void> {
   // 4. 动画期间开启静默隔离，避免业务组件自身的 CSS transition 争抢 CPU
   root.classList.add('theme-transitioning');
 
-  // 5. 开启浏览器原生视图过渡
-  const transition = (doc as unknown as {
-    startViewTransition: (cb: () => Promise<void>) => { finished: Promise<void> };
-  }).startViewTransition(async () => {
-    await callback();
-  });
+  // 5. 开启浏览器原生视图过渡（如遇异常自动兜底调用 callback）
+  try {
+    const transition = (doc as unknown as {
+      startViewTransition: (cb: () => Promise<void>) => { finished: Promise<void> };
+    }).startViewTransition(async () => {
+      await callback();
+    });
 
-  // 6. 统一生命周期清理
-  transition.finished.finally(() => {
-    if (transitionId !== latestTransitionId) return;
+    // 6. 统一生命周期清理
+    transition.finished.finally(() => {
+      if (transitionId !== latestTransitionId) return;
 
+      root.classList.remove('theme-transitioning');
+      delete root.dataset.themeStyle;
+      delete root.dataset.themeTransition;
+      root.style.removeProperty('--theme-transition-x');
+      root.style.removeProperty('--theme-transition-y');
+      root.style.removeProperty('--theme-transition-radius');
+    });
+  } catch {
     root.classList.remove('theme-transitioning');
     delete root.dataset.themeStyle;
     delete root.dataset.themeTransition;
-    root.style.removeProperty('--theme-transition-x');
-    root.style.removeProperty('--theme-transition-y');
-    root.style.removeProperty('--theme-transition-radius');
-  });
+    await callback();
+  }
 }

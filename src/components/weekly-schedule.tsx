@@ -50,17 +50,17 @@ export function WeeklySchedule({
   return (
     <section className="space-y-4 pt-2">
       {/* 头部标题与周历切换胶囊 */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-800">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-line">
         <div className="flex items-center gap-2">
           <span className="text-xl sm:text-2xl shrink-0">📅</span>
           <div>
-            <h2 className="text-base sm:text-lg font-extrabold tracking-tight text-slate-100 flex items-center gap-2">
+            <h2 className="text-base sm:text-lg font-extrabold tracking-tight text-content flex items-center gap-2">
               <span>每日追番 · 新番时间表</span>
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30">
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-accent/20 text-accent border border-accent/30">
                 Bangumi
               </span>
             </h2>
-            <p className="text-[11px] text-slate-400">连载新番放送时刻 · 准时更新</p>
+            <p className="text-[11px] text-muted">连载新番放送时刻 · 准时更新</p>
           </div>
         </div>
 
@@ -77,8 +77,8 @@ export function WeeklySchedule({
                 className={cn(
                   'px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer touch-manipulation',
                   isSelected
-                    ? 'bg-blue-600 text-white shadow-md shadow-blue-600/40'
-                    : 'bg-slate-800/80 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                    ? 'bg-accent text-on-accent shadow-md shadow-accent/40'
+                    : 'bg-chip text-muted hover:text-content hover:bg-hover'
                 )}
               >
                 <span>{tab.label}</span>
@@ -97,7 +97,7 @@ export function WeeklySchedule({
           {Array.from({ length: 12 }).map((_, i) => (
             <div
               key={i}
-              className="aspect-[2/3] rounded-xl bg-slate-800/60 animate-pulse border border-slate-700/40"
+              className="aspect-[2/3] rounded-xl bg-chip animate-pulse border border-line/40"
             />
           ))}
         </div>
@@ -113,7 +113,7 @@ export function WeeklySchedule({
           ))}
         </div>
       ) : (
-        <div className="py-12 text-center text-xs text-slate-500 border border-dashed border-slate-800 rounded-xl bg-slate-900/30">
+        <div className="py-12 text-center text-xs text-muted border border-dashed border-line/60 rounded-xl bg-surface/30">
           周历数据加载中或本日暂无新番连载…
         </div>
       )}

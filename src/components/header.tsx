@@ -431,6 +431,13 @@ function MobileNavDrawer({
             <Icon name="download" className="w-4 h-4 text-muted" />
             <span>{t('nav.downloads', '下载管理')}</span>
           </button>
+          <div className="flex items-center justify-between px-3 py-1.5 rounded-xl text-xs text-muted bg-chip/30">
+            <span className="flex items-center gap-2">
+              <span className="text-sm">🌓</span>
+              <span>外观模式</span>
+            </span>
+            <ThemeToggle showLabel />
+          </div>
           <Link
             href="/about"
             onClick={onClose}

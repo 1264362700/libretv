@@ -59,15 +59,17 @@ export function aggregateResults(list: SearchResultItem[]): AggregatedGroup[] {
 }
 
 /**
- * 聚合影片卡片：
- * 纯粹直达设计：点击卡片任意位置直接秒开播放页起播（线路切换留在播放页面自由操作）。
+ * 聚合影片卡片（现代流媒体 2:3 黄金比例海报竖卡）：
+ * 彻底解决横向切分造成的文字挤压错位与折行；
+ * 具备评分/源聚合胶囊、状态呼吸灯、Hover 立即播放微交互，
+ * 点击直接进入播放页秒开，绝不弹窗。
  */
 export function AggregatedCard({
   group,
   onOpen,
 }: {
   group: AggregatedGroup;
-  onOpen: (item: SearchResultItem) => void;
+  onOpen: (item: SearchResultItem, group: AggregatedGroup) => void;
 }) {
   const imageProxyMode = useAppStore((s) => s.imageProxyMode);
   const customImageProxy = useAppStore((s) => s.customImageProxy);
@@ -79,83 +81,114 @@ export function AggregatedCard({
   const adult = useMemo(() => group.items.some((i) => i.isAdult), [group.items]);
 
   const activate = () => {
-    // 搜索页面点击直接起播：默认第一集、最优线路
-    onOpen(primaryItem);
+    // 搜索页面点击直接起播：进入播放页由内核流式秒播，不弹窗
+    onOpen(primaryItem, group);
   };
 
   return (
-    <div className="card group/item hover:scale-[1.02] hover:shadow-md transition-all">
-      {/* 点击卡片主体直接起播 */}
-      <div
-        className="flex h-full cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/60"
-        role="button"
-        tabIndex={0}
-        onClick={activate}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            activate();
-          }
-        }}
-      >
+    <div
+      className="group relative flex flex-col rounded-xl overflow-hidden cursor-pointer bg-card border border-line hover:border-accent/60 hover:shadow-xl hover:-translate-y-1 active:scale-95 transition-all duration-300 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 select-none touch-manipulation"
+      role="button"
+      tabIndex={0}
+      onClick={activate}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          activate();
+        }
+      }}
+    >
+      {/* 2:3 黄金比例封面海报区 */}
+      <div className="relative aspect-[2/3] w-full overflow-hidden bg-chip">
         {showImg ? (
-          <div className="relative flex-shrink-0 w-[105px] sm:w-[120px] aspect-[2/3] bg-chip">
-            <SmartImage
-              url={group.pic}
-              mode={imageProxyMode}
-              customProxy={customImageProxy}
-              alt={group.name}
-              className="absolute inset-0 h-full w-full object-cover"
-              onExhausted={() => setImgFailed(true)}
-            />
-            <div className="absolute inset-0 bg-gradient-to-r from-black/30 to-transparent" />
-            {sourceCount > 1 && (
-              <span className="absolute top-1.5 left-1.5 tag bg-black/75 backdrop-blur-sm text-accent font-semibold text-[11px] border border-accent/20">
-                {sourceCount} 源聚合
-              </span>
-            )}
-          </div>
+          <SmartImage
+            url={group.pic}
+            mode={imageProxyMode}
+            customProxy={customImageProxy}
+            alt={group.name}
+            className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
+            onExhausted={() => setImgFailed(true)}
+          />
         ) : (
-          <div className="relative flex-shrink-0 w-[105px] sm:w-[120px] aspect-[2/3] bg-chip flex items-center justify-center">
-            <svg className="w-8 h-8 text-faint" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="w-full h-full flex flex-col items-center justify-center bg-chip p-4 text-center">
+            <svg className="w-8 h-8 text-faint mb-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 4v16m10-16v16M3 6a1 1 0 011-1h1a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V6zm4 0a1 1 0 011-1h1a1 1 0 011 1v12a1 1 0 01-1 1h-1a1 1 0 01-1-1V6zm8 0a1 1 0 011-1h1a1 1 0 011 1v12a1 1 0 01-1 1h-1a1 1 0 01-1-1V6zm4 0a1 1 0 011-1h1a1 1 0 011 1v12a1 1 0 01-1 1h-1a1 1 0 01-1-1V6z" />
             </svg>
-            {sourceCount > 1 && (
-              <span className="absolute top-1.5 left-1.5 tag bg-black/75 backdrop-blur-sm text-accent font-semibold text-[11px] border border-accent/20">
-                {sourceCount} 源聚合
-              </span>
-            )}
+            <span className="text-[10px] text-faint font-medium">暂无海报</span>
           </div>
         )}
 
-        <div className="p-2.5 flex flex-col flex-grow min-w-0">
-          <div className="flex-grow">
-            <h3 className="font-semibold text-sm text-content mb-1.5 line-clamp-2" title={group.name}>
-              {group.name}
-            </h3>
-            <div className="flex flex-wrap gap-1 mb-1.5">
-              {group.typeName && <span className="tag bg-accent/15 text-accent">{group.typeName}</span>}
-              {group.year && <span className="tag bg-purple-500/15 text-purple-600 dark:text-purple-300">{group.year}</span>}
-              {adult && <span className="tag bg-pink-500/15 text-pink-600 dark:text-pink-400">(18+)</span>}
-            </div>
-            <p className="text-xs text-muted line-clamp-2 mb-2">{group.remarks || '暂无介绍'}</p>
-          </div>
-          <div className="flex items-center justify-between mt-auto pt-1.5 border-t border-line">
-            <span className="tag bg-chip text-muted truncate max-w-[75%]">
-              {sourceCount > 1 ? `${sourceCount} 家片源 · 线路秒播` : primaryItem.sourceName}
+        {/* 底部暗部多层渐变 */}
+        <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/80 via-black/30 to-transparent pointer-events-none" />
+
+        {/* 左上角：源聚合胶囊 */}
+        {sourceCount > 1 ? (
+          <span className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-md bg-black/75 backdrop-blur-md text-accent font-bold text-[10px] sm:text-[11px] border border-accent/30 shadow-sm z-10">
+            {sourceCount} 源聚合
+          </span>
+        ) : primaryItem?.sourceName ? (
+          <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded-md bg-black/75 backdrop-blur-md text-muted font-medium text-[10px] border border-white/10 shadow-sm z-10 truncate max-w-[90px]">
+            {primaryItem.sourceName}
+          </span>
+        ) : null}
+
+        {/* 右上角：年份标签或成人标记 */}
+        <div className="absolute top-1.5 right-1.5 flex items-center gap-1 z-10">
+          {adult && (
+            <span className="px-1.5 py-0.5 rounded-md bg-rose-600/90 text-white font-bold text-[10px] shadow-sm">
+              18+
             </span>
-            <span className="text-[11px] text-accent font-medium flex items-center gap-0.5 group-hover/item:translate-x-0.5 transition-transform">
-              <span>立即播放</span>
-              <span>›</span>
+          )}
+          {group.year && (
+            <span className="px-1.5 py-0.5 rounded-md bg-black/75 backdrop-blur-md text-purple-300 font-semibold text-[10px] sm:text-[11px] border border-white/10 shadow-sm">
+              {group.year}
+            </span>
+          )}
+        </div>
+
+        {/* 左下角：实时集数状态呼吸灯胶囊 */}
+        {group.remarks && (
+          <div className="absolute bottom-1.5 left-1.5 right-1.5 flex items-center pointer-events-none z-10">
+            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-black/80 backdrop-blur-md border border-emerald-500/40 text-emerald-400 text-[10px] sm:text-[11px] font-medium shadow-sm max-w-full truncate">
+              <span className="relative flex h-1.5 w-1.5 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+              </span>
+              <span className="truncate">{group.remarks}</span>
             </span>
           </div>
+        )}
+
+        {/* Hover 时悬浮的播放按钮 */}
+        <div className="absolute inset-0 bg-black/40 backdrop-blur-[1px] opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center pointer-events-none z-20">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-accent text-on-accent text-xs font-bold shadow-xl shadow-accent/40 transform translate-y-2 group-hover:translate-y-0 transition-transform duration-300">
+            <span>▶</span>
+            <span>极速播放</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 底部信息区 */}
+      <div className="p-2 sm:p-2.5 flex flex-col flex-1 justify-between gap-1">
+        <h3
+          className="text-xs sm:text-sm font-semibold text-content line-clamp-1 group-hover:text-accent transition-colors"
+          title={group.name}
+        >
+          {group.name}
+        </h3>
+        <div className="flex items-center justify-between text-[11px] text-muted">
+          <span className="truncate">{group.typeName || '全网精选'}</span>
+          <span className="text-accent font-medium shrink-0 flex items-center gap-0.5">
+            <span>秒播</span>
+            <span>›</span>
+          </span>
         </div>
       </div>
     </div>
   );
 }
 
-/** 影片卡片：封面加载失败时逐级降级到占位图（未聚合的单一结果使用） */
+/** 影片卡片：封面加载失败时逐级降级到占位图（未聚合的单一结果使用，采用 2:3 黄金比例海报竖卡） */
 export function VideoCard({ item, onClick }: { item: SearchResultItem; onClick: () => void }) {
   const imageProxyMode = useAppStore((s) => s.imageProxyMode);
   const customImageProxy = useAppStore((s) => s.customImageProxy);
@@ -164,53 +197,66 @@ export function VideoCard({ item, onClick }: { item: SearchResultItem; onClick: 
 
   return (
     <div
-      className="card cursor-pointer hover:scale-[1.02] hover:shadow-md h-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+      className="group relative flex flex-col rounded-xl overflow-hidden cursor-pointer bg-card border border-line hover:border-accent/60 hover:shadow-xl hover:-translate-y-1 active:scale-95 transition-all duration-300 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 select-none touch-manipulation"
       role="button"
       tabIndex={0}
       onClick={onClick}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
-          // 阻止空格触发页面滚动（AggregatedCard 已是此写法，此处对齐）
           e.preventDefault();
           onClick();
         }
       }}
     >
-      <div className="flex h-full">
+      <div className="relative aspect-[2/3] w-full overflow-hidden bg-chip">
         {showImg ? (
-          <div className="relative flex-shrink-0 w-[105px] sm:w-[120px] aspect-[2/3] bg-chip">
-            <SmartImage
-              url={item.pic}
-              mode={imageProxyMode}
-              customProxy={customImageProxy}
-              alt={item.name}
-              className="h-full w-full object-cover"
-              onExhausted={() => setImgFailed(true)}
-            />
-            <div className="absolute inset-0 bg-gradient-to-r from-black/30 to-transparent" />
-          </div>
+          <SmartImage
+            url={item.pic}
+            mode={imageProxyMode}
+            customProxy={customImageProxy}
+            alt={item.name}
+            className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
+            onExhausted={() => setImgFailed(true)}
+          />
         ) : (
-          <div className="flex-shrink-0 w-[105px] sm:w-[120px] aspect-[2/3] bg-chip flex items-center justify-center">
-            <svg className="w-8 h-8 text-faint" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="w-full h-full flex flex-col items-center justify-center bg-chip p-4 text-center">
+            <svg className="w-8 h-8 text-faint mb-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 4v16m10-16v16M3 6a1 1 0 011-1h1a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V6zm4 0a1 1 0 011-1h1a1 1 0 011 1v12a1 1 0 01-1 1h-1a1 1 0 01-1-1V6zm8 0a1 1 0 011-1h1a1 1 0 011 1v12a1 1 0 01-1 1h-1a1 1 0 01-1-1V6zm4 0a1 1 0 011-1h1a1 1 0 011 1v12a1 1 0 01-1 1h-1a1 1 0 01-1-1V6z" />
             </svg>
+            <span className="text-[10px] text-faint font-medium">暂无海报</span>
           </div>
         )}
 
-        <div className="p-2.5 flex flex-col flex-grow min-w-0">
-          <div className="flex-grow">
-            <h3 className="font-semibold text-sm text-content mb-1.5 line-clamp-2" title={item.name}>
-              {item.name}
-            </h3>
-            <div className="flex flex-wrap gap-1 mb-1.5">
-              {item.typeName && <span className="tag bg-accent/15 text-accent">{item.typeName}</span>}
-              {item.year && <span className="tag bg-purple-500/15 text-purple-600 dark:text-purple-300">{item.year}</span>}
-            </div>
-            <p className="text-xs text-muted line-clamp-2 mb-2">{item.remarks || '暂无介绍'}</p>
+        <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/80 via-black/30 to-transparent pointer-events-none" />
+
+        {item.sourceName && (
+          <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded-md bg-black/75 backdrop-blur-md text-muted font-medium text-[10px] border border-white/10 shadow-sm z-10 truncate max-w-[90px]">
+            {item.sourceName}
+          </span>
+        )}
+
+        {item.year && (
+          <span className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-md bg-black/75 backdrop-blur-md text-purple-300 font-semibold text-[10px] border border-white/10 shadow-sm z-10">
+            {item.year}
+          </span>
+        )}
+
+        {item.remarks && (
+          <div className="absolute bottom-1.5 left-1.5 right-1.5 flex items-center pointer-events-none z-10">
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-black/80 backdrop-blur-md border border-line text-slate-300 text-[10px] font-medium shadow-sm max-w-full truncate">
+              <span className="truncate">{item.remarks}</span>
+            </span>
           </div>
-          <div className="flex items-center justify-between mt-auto pt-1.5 border-t border-line">
-            <span className="tag bg-chip text-muted truncate max-w-[80%]">{item.sourceName}</span>
-          </div>
+        )}
+      </div>
+
+      <div className="p-2 sm:p-2.5 flex flex-col flex-1 justify-between gap-1">
+        <h3 className="text-xs sm:text-sm font-semibold text-content line-clamp-1 group-hover:text-accent transition-colors" title={item.name}>
+          {item.name}
+        </h3>
+        <div className="flex items-center justify-between text-[11px] text-muted">
+          <span className="truncate">{item.typeName || '影视'}</span>
+          <span className="text-accent font-medium shrink-0">播放 ›</span>
         </div>
       </div>
     </div>

@@ -72,9 +72,9 @@ export function MediaCard({
     <div
       className={cn(
         'group relative flex flex-col rounded-xl overflow-hidden cursor-pointer select-none',
-        'bg-[#161F30]/80 border border-slate-700/40 hover:border-blue-500/50',
+        'bg-card dark:bg-[#161F30]/90 border border-line dark:border-slate-700/40 hover:border-accent/60',
         'hover:shadow-2xl hover:shadow-black/50 hover:-translate-y-1.5 active:scale-95',
-        'transition-all duration-300 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 touch-manipulation',
+        'transition-all duration-300 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 touch-manipulation',
         className
       )}
       role="button"
@@ -88,7 +88,7 @@ export function MediaCard({
       }}
     >
       {/* 2:3 黄金比例海报容器 */}
-      <div className="relative aspect-[2/3] w-full overflow-hidden bg-slate-900/80">
+      <div className="relative aspect-[2/3] w-full overflow-hidden bg-chip">
         {imgSrc && imgStage !== 2 ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -137,7 +137,7 @@ export function MediaCard({
         </div>
 
         {/* 底部多层暗部渐变遮罩 */}
-        <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-[#0B0F19] via-[#0B0F19]/60 to-transparent pointer-events-none" />
+        <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/80 via-black/40 to-transparent pointer-events-none" />
 
         {/* 左下角：集数/状态呼吸灯强提示胶囊 */}
         <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between pointer-events-none z-10">
@@ -158,7 +158,7 @@ export function MediaCard({
 
         {/* Hover 时悬浮浮现的半透明播放按钮 (Netflix 质感) */}
         <div className="absolute inset-0 bg-black/40 backdrop-blur-[1.5px] opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center pointer-events-none z-20">
-          <div className="w-12 h-12 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-xl shadow-blue-600/50 transform scale-75 group-hover:scale-100 transition-transform duration-300">
+          <div className="w-12 h-12 rounded-full bg-accent text-on-accent flex items-center justify-center shadow-xl shadow-accent/50 transform scale-75 group-hover:scale-100 transition-transform duration-300">
             <svg className="w-6 h-6 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
               <path d="M8 5v14l11-7z" />
             </svg>
@@ -169,13 +169,13 @@ export function MediaCard({
       {/* 卡片底部标题与副文本 */}
       <div className="p-2.5 flex flex-col flex-1 justify-between gap-1">
         <h3
-          className="text-xs sm:text-sm font-semibold text-slate-100 truncate group-hover:text-blue-400 transition-colors"
+          className="text-xs sm:text-sm font-semibold text-content truncate group-hover:text-accent transition-colors"
           title={item.title}
         >
           {item.title}
         </h3>
         {showSubtitle && subtitleText && (
-          <p className="text-[11px] text-slate-400 truncate leading-relaxed">
+          <p className="text-[11px] text-muted truncate leading-relaxed">
             {subtitleText}
           </p>
         )}

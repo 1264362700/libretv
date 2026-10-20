@@ -6,7 +6,6 @@ import { useQuery } from '@tanstack/react-query';
 import { Header } from '@/components/header';
 import { SiteFooter } from '@/components/site-footer';
 import { DoubanCard, AggregatedCard, aggregateResults } from '@/components/video-card';
-import { DetailModal } from '@/components/detail-modal';
 import { MobileFilterSheet } from '@/components/mobile-filter-sheet';
 import { api } from '@/lib/client-api';
 import { useAuth } from '@/components/auth';
@@ -15,7 +14,7 @@ import { buildWatchUrl, cn, validateSourceUrl } from '@/lib/utils';
 import { triggerTopProgress } from '@/components/top-progress-bar';
 import { isShortDramaTitle } from '@/lib/short-drama';
 import { useAppStore, resolveSource, isInDisabledSubscription, isSourceDisabled } from '@/lib/store';
-import type { SearchResultItem, SourceSearchOutcome, DoubanItem, SourceConfig } from '@/lib/types';
+import type { SourceSearchOutcome, DoubanItem, SourceConfig } from '@/lib/types';
 import { fetchDoubanFilter } from '@/lib/douban-api';
 
 type ChannelType = 'movie' | 'tv' | 'short_drama' | 'ai' | 'anime' | 'variety' | 'documentary';
@@ -207,8 +206,6 @@ function CatalogContent() {
   }, [catalogKeyword]);
 
   const [streamedOutcomes, setStreamedOutcomes] = useState<SourceSearchOutcome[]>([]);
-  const [detailItem, setDetailItem] = useState<SearchResultItem | null>(null);
-
   const [jumpPageInput, setJumpPageInput] = useState('');
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
   const [showBackToTop, setShowBackToTop] = useState(false);
@@ -531,7 +528,7 @@ function CatalogContent() {
   );
 
   return (
-    <div className="min-h-screen flex flex-col bg-bg text-content">
+    <div className="min-h-screen flex flex-col bg-page text-content transition-colors duration-200">
       <Header showSearch />
 
       <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-5 space-y-4 pb-28 md:pb-8 overflow-x-hidden">
@@ -966,12 +963,12 @@ function CatalogContent() {
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3 sm:gap-4 md:gap-4.5">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
               {searchGroups.map((group) => (
                 <AggregatedCard
                   key={group.key}
                   group={group}
-                  onOpen={(item) => setDetailItem(item)}
+                  onOpen={() => handleCardClick(group.name, undefined, group.year)}
                 />
               ))}
             </div>
@@ -1146,11 +1143,6 @@ function CatalogContent() {
               <polyline points="18 15 12 9 6 15" />
             </svg>
           </button>
-        )}
-
-        {/* 跨源搜索详情弹窗 */}
-        {detailItem && (
-          <DetailModal item={detailItem} onClose={() => setDetailItem(null)} />
         )}
       </main>
 

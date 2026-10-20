@@ -8,7 +8,6 @@ import { HeroBillboardBanner } from '@/components/hero-billboard-banner';
 import { MediaCarouselRow } from '@/components/media-carousel-row';
 import { WeeklySchedule } from '@/components/weekly-schedule';
 import { MediaCard } from '@/components/media-card';
-import { DetailModal } from '@/components/detail-modal';
 import { AggregatedCard, aggregateResults } from '@/components/video-card';
 import {
   useAppStore,
@@ -17,7 +16,7 @@ import {
   isSourceDisabled,
 } from '@/lib/store';
 import { api } from '@/lib/client-api';
-import type { SearchResultItem, SourceSearchOutcome } from '@/lib/types';
+import type { SourceSearchOutcome } from '@/lib/types';
 import {
   SearchHistoryDropdown,
   useSearchHistory,
@@ -59,7 +58,6 @@ function HomeContent() {
   const subscriptions = useAppStore((s) => s.subscriptions);
 
   const [input, setInput] = useState(urlQuery);
-  const [detailItem, setDetailItem] = useState<SearchResultItem | null>(null);
   const [streamedOutcomes, setStreamedOutcomes] = useState<SourceSearchOutcome[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -266,7 +264,7 @@ function HomeContent() {
   useEffect(() => setVisibleCount(RESULT_PAGE_SIZE), [groups]);
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#0B0F19] text-slate-100">
+    <div className="min-h-screen flex flex-col bg-page text-content transition-colors duration-200">
       {/* 1. 顶部沉浸式毛玻璃导航栏 */}
       <Header />
 
@@ -274,15 +272,15 @@ function HomeContent() {
         {/* 搜索模式：直接展示搜索结果 */}
         {urlQuery ? (
           <section className="space-y-4">
-            <div className="flex items-center justify-between py-2 border-b border-slate-800">
-              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+            <div className="flex items-center justify-between py-2 border-b border-line">
+              <h2 className="text-lg font-bold text-content flex items-center gap-2">
                 <span>🔍 搜索结果:</span>
-                <span className="text-blue-400">“{urlQuery}”</span>
+                <span className="text-accent">“{urlQuery}”</span>
               </h2>
               <button
                 type="button"
                 onClick={() => router.push('/')}
-                className="text-xs text-slate-400 hover:text-white px-3 py-1 rounded-lg bg-slate-800/80"
+                className="text-xs text-muted hover:text-content px-3 py-1.5 rounded-lg bg-chip hover:bg-hover transition-colors cursor-pointer border border-line/50"
               >
                 返回首页大厅
               </button>
@@ -290,18 +288,20 @@ function HomeContent() {
 
             {visibleGroups.length > 0 ? (
               <>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
                   {visibleGroups.map((group) => (
                     <AggregatedCard
                       key={group.key}
                       group={group}
-                      onOpen={(item) => {
+                      onOpen={() => {
                         const watchUrl = buildWatchUrl({
-                          sourceKey: item.sourceKey,
-                          vodId: item.vodId,
-                          title: item.name,
-                          sourceUrl: item.sourceUrl,
+                          title: group.name,
+                          year: group.year,
                         });
+                        if (!verified) {
+                          router.push(`/login?redirect=${encodeURIComponent(watchUrl)}`);
+                          return;
+                        }
                         router.push(watchUrl);
                       }}
                     />
@@ -310,7 +310,7 @@ function HomeContent() {
                 {visibleCount < groups.length && (
                   <div className="flex justify-center mt-6">
                     <button
-                      className="px-6 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold"
+                      className="px-6 py-2.5 rounded-xl bg-chip hover:bg-hover text-xs font-semibold text-content border border-line/60 transition-all cursor-pointer"
                       onClick={() => setVisibleCount((v) => v + RESULT_PAGE_SIZE)}
                     >
                       加载更多（还剩 {groups.length - visibleCount} 部）
@@ -319,7 +319,7 @@ function HomeContent() {
                 )}
               </>
             ) : isSearching ? (
-              <div className="py-20 text-center text-slate-400">正在流式并发检索几十个苹果CMS播放源…</div>
+              <div className="py-20 text-center text-muted">正在流式并发检索几十个苹果CMS播放源…</div>
             ) : (
               <EmptyState
                 icon="search"
@@ -354,14 +354,14 @@ function HomeContent() {
                     className={cn(
                       'flex items-stretch min-h-12 pl-4 border transition-all duration-200',
                       searchHistory.visible
-                        ? 'rounded-t-xl rounded-b-none border-blue-500 bg-[#161F30]'
-                        : 'rounded-xl border-slate-700/60 bg-[#161F30]/90 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/30'
+                        ? 'rounded-t-xl rounded-b-none border-accent bg-surface-raised shadow-lg'
+                        : 'rounded-xl border-line bg-surface/90 hover:border-accent/40 focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/30 shadow-sm'
                     )}
                   >
                     <input
                       ref={inputRef}
                       role="combobox"
-                      className="flex-1 min-w-0 pr-2 bg-transparent text-sm text-white placeholder:text-slate-500 focus:outline-none"
+                      className="flex-1 min-w-0 pr-2 bg-transparent text-sm text-content placeholder:text-faint focus:outline-none"
                       placeholder="搜索全网海量电影、电视剧、动漫、短剧..."
                       value={input}
                       maxLength={100}
@@ -377,7 +377,7 @@ function HomeContent() {
                     />
                     <button
                       type="submit"
-                      className="px-5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-r-xl transition-all active:scale-95 cursor-pointer"
+                      className="px-5 bg-accent hover:bg-accent-hover text-on-accent text-xs font-bold rounded-r-xl transition-all active:scale-95 cursor-pointer"
                     >
                       搜索
                     </button>
@@ -398,13 +398,13 @@ function HomeContent() {
 
               {/* 热门搜索推荐词 */}
               <div className="flex flex-wrap items-center justify-center gap-1.5 mt-3 max-w-2xl">
-                <span className="text-[11px] text-slate-500">大家都在搜:</span>
+                <span className="text-[11px] text-faint">大家都在搜:</span>
                 {TRENDING_SEARCH_KEYWORDS.slice(0, 6).map((kw) => (
                   <button
                     key={kw}
                     type="button"
                     onClick={() => pickHistory(kw)}
-                    className="text-[11px] text-slate-400 hover:text-blue-400 hover:bg-slate-800/80 px-2 py-0.5 rounded-md transition-colors"
+                    className="text-[11px] text-muted hover:text-accent hover:bg-chip px-2 py-0.5 rounded-md transition-colors cursor-pointer"
                   >
                     {kw}
                   </button>
@@ -484,28 +484,28 @@ function HomeContent() {
             />
 
             {/* 6. 板块六：全量片库多维筛选器 (All-in-One Media Explorer) */}
-            <section className="space-y-4 pt-4 border-t border-slate-800">
+            <section className="space-y-4 pt-4 border-t border-line">
               <div className="flex items-center justify-between pb-2">
                 <div className="flex items-center gap-2">
                   <span className="text-xl sm:text-2xl">🍿</span>
-                  <h2 className="text-base sm:text-lg font-extrabold text-white">
+                  <h2 className="text-base sm:text-lg font-extrabold text-content">
                     全量片库多维探索
                   </h2>
                 </div>
                 <button
                   type="button"
                   onClick={() => setFilterPage((p) => (p >= 5 ? 1 : p + 1))}
-                  className="text-xs text-blue-400 hover:text-blue-300 px-3 py-1 rounded-lg bg-slate-800/80 cursor-pointer"
+                  className="text-xs text-accent hover:text-accent-hover px-3 py-1.5 rounded-lg bg-chip hover:bg-hover cursor-pointer border border-line/50 transition-colors"
                 >
                   换一组 ›
                 </button>
               </div>
 
               {/* 四维胶囊筛选栏 */}
-              <div className="p-4 rounded-2xl bg-[#161F30]/60 border border-slate-800/80 space-y-3 text-xs">
+              <div className="p-4 rounded-2xl bg-surface/50 border border-line/60 space-y-3 text-xs">
                 {/* 频道 */}
                 <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-                  <span className="text-slate-500 shrink-0 font-medium">频道:</span>
+                  <span className="text-faint shrink-0 font-medium">频道:</span>
                   {(['全部', '电视剧', '电影', '动漫', '综艺'] as const).map((ch) => (
                     <button
                       key={ch}
@@ -517,8 +517,8 @@ function HomeContent() {
                       className={cn(
                         'px-2.5 py-1 rounded-lg font-medium transition-all shrink-0 cursor-pointer',
                         filterChannel === ch
-                          ? 'bg-blue-600 text-white font-bold'
-                          : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                          ? 'bg-accent text-on-accent font-bold shadow-xs'
+                          : 'text-muted hover:text-content hover:bg-hover bg-chip/40'
                       )}
                     >
                       {ch}
@@ -528,7 +528,7 @@ function HomeContent() {
 
                 {/* 类型 */}
                 <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-                  <span className="text-slate-500 shrink-0 font-medium">类型:</span>
+                  <span className="text-faint shrink-0 font-medium">类型:</span>
                   {['全部', '科幻', '悬疑', '动作', '喜剧', '爱情', '犯罪', '奇幻', '战争'].map(
                     (g) => (
                       <button
@@ -541,8 +541,8 @@ function HomeContent() {
                         className={cn(
                           'px-2.5 py-1 rounded-lg font-medium transition-all shrink-0 cursor-pointer',
                           filterGenre === g
-                            ? 'bg-blue-600 text-white font-bold'
-                            : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                            ? 'bg-accent text-on-accent font-bold shadow-xs'
+                            : 'text-muted hover:text-content hover:bg-hover bg-chip/40'
                         )}
                       >
                         {g}
@@ -553,7 +553,7 @@ function HomeContent() {
 
                 {/* 地区 */}
                 <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-                  <span className="text-slate-500 shrink-0 font-medium">地区:</span>
+                  <span className="text-faint shrink-0 font-medium">地区:</span>
                   {['全部', '华语', '欧美', '韩国', '日本', '英国'].map((r) => (
                     <button
                       key={r}
@@ -565,8 +565,8 @@ function HomeContent() {
                       className={cn(
                         'px-2.5 py-1 rounded-lg font-medium transition-all shrink-0 cursor-pointer',
                         filterRegion === r
-                          ? 'bg-blue-600 text-white font-bold'
-                          : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                          ? 'bg-accent text-on-accent font-bold shadow-xs'
+                          : 'text-muted hover:text-content hover:bg-hover bg-chip/40'
                       )}
                     >
                       {r}
@@ -575,8 +575,8 @@ function HomeContent() {
                 </div>
 
                 {/* 排序 */}
-                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pt-1 border-t border-slate-800/60">
-                  <span className="text-slate-500 shrink-0 font-medium">排序:</span>
+                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pt-1 border-t border-line/40">
+                  <span className="text-faint shrink-0 font-medium">排序:</span>
                   {[
                     { id: 'U' as const, label: '近期热门' },
                     { id: 'R' as const, label: '最新上线' },
@@ -592,8 +592,8 @@ function HomeContent() {
                       className={cn(
                         'px-2.5 py-1 rounded-lg font-medium transition-all shrink-0 cursor-pointer',
                         filterSort === s.id
-                          ? 'bg-blue-600 text-white font-bold'
-                          : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                          ? 'bg-accent text-on-accent font-bold shadow-xs'
+                          : 'text-muted hover:text-content hover:bg-hover bg-chip/40'
                       )}
                     >
                       {s.label}
@@ -608,7 +608,7 @@ function HomeContent() {
                   {Array.from({ length: 12 }).map((_, i) => (
                     <div
                       key={i}
-                      className="aspect-[2/3] rounded-xl bg-slate-800/60 animate-pulse border border-slate-700/40"
+                      className="aspect-[2/3] rounded-xl bg-chip animate-pulse border border-line/40"
                     />
                   ))}
                 </div>
@@ -624,7 +624,7 @@ function HomeContent() {
                   ))}
                 </div>
               ) : (
-                <div className="py-12 text-center text-xs text-slate-500 border border-dashed border-slate-800 rounded-xl bg-slate-900/30">
+                <div className="py-12 text-center text-xs text-muted border border-dashed border-line/60 rounded-xl bg-surface/30">
                   未找到符合条件的影片，请尝试调整筛选条件
                 </div>
               )}
@@ -634,7 +634,6 @@ function HomeContent() {
       </main>
 
       <SiteFooter />
-      <DetailModal item={detailItem} onClose={() => setDetailItem(null)} />
     </div>
   );
 }

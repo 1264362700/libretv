@@ -16,6 +16,7 @@ import { triggerTopProgress } from '@/components/top-progress-bar';
 import { isShortDramaTitle } from '@/lib/short-drama';
 import { useAppStore, resolveSource, isInDisabledSubscription, isSourceDisabled } from '@/lib/store';
 import type { SearchResultItem, SourceSearchOutcome, DoubanItem, SourceConfig } from '@/lib/types';
+import { fetchDoubanFilter } from '@/lib/douban-api';
 
 type ChannelType = 'movie' | 'tv' | 'short_drama' | 'ai' | 'anime' | 'variety' | 'documentary';
 
@@ -366,8 +367,6 @@ function CatalogContent() {
     return '热门';
   }, [currentRegion, currentGenre]);
 
-  const pageStart = (currentPage - 1) * PAGE_SIZE;
-
   // 1. 全网采集源直搜 React Query（当 URL 存在 ?q= 触发）
   const vodSearchQuery = useQuery({
     queryKey: ['catalog-vod-search', urlQuery, selectedKeys, yellowFilter],
@@ -415,69 +414,75 @@ function CatalogContent() {
       catalogKeyword,
     ],
     queryFn: async ({ signal }) => {
-      // 单一顶级全维检索源（天涯影视标准接口），统一支持所有搜索条件、细分子类与 500+ 页真分页
-      const sourceUrl = 'https://tyyszyapi.com/api.php/provide/vod';
-      const typeIdNum = rawCmsTypeId && !Number.isNaN(parseInt(rawCmsTypeId, 10)) ? parseInt(rawCmsTypeId, 10) : undefined;
+      // 门面层：全面采用豆瓣官方多维分类筛选引擎，零采集站请求、零杂乱水印
+      let tags = '电影';
+      if (currentChannel === 'tv' || currentChannel === 'short_drama') tags = '电视剧';
+      else if (currentChannel === 'anime') tags = '动漫';
+      else if (currentChannel === 'variety') tags = '综艺';
+      else if (currentChannel === 'documentary') tags = '纪录片';
+
+      let sort = 'U';
+      if (currentSort === 'time') sort = 'R';
+      else if (currentSort === 'rank') sort = 'S';
+
+      let genres = '';
+      if (currentChannel === 'short_drama') {
+        genres = currentGenre !== '全部' ? currentGenre : '短片';
+      } else if (currentChannel === 'ai') {
+        genres = '科幻';
+      } else if (currentGenre !== '全部') {
+        genres = currentGenre;
+      }
+
+      let countries = '';
+      if (currentRegion !== '全部') {
+        if (currentRegion === '大陆') countries = '中国大陆';
+        else if (currentRegion === '香港') countries = '中国香港';
+        else if (currentRegion === '台湾') countries = '中国台湾';
+        else countries = currentRegion;
+      }
+
+      let yearRange = '';
+      if (currentYear !== '全部') {
+        if (/^\d{4}$/.test(currentYear)) {
+          yearRange = `${currentYear},${currentYear}`;
+        } else if (currentYear.includes('年代')) {
+          const baseYear = parseInt(currentYear, 10);
+          if (baseYear) yearRange = `${baseYear},${baseYear + 9}`;
+        }
+      }
+
+      const start = (currentPage - 1) * PAGE_SIZE;
 
       try {
-        const res = await api.cmsCatalog(
+        const res = await fetchDoubanFilter(
           {
-            url: sourceUrl,
-            type: currentChannel,
-            typeId: typeIdNum,
-            keyword: catalogKeyword || undefined,
-            page: currentPage,
-            pageSize: PAGE_SIZE,
-            filterAdult: yellowFilter,
+            tags,
+            sort,
+            start,
+            genres: genres || undefined,
+            countries: countries || undefined,
+            yearRange: yearRange || undefined,
           },
           signal
         );
-        if (res.items && res.items.length > 0) {
-          let filtered = res.items;
-          // 按年份条件过滤
-          if (currentYear !== '全部') {
-            filtered = filtered.filter((i) => i.year === currentYear);
-          }
-          // 按地区条件过滤
-          if (currentRegion !== '全部') {
-            filtered = filtered.filter((i) => (i.region || i.area || '').includes(currentRegion));
-          }
-          return {
-            items: filtered,
-            total: res.total,
-            pagecount: res.pagecount,
-            subCategories: res.subCategories,
-          };
-        }
-      } catch (err) {
-        console.warn('[Catalog] 统一采集源查询异常，平滑切换备用引擎:', err);
-      }
 
-      // 降级兜底：360 多维片库
-      try {
-        if (currentChannel === 'short_drama') {
-          const res = await api.hotList('short_drama', signal, pageStart, { page: currentPage });
-          return { items: res.items, total: 500, pagecount: 25, subCategories: [] };
-        }
-        if (currentChannel === 'ai') {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const res = await api.douban('movie' as any, '科幻', pageStart, PAGE_SIZE, signal, currentSort, {
-            area: currentRegion,
-            genre: '科幻',
-            year: currentYear,
-          });
-          const mapped = res.items.map((item) => ({ ...item, rating: 'AIGC/科幻' }));
-          return { items: mapped, total: res.total ?? res.items.length, pagecount: 25, subCategories: [] };
-        }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const res = await api.douban(currentChannel as any, queryTag, pageStart, PAGE_SIZE, signal, currentSort, {
-          area: currentRegion,
-          genre: currentGenre,
-          year: currentYear,
-        });
-        const total = res.total ?? res.items.length;
-        return { items: res.items, total, pagecount: Math.ceil(total / PAGE_SIZE), subCategories: [] };
-      } catch {
+        const mappedItems: DoubanItem[] = res.items.map((item) => ({
+          id: item.id,
+          title: item.title,
+          cover: item.cover,
+          rating: item.rate,
+          year: item.year,
+        }));
+
+        return {
+          items: mappedItems,
+          total: 500, // 豆瓣多维分类支持多页深度浏览
+          pagecount: 25,
+          subCategories: [],
+        };
+      } catch (err) {
+        console.warn('[Catalog] 豆瓣多维筛选接口异常:', err);
         return { items: [], total: 0, pagecount: 1, subCategories: [] };
       }
     },
@@ -496,11 +501,11 @@ function CatalogContent() {
     Math.min(500, catalogQuery.data?.pagecount ?? Math.ceil(total / PAGE_SIZE))
   );
 
-  const cmsSubCategories = catalogQuery.data?.subCategories || [];
+  const cmsSubCategories = (catalogQuery.data?.subCategories || []) as Array<{ id: string | number; name: string }>;
 
-  // 点击卡片直接进入播放前进行登录校验
-  const handleCardClick = (title: string) => {
-    const watchUrl = buildWatchUrl({ title });
+  // 点击卡片直接进入播放前进行登录校验（透传 title, doubanId, year 激活流式秒播内核）
+  const handleCardClick = (title: string, doubanId?: string, year?: string) => {
+    const watchUrl = buildWatchUrl({ title, doubanId, year });
     if (!verified) {
       router.push(`/login?redirect=${encodeURIComponent(watchUrl)}`);
       return;
@@ -1012,7 +1017,7 @@ function CatalogContent() {
                 <DoubanCard
                   key={item.id}
                   item={item}
-                  onClick={() => handleCardClick(item.title)}
+                  onClick={() => handleCardClick(item.title, item.id, item.year)}
                 />
               ))}
             </div>

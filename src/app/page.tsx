@@ -41,9 +41,9 @@ function HomeContent() {
   const { toast } = useToast();
   const urlQuery = searchParams.get('s') || '';
 
-  // 播放前强制登录校验
-  const handlePlayTitle = (title: string) => {
-    const watchUrl = buildWatchUrl({ title });
+  // 播放前强制登录校验（透传 title, doubanId, year 激活流式秒播内核）
+  const handlePlayTitle = (title: string, doubanId?: string, year?: string) => {
+    const watchUrl = buildWatchUrl({ title, doubanId, year });
     if (!verified) {
       router.push(`/login?redirect=${encodeURIComponent(watchUrl)}`);
       return;

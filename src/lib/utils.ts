@@ -102,12 +102,16 @@ export function buildWatchUrl(params: {
   sourceUrl?: string;
   detail?: string;
   position?: number;
+  doubanId?: string;
+  year?: string;
 }): string {
   const sp = new URLSearchParams();
   if (params.sourceKey) sp.set('source', params.sourceKey);
   if (params.vodId) sp.set('id', params.vodId);
   if (typeof params.index === 'number') sp.set('index', String(params.index));
   if (params.title) sp.set('title', params.title);
+  if (params.doubanId) sp.set('douban_id', params.doubanId);
+  if (params.year) sp.set('year', params.year);
   if (params.episodeUrl) sp.set('url', params.episodeUrl);
   if (params.sourceUrl) sp.set('sourceUrl', params.sourceUrl);
   if (params.detail) sp.set('detail', params.detail);

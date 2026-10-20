@@ -34,6 +34,8 @@ import {
 import { buildWatchUrl, cn } from '@/lib/utils';
 import { SmartImage } from '@/components/smart-image';
 import { DoubanCard } from '@/components/video-card';
+import { StreamSourceMatcher, type MatchedSource } from '@/lib/stream-source-matcher';
+import { fetchDoubanDetail } from '@/lib/douban-api';
 
 interface CandidateItem {
   source: SourceConfig;
@@ -97,10 +99,26 @@ function WatchContent() {
   const vodId = searchParams.get('id') || '';
   const directUrl = searchParams.get('url') || '';
   const titleParam = searchParams.get('title') || '';
+  const doubanIdParam = searchParams.get('douban_id') || '';
+  const yearParam = searchParams.get('year') || '';
   const indexParam = parseInt(searchParams.get('index') || '0', 10) || 0;
 
   const [reversed, setReversed] = useState(false);
   const [switchOpen, setSwitchOpen] = useState(false);
+
+  // 豆瓣官方详情（门面层元数据）：获取权威长简介、评分、演职员名单与高清封面
+  const doubanQuery = useQuery({
+    queryKey: ['douban-detail-watch', doubanIdParam],
+    queryFn: ({ signal }) => fetchDoubanDetail(doubanIdParam, signal),
+    enabled: Boolean(doubanIdParam),
+    staleTime: 24 * 3600_000,
+  });
+
+  // 流式并发匹配状态
+  const [streamProgress, setStreamProgress] = useState<{ completed: number; total: number; matched: number } | null>(null);
+  const [streamMatchedList, setStreamMatchedList] = useState<MatchedSource[]>([]);
+  const [matchingDone, setMatchingDone] = useState(false);
+  const [isMatching, setIsMatching] = useState(false);
 
   // 记录当前播放秒数，供换源时无缝保留时间戳
   const currentPosRef = useRef(0);
@@ -235,24 +253,64 @@ function WatchContent() {
   });
 
   const candidates = useMemo(() => {
-    const list = candidatesQuery.data ?? [];
+    const list = [...(candidatesQuery.data ?? [])];
+    const seen = new Set(list.map((c) => c.source.key));
+
+    for (const sm of streamMatchedList) {
+      if (!seen.has(sm.source.key)) {
+        seen.add(sm.source.key);
+        list.push({
+          source: sm.source,
+          result: {
+            sourceKey: sm.source.key,
+            sourceName: sm.source.name,
+            vodId: sm.vodId,
+            name: sm.vodName || videoTitle,
+            sourceUrl: sm.source.url,
+            remarks: sm.vodYear ? `${sm.vodYear} · 匹配度 ${sm.score}%` : `匹配度 ${sm.score}%`,
+          } as SearchResultItem,
+        });
+      }
+    }
+
     if (source && vodId && !list.some((c) => c.source.key === source.key)) {
-      return [{ source, result: { sourceKey: source.key, vodId, name: videoTitle } as SearchResultItem }, ...list];
+      list.unshift({ source, result: { sourceKey: source.key, vodId, name: videoTitle } as SearchResultItem });
     }
     return list;
-  }, [candidatesQuery.data, source, vodId, videoTitle]);
+  }, [candidatesQuery.data, streamMatchedList, source, vodId, videoTitle]);
 
-  // 影片元数据提取（当前源详情优先，跨源检索候选兜底）
+  // 影片元数据提取（豆瓣官方门面优先，采集源详情与候选兜底）
+  const doubanMeta = doubanQuery.data;
   const videoInfo = detailQuery.data?.videoInfo;
-  const coverUrl = videoInfo?.cover || candidates.find((c) => c.result.pic)?.result.pic;
-  const yearText = videoInfo?.year || candidates.find((c) => c.result.year)?.result.year;
-  const typeText = videoInfo?.typeName || candidates.find((c) => c.result.typeName)?.result.typeName;
-  const areaText = videoInfo?.area || candidates.find((c) => c.result.area)?.result.area;
-  const remarksText = videoInfo?.remarks || candidates.find((c) => c.result.remarks)?.result.remarks;
+  const coverUrl = doubanMeta?.cover || videoInfo?.cover || candidates.find((c) => c.result.pic)?.result.pic;
+  const yearText = doubanMeta?.year || videoInfo?.year || candidates.find((c) => c.result.year)?.result.year;
+  const typeText =
+    doubanMeta?.genres && doubanMeta.genres.length > 0
+      ? doubanMeta.genres.join(' / ')
+      : videoInfo?.typeName || candidates.find((c) => c.result.typeName)?.result.typeName;
+  const areaText =
+    doubanMeta?.countries && doubanMeta.countries.length > 0
+      ? doubanMeta.countries.join(' / ')
+      : videoInfo?.area || candidates.find((c) => c.result.area)?.result.area;
+  const remarksText =
+    doubanMeta?.rate && doubanMeta.rate !== '暂无评分'
+      ? `豆瓣评分 ★${doubanMeta.rate}`
+      : videoInfo?.remarks || candidates.find((c) => c.result.remarks)?.result.remarks;
 
-  const actorList = useMemo(() => parseNames(videoInfo?.actor), [videoInfo?.actor]);
-  const directorList = useMemo(() => parseNames(videoInfo?.director), [videoInfo?.director]);
-  const cleanDesc = useMemo(() => sanitizeDesc(videoInfo?.desc), [videoInfo?.desc]);
+  const actorList = useMemo(() => {
+    if (doubanMeta?.actors && doubanMeta.actors.length > 0) return doubanMeta.actors;
+    return parseNames(videoInfo?.actor);
+  }, [doubanMeta?.actors, videoInfo?.actor]);
+
+  const directorList = useMemo(() => {
+    if (doubanMeta?.directors && doubanMeta.directors.length > 0) return doubanMeta.directors;
+    return parseNames(videoInfo?.director);
+  }, [doubanMeta?.directors, videoInfo?.director]);
+
+  const cleanDesc = useMemo(() => {
+    if (doubanMeta?.intro) return doubanMeta.intro;
+    return sanitizeDesc(videoInfo?.desc);
+  }, [doubanMeta?.intro, videoInfo?.desc]);
 
   const [descExpanded, setDescExpanded] = useState(false);
   useEffect(() => {
@@ -521,22 +579,59 @@ function WatchContent() {
 
   const orderedEpisodes = reversed ? [...episodes].map((_, i) => episodes.length - 1 - i) : episodes.map((_, i) => i);
 
-  // 当从片库/首页推荐通过标题直接点播进入（无 sourceKey 时），自动挑选第一条匹配的线路起播
+  // 壳肉分离内核：当从豆瓣卡片直接点播进入（无 sourceKey 时），启动 StreamSourceMatcher 流式并发秒播
   useEffect(() => {
-    if (!sourceKey && videoTitle && videoTitle !== '未知视频' && candidatesQuery.data && candidatesQuery.data.length > 0) {
-      const best = candidatesQuery.data[0];
-      router.replace(
-        buildWatchUrl({
-          sourceKey: best.source.key,
-          vodId: best.result.vodId,
-          index: 0,
-          title: videoTitle,
-          sourceUrl: best.source.url,
-          detail: best.source.detail,
-        })
-      );
-    }
-  }, [sourceKey, videoTitle, candidatesQuery.data, router]);
+    if (sourceKey && vodId) return;
+    if (!titleParam || !verified || allCandidateSources.length === 0) return;
+
+    setIsMatching(true);
+    setMatchingDone(false);
+    setStreamMatchedList([]);
+
+    const matcher = new StreamSourceMatcher(
+      {
+        title: titleParam,
+        doubanId: doubanIdParam || undefined,
+        year: yearParam || undefined,
+      },
+      allCandidateSources,
+      {
+        concurrency: 6,
+        timeoutMs: 5000,
+        onSourceFound: (matched, isFirst) => {
+          setStreamMatchedList((prev) => {
+            if (prev.some((m) => m.source.key === matched.source.key)) return prev;
+            return [...prev, matched];
+          });
+          if (isFirst) {
+            // 首源秒播！立刻替换 URL 驱动播放器初始化，不阻塞其他源后台加载
+            router.replace(
+              buildWatchUrl({
+                sourceKey: matched.source.key,
+                vodId: matched.vodId,
+                index: indexParam,
+                title: titleParam,
+                doubanId: doubanIdParam || undefined,
+                year: yearParam || undefined,
+                sourceUrl: matched.source.url,
+                detail: matched.source.detail,
+              })
+            );
+          }
+        },
+        onProgress: (p) => {
+          setStreamProgress(p);
+        },
+        onComplete: () => {
+          setIsMatching(false);
+          setMatchingDone(true);
+        },
+      }
+    );
+
+    matcher.start();
+    return () => matcher.abort();
+  }, [sourceKey, vodId, titleParam, doubanIdParam, yearParam, verified, allCandidateSources, router, indexParam]);
 
   if (!verified) {
     return (
@@ -548,17 +643,21 @@ function WatchContent() {
   }
 
   if (!source) {
-    if (titleParam && candidatesQuery.isLoading) {
+    if (titleParam && !matchingDone) {
       return (
         <div className="min-h-screen flex flex-col items-center justify-center gap-3 px-4">
           <Spinner size="lg" />
-          <p className="text-sm text-content font-medium">正在全网匹配「{titleParam}」最佳线路并起播...</p>
-          <p className="text-xs text-faint">已搜寻 {allCandidateSources.length} 个启用数据源</p>
+          <p className="text-sm text-content font-medium">正在流式并发匹配「{titleParam}」播放源并秒开...</p>
+          <p className="text-xs text-faint">
+            {streamProgress
+              ? `已检测 ${streamProgress.completed}/${streamProgress.total} 个源，命中 ${streamProgress.matched} 条线路`
+              : `已连接 ${allCandidateSources.length} 个启用数据源并发池`}
+          </p>
         </div>
       );
     }
 
-    if (titleParam && candidatesQuery.isSuccess && (!candidatesQuery.data || candidatesQuery.data.length === 0)) {
+    if (titleParam && matchingDone && streamMatchedList.length === 0) {
       return (
         <div className="min-h-screen flex items-center justify-center px-4">
           <div className="text-center max-w-md">
@@ -722,7 +821,9 @@ function WatchContent() {
                     播放线路
                   </span>
                   <span className="text-[11px] text-faint">
-                    {candidatesQuery.isLoading ? '正在探测可用线路...' : `共 ${candidates.length} 条线路`}
+                    {isMatching || candidatesQuery.isLoading
+                      ? '正在流式并发探测可用线路...'
+                      : `共 ${candidates.length} 条高速线路`}
                   </span>
                 </div>
                 <button

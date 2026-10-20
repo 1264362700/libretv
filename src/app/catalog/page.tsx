@@ -12,6 +12,7 @@ import { api } from '@/lib/client-api';
 import { useAuth } from '@/components/auth';
 import { useTranslation } from '@/lib/i18n';
 import { buildWatchUrl, cn, validateSourceUrl } from '@/lib/utils';
+import { triggerTopProgress } from '@/components/top-progress-bar';
 import { isShortDramaTitle } from '@/lib/short-drama';
 import { useAppStore, resolveSource, isInDisabledSubscription, isSourceDisabled } from '@/lib/store';
 import type { SearchResultItem, SourceSearchOutcome, DoubanItem, SourceConfig } from '@/lib/types';
@@ -134,7 +135,6 @@ const CHANNEL_HOT_KEYWORDS: Record<ChannelType, string[]> = {
   documentary: ['地球脉动', '蓝色星球', '如果国宝会说话', '舌尖上的中国', '航拍中国'],
 };
 
-const BANGUMI_WEEKDAYS = ['全部', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 const YEARS = ['全部', '2026', '2025', '2024', '2023', '2022', '2021', '2020', '2019', '2018', '2017', '2016', '2015', '2010', '2000'];
 
 const SORTS = [
@@ -415,10 +415,11 @@ function CatalogContent() {
       catalogKeyword,
     ],
     queryFn: async ({ signal }) => {
-      // 1. 点播采集源全量原生片库（TVBox / 影视仓标准，500+页真分页最新入库与细分子类下钻）
-      if (currentSource === 'cms') {
-        const sourceUrl = activeCmsSource?.url || 'https://tyyszyapi.com/api.php/provide/vod';
-        const typeIdNum = rawCmsTypeId && !Number.isNaN(parseInt(rawCmsTypeId, 10)) ? parseInt(rawCmsTypeId, 10) : undefined;
+      // 单一顶级全维检索源（天涯影视标准接口），统一支持所有搜索条件、细分子类与 500+ 页真分页
+      const sourceUrl = 'https://tyyszyapi.com/api.php/provide/vod';
+      const typeIdNum = rawCmsTypeId && !Number.isNaN(parseInt(rawCmsTypeId, 10)) ? parseInt(rawCmsTypeId, 10) : undefined;
+
+      try {
         const res = await api.cmsCatalog(
           {
             url: sourceUrl,
@@ -427,97 +428,58 @@ function CatalogContent() {
             keyword: catalogKeyword || undefined,
             page: currentPage,
             pageSize: PAGE_SIZE,
-            sourceKey: activeCmsSource?.key,
             filterAdult: yellowFilter,
           },
           signal
         );
-        return { items: res.items, total: res.total, pagecount: res.pagecount, subCategories: res.subCategories };
-      }
-
-      // 2. 爱奇艺官方大厅（大厂官方片库，支持 100+ 页真分页与热播/最新切换）
-      if (currentSource === 'iqiyi') {
-        let hotKey: 'iqiyi_tv' | 'iqiyi_movie' | 'iqiyi_anime' | 'iqiyi_variety' = 'iqiyi_movie';
-        if (currentChannel === 'tv') hotKey = 'iqiyi_tv';
-        else if (currentChannel === 'anime') hotKey = 'iqiyi_anime';
-        else if (currentChannel === 'variety') hotKey = 'iqiyi_variety';
-        else hotKey = 'iqiyi_movie';
-        const res = await api.hotList(hotKey, signal, pageStart, {
-          page: currentPage,
-          mode: currentIqiyiMode,
-        });
-        const total = res.total || 2400;
-        return { items: res.items, total, pagecount: Math.ceil(total / PAGE_SIZE) };
-      }
-
-      // 3. Bangumi 新番周历
-      if (currentSource === 'bangumi' && currentChannel === 'anime') {
-        const calendar = await api.bangumiCalendar(signal);
-        if (!calendar?.days) return { items: [], total: 0, pagecount: 1 };
-        const dayIdx = BANGUMI_WEEKDAYS.indexOf(currentWeekday);
-        if (currentWeekday === '全部' || dayIdx <= 0) {
-          const allItems = calendar.days.flatMap((d) => d.items);
-          return { items: allItems, total: allItems.length, pagecount: 1 };
-        }
-        const targetDay = calendar.days.find((d) => d.weekday === dayIdx);
-        const dayItems = targetDay?.items || [];
-        return { items: dayItems, total: dayItems.length, pagecount: 1 };
-      }
-
-      // 4. 豆瓣影史高分与口碑周榜
-      if (currentSource === 'douban') {
-        if (currentChannel === 'movie') {
-          if (currentDoubanSubTab === 'top250' || currentSort === 'rank') {
-            const res = await api.hotList('douban_top250', signal, pageStart, { page: currentPage });
-            return { items: res.items, total: 250, pagecount: Math.ceil(250 / PAGE_SIZE) };
+        if (res.items && res.items.length > 0) {
+          let filtered = res.items;
+          // 按年份条件过滤
+          if (currentYear !== '全部') {
+            filtered = filtered.filter((i) => i.year === currentYear);
           }
-          const res = await api.hotList('douban_movie_weekly', signal);
-          return { items: res.items, total: res.items.length, pagecount: 1 };
+          // 按地区条件过滤
+          if (currentRegion !== '全部') {
+            filtered = filtered.filter((i) => (i.region || i.area || '').includes(currentRegion));
+          }
+          return {
+            items: filtered,
+            total: res.total,
+            pagecount: res.pagecount,
+            subCategories: res.subCategories,
+          };
         }
-        if (currentChannel === 'tv') {
-          const listId = currentDoubanSubTab === 'global' ? 'douban_tv_global' : 'douban_tv_chinese';
-          const res = await api.hotList(listId, signal);
-          return { items: res.items, total: res.items.length, pagecount: 1 };
-        }
-        if (currentChannel === 'variety') {
-          const listId = currentDoubanSubTab === 'global' ? 'douban_show_global' : 'douban_show_chinese';
-          const res = await api.hotList(listId, signal);
-          return { items: res.items, total: res.items.length, pagecount: 1 };
-        }
-        const res = await api.hotList('douban_movie_weekly', signal);
-        return { items: res.items, total: res.items.length, pagecount: 1 };
+      } catch (err) {
+        console.warn('[Catalog] 统一采集源查询异常，平滑切换备用引擎:', err);
       }
 
-      // 5. 短剧与 AI 专区（在 360 来源下彻底解耦，杜绝同质化内容）
-      if (currentChannel === 'short_drama' && currentSource === '360') {
-        const res = await api.hotList('short_drama', signal, pageStart, { page: currentPage });
-        return { items: res.items, total: 500, pagecount: 25 };
-      }
-      if (currentChannel === 'ai' && currentSource === '360') {
-        // AI 专区：在 360 模式下严格抓取带有科幻/未来/脑洞标签的剧集，绝不复用普通微短剧
+      // 降级兜底：360 多维片库
+      try {
+        if (currentChannel === 'short_drama') {
+          const res = await api.hotList('short_drama', signal, pageStart, { page: currentPage });
+          return { items: res.items, total: 500, pagecount: 25, subCategories: [] };
+        }
+        if (currentChannel === 'ai') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const res = await api.douban('movie' as any, '科幻', pageStart, PAGE_SIZE, signal, currentSort, {
+            area: currentRegion,
+            genre: '科幻',
+            year: currentYear,
+          });
+          const mapped = res.items.map((item) => ({ ...item, rating: 'AIGC/科幻' }));
+          return { items: mapped, total: res.total ?? res.items.length, pagecount: 25, subCategories: [] };
+        }
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const res = await api.douban('movie' as any, '科幻', pageStart, PAGE_SIZE, signal, currentSort, {
+        const res = await api.douban(currentChannel as any, queryTag, pageStart, PAGE_SIZE, signal, currentSort, {
           area: currentRegion,
-          genre: '科幻',
+          genre: currentGenre,
           year: currentYear,
         });
-        const mapped = res.items.map((item) => ({
-          ...item,
-          rating: 'AIGC/科幻',
-        }));
         const total = res.total ?? res.items.length;
-        return { items: mapped, total, pagecount: Math.ceil(total / PAGE_SIZE) };
+        return { items: res.items, total, pagecount: Math.ceil(total / PAGE_SIZE), subCategories: [] };
+      } catch {
+        return { items: [], total: 0, pagecount: 1, subCategories: [] };
       }
-
-      // 6. 全网 360 多维分类片库
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const res = await api.douban(currentChannel as any, queryTag, pageStart, PAGE_SIZE, signal, currentSort, {
-        area: currentRegion,
-        genre: currentGenre,
-        year: currentYear,
-      });
-      const total = res.total ?? res.items.length;
-      return { items: res.items, total, pagecount: Math.ceil(total / PAGE_SIZE) };
     },
     staleTime: 5 * 60_000,
     enabled: !urlQuery,
@@ -701,282 +663,65 @@ function CatalogContent() {
           </div>
         )}
 
-        {/* 二级数据源与榜单引擎切换器 */}
-        {!urlQuery && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between gap-2 overflow-x-auto no-scrollbar py-1">
-              <div className="flex items-center gap-1.5 sm:gap-2">
-                {availableSources.map((srcId) => {
-                  const meta = CATALOG_SOURCES.find((s) => s.id === srcId) || CATALOG_SOURCES[0];
-                  const isSelected = currentSource === srcId;
-                  return (
-                    <button
-                      key={srcId}
-                      type="button"
-                      onClick={() => updateFilters({ source: srcId })}
-                      className={cn(
-                        'flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl text-xs font-semibold transition-all shrink-0 active:scale-95 border cursor-pointer touch-manipulation',
-                        isSelected
-                          ? 'bg-accent/15 text-accent border-accent/40 shadow-xs'
-                          : 'bg-surface hover:bg-hover text-muted hover:text-content border-line/60'
-                      )}
-                    >
-                      <span className="text-sm">{meta.icon}</span>
-                      <span>{meta.label}</span>
-                      <span
-                        className={cn(
-                          'text-[10px] px-1.5 py-0.5 rounded font-medium hidden sm:inline',
-                          isSelected ? 'bg-accent text-on-accent' : 'bg-chip text-faint'
-                        )}
-                      >
-                        {meta.badge}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* 源描述小标 */}
-              <div className="hidden lg:flex items-center gap-1 text-[11px] text-faint shrink-0">
-                <span>⚡ {activeSourceMeta.subTitle}</span>
-              </div>
+        {/* 细分子类下钻栏（仅当该频道在源端拥有二级子分类时展示，如动作片/战神/AIGC短剧等） */}
+        {!urlQuery && cmsSubCategories.length > 0 && (
+          <div className="flex items-center gap-1.5 sm:gap-2 bg-chip/40 border border-line/50 rounded-2xl p-2.5 sm:p-3 overflow-x-auto no-scrollbar">
+            <span className="text-xs font-bold text-faint shrink-0 px-1">细分子类:</span>
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+              <button
+                type="button"
+                onClick={() => {
+                  triggerTopProgress();
+                  updateFilters({ cmsTypeId: '' });
+                }}
+                className={cn(
+                  'px-3 py-1 rounded-xl text-xs font-medium transition-all shrink-0 active:scale-95 cursor-pointer',
+                  !rawCmsTypeId
+                    ? 'bg-accent text-on-accent font-semibold shadow-xs'
+                    : 'text-muted hover:text-content bg-surface/60 hover:bg-surface border border-line/40'
+                )}
+              >
+                全部
+              </button>
+              {cmsSubCategories.map((sub) => {
+                const isSelected = rawCmsTypeId === String(sub.id);
+                return (
+                  <button
+                    key={sub.id}
+                    type="button"
+                    onClick={() => {
+                      triggerTopProgress();
+                      updateFilters({ cmsTypeId: String(sub.id) });
+                    }}
+                    className={cn(
+                      'px-3 py-1 rounded-xl text-xs font-medium transition-all shrink-0 active:scale-95 cursor-pointer',
+                      isSelected
+                        ? 'bg-accent text-on-accent font-semibold shadow-xs'
+                        : 'text-muted hover:text-content bg-surface/60 hover:bg-surface border border-line/40'
+                    )}
+                  >
+                    {sub.name}
+                  </button>
+                );
+              })}
             </div>
-
-            {/* 点播源专属：采集站切换器 */}
-            {currentSource === 'cms' && availableCmsSources.length > 0 && (
-              <div className="flex items-center gap-1.5 sm:gap-2 bg-chip/40 border border-line/60 rounded-xl p-2 sm:p-2.5 overflow-x-auto no-scrollbar">
-                <div className="flex items-center gap-1 text-xs font-semibold text-faint shrink-0 px-1">
-                  <span>📡</span>
-                  <span>点播源:</span>
-                </div>
-                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-                  {availableCmsSources.map((s) => {
-                    const isSelected = activeCmsSource.key === s.key;
-                    return (
-                      <button
-                        key={s.key}
-                        type="button"
-                        onClick={() => updateFilters({ cmsSource: s.key, page: 1 })}
-                        className={cn(
-                          'px-3 py-1 rounded-lg text-xs font-medium transition-all shrink-0 active:scale-95 cursor-pointer flex items-center gap-1',
-                          isSelected
-                            ? 'bg-accent text-on-accent font-semibold shadow-xs'
-                            : 'text-muted hover:text-content bg-surface/60 hover:bg-surface border border-line/40'
-                        )}
-                      >
-                        <span>{isSelected ? '⚡' : '📺'}</span>
-                        <span className="truncate max-w-[130px] sm:max-w-none">{s.name}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-                <span className="text-[11px] text-faint ml-auto hidden md:inline shrink-0">
-                  💡 支持 500+ 页真分页，最新入库剧集实时同步
-                </span>
-              </div>
-            )}
-
-            {/* 采集站二级细分子分类下钻筛选栏 */}
-            {currentSource === 'cms' && cmsSubCategories.length > 0 && (
-              <div className="flex items-center gap-1.5 sm:gap-2 bg-chip/35 border border-line/50 rounded-xl p-2 sm:p-2.5 overflow-x-auto no-scrollbar">
-                <span className="text-xs font-semibold text-faint shrink-0 px-1">细分子类:</span>
-                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-                  <button
-                    type="button"
-                    onClick={() => updateFilters({ cmsTypeId: '' })}
-                    className={cn(
-                      'px-3 py-1 rounded-lg text-xs font-medium transition-all shrink-0 active:scale-95 cursor-pointer',
-                      !rawCmsTypeId
-                        ? 'bg-accent text-on-accent font-semibold shadow-xs'
-                        : 'text-muted hover:text-content bg-surface/60 hover:bg-surface border border-line/40'
-                    )}
-                  >
-                    全部
-                  </button>
-                  {cmsSubCategories.map((sub) => {
-                    const isSelected = rawCmsTypeId === String(sub.id);
-                    return (
-                      <button
-                        key={sub.id}
-                        type="button"
-                        onClick={() => updateFilters({ cmsTypeId: String(sub.id) })}
-                        className={cn(
-                          'px-3 py-1 rounded-lg text-xs font-medium transition-all shrink-0 active:scale-95 cursor-pointer',
-                          isSelected
-                            ? 'bg-accent text-on-accent font-semibold shadow-xs'
-                            : 'text-muted hover:text-content bg-surface/60 hover:bg-surface border border-line/40'
-                        )}
-                      >
-                        {sub.name}
-                      </button>
-                    );
-                  })}
-                </div>
-                {rawCmsTypeId && (
-                  <button
-                    type="button"
-                    onClick={() => updateFilters({ cmsTypeId: '' })}
-                    className="text-xs text-accent hover:underline shrink-0 ml-auto hidden sm:inline cursor-pointer"
-                  >
-                    重置为全部分类 ✕
-                  </button>
-                )}
-              </div>
-            )}
-
-            {/* 爱奇艺大厅专属：最热 / 最新上线排期切换 */}
-            {currentSource === 'iqiyi' && (
-              <div className="flex items-center gap-2 bg-chip/40 border border-line/60 rounded-xl p-2 sm:p-2.5 overflow-x-auto no-scrollbar">
-                <span className="text-xs font-semibold text-faint shrink-0 px-1">排序模式:</span>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => updateFilters({ iqiyiMode: 'hot', page: 1 })}
-                    className={cn(
-                      'px-3 py-1 rounded-lg text-xs font-medium transition-all shrink-0 active:scale-95 cursor-pointer',
-                      currentIqiyiMode === 'hot'
-                        ? 'bg-accent text-on-accent font-semibold shadow-xs'
-                        : 'text-muted hover:text-content bg-surface/60 hover:bg-surface border border-line/40'
-                    )}
-                  >
-                    🔥 实时热播大盘
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => updateFilters({ iqiyiMode: 'latest', page: 1 })}
-                    className={cn(
-                      'px-3 py-1 rounded-lg text-xs font-medium transition-all shrink-0 active:scale-95 cursor-pointer',
-                      currentIqiyiMode === 'latest'
-                        ? 'bg-accent text-on-accent font-semibold shadow-xs'
-                        : 'text-muted hover:text-content bg-surface/60 hover:bg-surface border border-line/40'
-                    )}
-                  >
-                    ⏰ 最新上线排期
-                  </button>
-                </div>
-                <span className="text-[11px] text-faint ml-auto hidden md:inline shrink-0">
-                  官方大厂接口 · 100+ 页真分页
-                </span>
-              </div>
-            )}
-
-            {/* Bangumi 专属星期选择器 */}
-            {currentSource === 'bangumi' && currentChannel === 'anime' && (
-              <div className="flex items-center gap-1.5 bg-chip/40 border border-line/60 rounded-xl p-2 overflow-x-auto no-scrollbar">
-                <span className="text-xs font-semibold text-faint shrink-0 px-1">连载周历:</span>
-                {BANGUMI_WEEKDAYS.map((day) => (
-                  <button
-                    key={day}
-                    type="button"
-                    onClick={() => updateFilters({ weekday: day })}
-                    className={cn(
-                      'px-3 py-1 rounded-lg text-xs font-medium transition-all shrink-0 active:scale-95 cursor-pointer',
-                      currentWeekday === day
-                        ? 'bg-accent text-on-accent font-semibold shadow-xs'
-                        : 'text-muted hover:text-content bg-surface/50 border border-line/40'
-                    )}
-                  >
-                    {day}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* 豆瓣专属子榜单选项 */}
-            {currentSource === 'douban' && (
-              <div className="flex items-center gap-1.5 bg-chip/40 border border-line/60 rounded-xl p-2 overflow-x-auto no-scrollbar">
-                <span className="text-xs font-semibold text-faint shrink-0 px-1">精选榜单:</span>
-                {currentChannel === 'movie' && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => updateFilters({ subTab: 'weekly' })}
-                      className={cn(
-                        'px-3 py-1 rounded-lg text-xs font-medium transition-all shrink-0 active:scale-95 cursor-pointer',
-                        currentDoubanSubTab === 'weekly'
-                          ? 'bg-accent text-on-accent font-semibold shadow-xs'
-                          : 'text-muted hover:text-content bg-surface/50 border border-line/40'
-                      )}
-                    >
-                      🔥 本周口碑周榜
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => updateFilters({ subTab: 'top250' })}
-                      className={cn(
-                        'px-3 py-1 rounded-lg text-xs font-medium transition-all shrink-0 active:scale-95 cursor-pointer',
-                        currentDoubanSubTab === 'top250'
-                          ? 'bg-accent text-on-accent font-semibold shadow-xs'
-                          : 'text-muted hover:text-content bg-surface/50 border border-line/40'
-                      )}
-                    >
-                      🏆 影史高分 Top250
-                    </button>
-                  </>
-                )}
-                {currentChannel === 'tv' && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => updateFilters({ subTab: 'chinese' })}
-                      className={cn(
-                        'px-3 py-1 rounded-lg text-xs font-medium transition-all shrink-0 active:scale-95 cursor-pointer',
-                        currentDoubanSubTab === 'chinese'
-                          ? 'bg-accent text-on-accent font-semibold shadow-xs'
-                          : 'text-muted hover:text-content bg-surface/50 border border-line/40'
-                      )}
-                    >
-                      🇨🇳 华语剧集周榜
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => updateFilters({ subTab: 'global' })}
-                      className={cn(
-                        'px-3 py-1 rounded-lg text-xs font-medium transition-all shrink-0 active:scale-95 cursor-pointer',
-                        currentDoubanSubTab === 'global'
-                          ? 'bg-accent text-on-accent font-semibold shadow-xs'
-                          : 'text-muted hover:text-content bg-surface/50 border border-line/40'
-                      )}
-                    >
-                      🌍 全球剧集周榜
-                    </button>
-                  </>
-                )}
-                {currentChannel === 'variety' && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => updateFilters({ subTab: 'chinese' })}
-                      className={cn(
-                        'px-3 py-1 rounded-lg text-xs font-medium transition-all shrink-0 active:scale-95 cursor-pointer',
-                        currentDoubanSubTab === 'chinese'
-                          ? 'bg-accent text-on-accent font-semibold shadow-xs'
-                          : 'text-muted hover:text-content bg-surface/50 border border-line/40'
-                      )}
-                    >
-                      🇨🇳 华语精选综艺
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => updateFilters({ subTab: 'global' })}
-                      className={cn(
-                        'px-3 py-1 rounded-lg text-xs font-medium transition-all shrink-0 active:scale-95 cursor-pointer',
-                        currentDoubanSubTab === 'global'
-                          ? 'bg-accent text-on-accent font-semibold shadow-xs'
-                          : 'text-muted hover:text-content bg-surface/50 border border-line/40'
-                      )}
-                    >
-                      🌍 全球真人秀
-                    </button>
-                  </>
-                )}
-              </div>
+            {rawCmsTypeId && (
+              <button
+                type="button"
+                onClick={() => {
+                  triggerTopProgress();
+                  updateFilters({ cmsTypeId: '' });
+                }}
+                className="text-xs text-accent hover:underline shrink-0 ml-auto hidden sm:inline cursor-pointer"
+              >
+                重置为全部分类 ✕
+              </button>
             )}
           </div>
         )}
 
-        {/* 仅在 360 全网片库模式下展示多维筛选器 */}
-        {!urlQuery && currentSource === '360' && (
+        {/* 全网统一单源多维筛选器面板（支持地区、类型、年份、排序各种检索条件） */}
+        {!urlQuery && (
           <>
             {/* 网页版多维聚合筛选器面板 (桌面端 >= 1024px) */}
             <div className="hidden lg:block bg-chip/35 border border-line/50 rounded-2xl p-3 sm:p-4 space-y-2.5 sm:space-y-3">

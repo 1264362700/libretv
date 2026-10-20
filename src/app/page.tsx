@@ -4,8 +4,8 @@ import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Header } from '@/components/header';
-import { RecommendSection } from '@/components/douban-section';
 import { HeroBanner } from '@/components/hero-banner';
+import { ChannelHomeSection } from '@/components/channel-home-section';
 import { DetailModal } from '@/components/detail-modal';
 import { AggregatedCard, aggregateResults } from '@/components/video-card';
 import { useAppStore, resolveSource, isInDisabledSubscription, isSourceDisabled } from '@/lib/store';
@@ -461,11 +461,59 @@ function HomeContent() {
           </section>
         )}
 
-        {/* 首页推荐（有搜索时隐藏） */}
+        {/* 首页各大栏目精选：每个栏目双排最近更新剧集 + 换一批 + 更多跳转 */}
         {!urlQuery && (
-          <RecommendSection
-            onPick={handlePlayTitle}
-          />
+          <div className="space-y-8 mt-6">
+            <ChannelHomeSection
+              title="热门电影"
+              icon="🎬"
+              channelId="movie"
+              subTitle="院线热映 · 高清大片"
+              onPick={handlePlayTitle}
+            />
+            <ChannelHomeSection
+              title="热播电视剧"
+              icon="📺"
+              channelId="tv"
+              subTitle="华语热剧 · 精彩连载"
+              onPick={handlePlayTitle}
+            />
+            <ChannelHomeSection
+              title="爆款微短剧"
+              icon="📱"
+              channelId="short_drama"
+              subTitle="爽文逆袭 · 全集秒播"
+              onPick={handlePlayTitle}
+            />
+            <ChannelHomeSection
+              title="AI专区 · AIGC短剧"
+              icon="🤖"
+              channelId="ai"
+              subTitle="未来科幻 · 脑洞神作 · 数字生命"
+              onPick={handlePlayTitle}
+            />
+            <ChannelHomeSection
+              title="连载动漫"
+              icon="✨"
+              channelId="anime"
+              subTitle="热血新番 · 经典剧场版"
+              onPick={handlePlayTitle}
+            />
+            <ChannelHomeSection
+              title="爆笑综艺"
+              icon="🎤"
+              channelId="variety"
+              subTitle="欢笑下饭 · 音乐舞台"
+              onPick={handlePlayTitle}
+            />
+            <ChannelHomeSection
+              title="人文纪录片"
+              icon="🌍"
+              channelId="documentary"
+              subTitle="探索自然 · 揭秘历史"
+              onPick={handlePlayTitle}
+            />
+          </div>
         )}
       </main>
 

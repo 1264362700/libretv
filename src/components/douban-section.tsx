@@ -12,13 +12,12 @@ import { DoubanCard } from './video-card';
 
 const WEEKDAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 
-type PrimaryCategory = 'movie' | 'tv' | 'short_drama' | 'ai' | 'anime' | 'variety' | 'documentary';
+type PrimaryCategory = 'movie' | 'tv' | 'short_drama' | 'anime' | 'variety' | 'documentary';
 
 const PRIMARY_TABS: { id: PrimaryCategory; label: string; icon: string }[] = [
   { id: 'movie', label: '电影', icon: '🎬' },
   { id: 'tv', label: '电视剧', icon: '📺' },
   { id: 'short_drama', label: '短剧', icon: '📱' },
-  { id: 'ai', label: 'AI专区', icon: '🤖' },
   { id: 'anime', label: '动漫', icon: '✨' },
   { id: 'variety', label: '综艺', icon: '🎤' },
   { id: 'documentary', label: '纪录片', icon: '🌍' },
@@ -30,14 +29,6 @@ const SHORT_DRAMA_SORTS = [
   { id: 'recommend', label: '热门爽剧' },
   { id: 'latest', label: '最新上线' },
   { id: 'hot', label: '全网热播' },
-];
-
-// AI 专区筛选维度
-const AI_THEMES = ['全部', 'AI短剧', 'AI科幻', 'AI奇幻', '未来脑洞', '数字人生'];
-const AI_SORTS = [
-  { id: 'recommend', label: '热门推荐' },
-  { id: 'rank', label: '高分口碑' },
-  { id: 'time', label: '最新发布' },
 ];
 
 // 电影筛选维度（地区与排序，严格对齐豆瓣标准标签体系）
@@ -226,10 +217,6 @@ function DoubanMultiCategoryView({ onPick }: { onPick: (title: string) => void }
   const [shortDramaTheme, setShortDramaTheme] = useState('全部');
   const [shortDramaSort, setShortDramaSort] = useState('recommend');
 
-  // AI 专区筛选状态
-  const [aiTheme, setAiTheme] = useState('全部');
-  const [aiSort, setAiSort] = useState('recommend');
-
   // 换一批真实分页页码
   const [page, setPage] = useState(1);
   const [isShuffling, setIsShuffling] = useState(false);
@@ -283,31 +270,16 @@ function DoubanMultiCategoryView({ onPick }: { onPick: (title: string) => void }
   const query = useQuery({
     queryKey: ['douban-multi', category, type, tag, sort, page],
     queryFn: ({ signal }) => api.douban(type, tag, (page - 1) * 20, 20, signal, sort),
-    enabled: category !== 'short_drama' && category !== 'ai' && !(category === 'anime' && animeViewMode === 'bangumi'),
+    enabled: category !== 'short_drama' && !(category === 'anime' && animeViewMode === 'bangumi'),
   });
 
   const shortDramaQuery = useQuery({
     queryKey: ['douban-multi-short-drama', page],
     queryFn: ({ signal }) => api.hotList('short_drama', signal, (page - 1) * 20),
-    enabled: category === 'short_drama' || (category === 'ai' && aiTheme === 'AI短剧'),
+    enabled: category === 'short_drama',
   });
 
-  const aiQuery = useQuery({
-    queryKey: ['douban-multi-ai', aiTheme, aiSort, page],
-    queryFn: async ({ signal }) => {
-      const tag = aiTheme === '全部' ? '科幻' : aiTheme;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return api.douban('movie', tag, (page - 1) * 20, 20, signal, aiSort as any);
-    },
-    enabled: category === 'ai' && aiTheme !== 'AI短剧',
-  });
-
-  const activeQuery =
-    category === 'short_drama'
-      ? shortDramaQuery
-      : category === 'ai'
-      ? (aiTheme === 'AI短剧' ? shortDramaQuery : aiQuery)
-      : query;
+  const activeQuery = category === 'short_drama' ? shortDramaQuery : query;
 
   const items = (() => {
     if (category === 'short_drama') {
@@ -319,15 +291,6 @@ function DoubanMultiCategoryView({ onPick }: { onPick: (title: string) => void }
       }
       const matched = list.filter((item) => item.title.includes(shortDramaTheme));
       return matched.length > 0 ? matched : list;
-    }
-    if (category === 'ai') {
-      if (aiTheme === 'AI短剧') {
-        return (shortDramaQuery.data?.items ?? []).map((item) => ({
-          ...item,
-          rating: item.rating === '微短剧' ? 'AI短剧' : item.rating,
-        }));
-      }
-      return aiQuery.data?.items ?? [];
     }
     const rawItems = query.data?.items ?? [];
     return rawItems.filter((item) => !isShortDramaTitle(item.title));
@@ -402,29 +365,6 @@ function DoubanMultiCategoryView({ onPick }: { onPick: (title: string) => void }
               active={SHORT_DRAMA_SORTS.find((s) => s.id === shortDramaSort)?.label ?? '热门爽剧'}
               onSelect={(label) => {
                 setShortDramaSort(SHORT_DRAMA_SORTS.find((s) => s.label === label)?.id ?? 'recommend');
-                setPage(1);
-              }}
-            />
-          </>
-        )}
-
-        {category === 'ai' && (
-          <>
-            <FilterRow
-              label="专区"
-              options={AI_THEMES}
-              active={aiTheme}
-              onSelect={(t) => {
-                setAiTheme(t);
-                setPage(1);
-              }}
-            />
-            <FilterRow
-              label="排序"
-              options={AI_SORTS.map((s) => s.label)}
-              active={AI_SORTS.find((s) => s.id === aiSort)?.label ?? '热门推荐'}
-              onSelect={(label) => {
-                setAiSort(AI_SORTS.find((s) => s.label === label)?.id ?? 'recommend');
                 setPage(1);
               }}
             />

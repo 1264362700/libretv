@@ -7,7 +7,6 @@ import { Header } from '@/components/header';
 import { HeroBillboardBanner } from '@/components/hero-billboard-banner';
 import { MediaCarouselRow } from '@/components/media-carousel-row';
 import { WeeklySchedule } from '@/components/weekly-schedule';
-import { MediaCard } from '@/components/media-card';
 import { AggregatedCard, aggregateResults } from '@/components/video-card';
 import {
   useAppStore,
@@ -32,7 +31,6 @@ import {
   syncRecentUpdates,
   type MediaItem,
 } from '@/lib/media-library-service';
-import { fetchDoubanFilter } from '@/lib/douban-api';
 
 const RESULT_PAGE_SIZE = 60;
 
@@ -155,48 +153,7 @@ function HomeContent() {
     enabled: !urlQuery,
   });
 
-  // 5. 板块六：全量片库四维筛选器状态
-  const [filterChannel, setFilterChannel] = useState<'全部' | '电视剧' | '电影' | '动漫' | '综艺'>('全部');
-  const [filterGenre, setFilterGenre] = useState('全部');
-  const [filterRegion, setFilterRegion] = useState('全部');
-  const [filterSort, setFilterSort] = useState<'U' | 'R' | 'S'>('U');
-  const [filterPage, setFilterPage] = useState(1);
 
-  const explorerQuery = useQuery({
-    queryKey: ['home-explorer-filter', filterChannel, filterGenre, filterRegion, filterSort, filterPage],
-    queryFn: async ({ signal }): Promise<MediaItem[]> => {
-      const tags = filterChannel === '全部' ? '电影' : filterChannel;
-      const start = (filterPage - 1) * 18;
-      const genres = filterGenre !== '全部' ? filterGenre : undefined;
-      let countries: string | undefined;
-      if (filterRegion !== '全部') {
-        if (filterRegion === '华语') countries = '中国大陆,香港,台湾';
-        else if (filterRegion === '欧美') countries = '美国,英国,法国';
-        else countries = filterRegion;
-      }
-
-      const res = await fetchDoubanFilter(
-        {
-          tags,
-          sort: filterSort,
-          start,
-          genres,
-          countries,
-        },
-        signal
-      );
-
-      return res.items.map((i) => ({
-        id: i.id,
-        title: i.title,
-        cover: i.cover,
-        rating: i.rate !== '暂无评分' ? i.rate : undefined,
-        year: i.year,
-      }));
-    },
-    staleTime: 10 * 60_000,
-    enabled: !urlQuery,
-  });
 
   // 播放前强制校验登录并直通播放页
   const handlePlayMedia = (item: MediaItem) => {
@@ -482,153 +439,6 @@ function HomeContent() {
               onPick={handlePlayMedia}
               isLoading={animeVarietyQuery.isLoading}
             />
-
-            {/* 6. 板块六：全量片库多维筛选器 (All-in-One Media Explorer) */}
-            <section className="space-y-4 pt-4 border-t border-line">
-              <div className="flex items-center justify-between pb-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-xl sm:text-2xl">🍿</span>
-                  <h2 className="text-base sm:text-lg font-extrabold text-content">
-                    全量片库多维探索
-                  </h2>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setFilterPage((p) => (p >= 5 ? 1 : p + 1))}
-                  className="text-xs text-accent hover:text-accent-hover px-3 py-1.5 rounded-lg bg-chip hover:bg-hover cursor-pointer border border-line/50 transition-colors"
-                >
-                  换一组 ›
-                </button>
-              </div>
-
-              {/* 四维胶囊筛选栏 */}
-              <div className="p-4 rounded-2xl bg-surface/50 border border-line/60 space-y-3 text-xs">
-                {/* 频道 */}
-                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-                  <span className="text-faint shrink-0 font-medium">频道:</span>
-                  {(['全部', '电视剧', '电影', '动漫', '综艺'] as const).map((ch) => (
-                    <button
-                      key={ch}
-                      type="button"
-                      onClick={() => {
-                        setFilterChannel(ch);
-                        setFilterPage(1);
-                      }}
-                      className={cn(
-                        'px-2.5 py-1 rounded-lg font-medium transition-all shrink-0 cursor-pointer',
-                        filterChannel === ch
-                          ? 'bg-accent text-on-accent font-bold shadow-xs'
-                          : 'text-muted hover:text-content hover:bg-hover bg-chip/40'
-                      )}
-                    >
-                      {ch}
-                    </button>
-                  ))}
-                </div>
-
-                {/* 类型 */}
-                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-                  <span className="text-faint shrink-0 font-medium">类型:</span>
-                  {['全部', '科幻', '悬疑', '动作', '喜剧', '爱情', '犯罪', '奇幻', '战争'].map(
-                    (g) => (
-                      <button
-                        key={g}
-                        type="button"
-                        onClick={() => {
-                          setFilterGenre(g);
-                          setFilterPage(1);
-                        }}
-                        className={cn(
-                          'px-2.5 py-1 rounded-lg font-medium transition-all shrink-0 cursor-pointer',
-                          filterGenre === g
-                            ? 'bg-accent text-on-accent font-bold shadow-xs'
-                            : 'text-muted hover:text-content hover:bg-hover bg-chip/40'
-                        )}
-                      >
-                        {g}
-                      </button>
-                    )
-                  )}
-                </div>
-
-                {/* 地区 */}
-                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-                  <span className="text-faint shrink-0 font-medium">地区:</span>
-                  {['全部', '华语', '欧美', '韩国', '日本', '英国'].map((r) => (
-                    <button
-                      key={r}
-                      type="button"
-                      onClick={() => {
-                        setFilterRegion(r);
-                        setFilterPage(1);
-                      }}
-                      className={cn(
-                        'px-2.5 py-1 rounded-lg font-medium transition-all shrink-0 cursor-pointer',
-                        filterRegion === r
-                          ? 'bg-accent text-on-accent font-bold shadow-xs'
-                          : 'text-muted hover:text-content hover:bg-hover bg-chip/40'
-                      )}
-                    >
-                      {r}
-                    </button>
-                  ))}
-                </div>
-
-                {/* 排序 */}
-                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pt-1 border-t border-line/40">
-                  <span className="text-faint shrink-0 font-medium">排序:</span>
-                  {[
-                    { id: 'U' as const, label: '近期热门' },
-                    { id: 'R' as const, label: '最新上线' },
-                    { id: 'S' as const, label: '豆瓣高分' },
-                  ].map((s) => (
-                    <button
-                      key={s.id}
-                      type="button"
-                      onClick={() => {
-                        setFilterSort(s.id);
-                        setFilterPage(1);
-                      }}
-                      className={cn(
-                        'px-2.5 py-1 rounded-lg font-medium transition-all shrink-0 cursor-pointer',
-                        filterSort === s.id
-                          ? 'bg-accent text-on-accent font-bold shadow-xs'
-                          : 'text-muted hover:text-content hover:bg-hover bg-chip/40'
-                      )}
-                    >
-                      {s.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* 探索筛选网格结果 */}
-              {explorerQuery.isLoading ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4">
-                  {Array.from({ length: 12 }).map((_, i) => (
-                    <div
-                      key={i}
-                      className="aspect-[2/3] rounded-xl bg-chip animate-pulse border border-line/40"
-                    />
-                  ))}
-                </div>
-              ) : (explorerQuery.data?.length ?? 0) > 0 ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4">
-                  {(explorerQuery.data ?? []).map((item) => (
-                    <MediaCard
-                      key={item.id}
-                      item={item}
-                      cmsRemarksMap={cmsRemarksMap}
-                      onClick={() => handlePlayMedia(item)}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <div className="py-12 text-center text-xs text-muted border border-dashed border-line/60 rounded-xl bg-surface/30">
-                  未找到符合条件的影片，请尝试调整筛选条件
-                </div>
-              )}
-            </section>
           </div>
         )}
       </main>

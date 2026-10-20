@@ -20,7 +20,7 @@ export interface CmsSubCategory {
 
 export interface CmsCatalogOptions {
   url: string;
-  type: 'movie' | 'tv' | 'anime' | 'variety' | 'short_drama' | 'ai' | 'documentary' | 'all' | string;
+  type: 'movie' | 'tv' | 'anime' | 'variety' | 'short_drama' | 'documentary' | 'all' | string;
   typeId?: number; // 用户选中的具体二级子分类 ID
   keyword?: string; // 分类内深度搜索关键词
   page?: number;
@@ -76,14 +76,7 @@ export function resolveCmsTypeId(
 ): number | undefined {
   if (type === 'all') return undefined;
 
-  // 1. AI 专区匹配（AI短剧 / AIGC / 科幻脑洞，不回退普通电影）
-  if (type === 'ai') {
-    const aiFound = classes.find((c) => /ai|人工智能|aigc|脑洞/.test(c.type_name.toLowerCase()));
-    if (aiFound) return aiFound.type_id;
-    return undefined;
-  }
-
-  // 2. 短剧频道匹配（微短剧/短剧/爽文，内置天涯54、标准36/58等典型短剧分类）
+  // 1. 短剧频道匹配（微短剧/短剧/爽文，内置天涯54、标准36/58等典型短剧分类）
   if (type === 'short_drama') {
     const found = classes.find((c) => /短剧|微短剧|爽文/.test(c.type_name));
     if (found) return found.type_id;
@@ -147,17 +140,6 @@ export function extractSubCategories(
 ): CmsSubCategory[] {
   if (type === 'all') return [];
 
-  // AI 专区专属子类矩阵（AIGC短剧、AI科幻、数字生命、未来世界、赛博脑洞）
-  if (type === 'ai') {
-    return [
-      { id: 9001, name: 'AIGC短剧' },
-      { id: 9002, name: 'AI科幻' },
-      { id: 9003, name: '数字生命' },
-      { id: 9004, name: '未来世界' },
-      { id: 9005, name: '赛博脑洞' },
-    ];
-  }
-
   if (!Array.isArray(classes) || classes.length === 0) return [];
 
   const parentId = resolveCmsTypeId(type, classes);
@@ -184,8 +166,6 @@ export function extractSubCategories(
     matcher = /国产动漫|国漫|日韩动漫|日本动漫|欧美动漫|港台动漫|海外动漫/;
   } else if (type === 'variety') {
     matcher = /大陆综艺|内地综艺|港台综艺|日韩综艺|欧美综艺|真人秀|脱口秀/;
-  } else if (type === 'ai') {
-    matcher = /ai|人工智能|科幻|脑洞|未来|数字人|元宇宙/;
   } else if (type === 'short_drama') {
     matcher = /短剧|微短剧|爽文|现代都市|古代言情|玄幻武侠|重生逆袭/;
   }
@@ -222,8 +202,7 @@ export async function fetchCmsCatalog(options: CmsCatalogOptions): Promise<CmsCa
   // 1. 获取源站分类并匹配目标 type_id 与二级细分子分类
   const classes = await fetchCmsClasses(cleanUrl);
   const subCategories = extractSubCategories(type, classes);
-  const isAiVirtualSub = type === 'ai' && typeId && typeId >= 9000;
-  const targetTypeId = isAiVirtualSub ? undefined : (typeId !== undefined ? typeId : resolveCmsTypeId(type, classes));
+  const targetTypeId = typeId !== undefined ? typeId : resolveCmsTypeId(type, classes);
 
   const cacheKey = `cms_catalog:${cleanUrl}:${type}:${targetTypeId ?? 'all'}:${keyword || ''}:${typeId || ''}:${page}:${pageSize}:${filterAdult ? 1 : 0}`;
   const cached = getCache<CmsCatalogResult>(cacheKey);
@@ -240,13 +219,6 @@ export async function fetchCmsCatalog(options: CmsCatalogOptions): Promise<CmsCa
   }
   if (keyword && keyword.trim()) {
     params.set('wd', keyword.trim().slice(0, 100));
-  } else if (type === 'ai') {
-    if (typeId === 9001) params.set('wd', 'AIGC');
-    else if (typeId === 9002) params.set('wd', '科幻');
-    else if (typeId === 9003) params.set('wd', '数字');
-    else if (typeId === 9004) params.set('wd', '未来');
-    else if (typeId === 9005) params.set('wd', '赛博');
-    else params.set('wd', 'AI');
   }
 
   const res = await fetchUpstream(`${cleanUrl}?${params.toString()}`, {
@@ -289,7 +261,7 @@ export async function fetchCmsCatalog(options: CmsCatalogOptions): Promise<CmsCa
     );
   }
 
-  if (type !== 'short_drama' && type !== 'ai') {
+  if (type !== 'short_drama') {
     filteredList = filteredList.filter(
       (v) =>
         !isShortDramaTitle(v.vod_name || '') &&
@@ -327,7 +299,7 @@ export async function fetchCmsCatalog(options: CmsCatalogOptions): Promise<CmsCa
         title,
         cover,
         rating: ratingBadge,
-        isTv: type === 'tv' || type === 'anime' || type === 'short_drama' || type === 'ai',
+        isTv: type === 'tv' || type === 'anime' || type === 'short_drama',
       };
     })
     .filter((x): x is DoubanItem => Boolean(x));

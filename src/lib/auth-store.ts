@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import os from 'node:os';
 import { getEnvSources } from './env-sources';
 import { getEnvLiveSources } from './env-live-sources';
+import { CUSTOMER_SOURCES_LIST } from './customer-sites';
 import {
   isPostgresConfigured,
   initPostgresSchema,
@@ -129,22 +130,14 @@ export function getStoreFilePath(): string {
   return path.join(getDataDir(), 'auth-store.json');
 }
 
-/** 顶级秒播蓝光 CMS 矩阵 + IPv4 高可用直播矩阵 */
+/** 顶级秒播蓝光 CMS 矩阵 (全量注入 76 个优质采集源) + IPv4 高可用直播矩阵 */
 const CURATED_DEFAULT_SOURCES: { key: string; name: string; url: string; type: 'vod' | 'live' }[] = [
-  { key: 'curated_tyyszy', name: '天涯资源 (蓝光秒播·短剧专区)', url: 'https://tyyszyapi.com/api.php/provide/vod', type: 'vod' },
-  { key: 'curated_lzzy', name: '量子资源 (蓝光秒开)', url: 'https://cj.lziapi.com/api.php/provide/vod', type: 'vod' },
-  { key: 'curated_ffzy', name: '非凡资源 (极速秒播)', url: 'https://cj.ffzyapi.com/api.php/provide/vod', type: 'vod' },
-  { key: 'curated_snzy', name: '索尼资源 (高清秒播)', url: 'https://suoniapi.com/api.php/provide/vod', type: 'vod' },
-  { key: 'curated_gszy', name: '光速资源 (超低延迟)', url: 'https://api.guangsuapi.com/api.php/provide/vod', type: 'vod' },
-  { key: 'curated_hnzy', name: '红牛资源 (综合大片)', url: 'https://www.hongniuzy2.com/api.php/provide/vod', type: 'vod' },
-  { key: 'curated_yyzy', name: '丫丫资源 (日韩动漫)', url: 'https://cj.yayazy.net/api.php/provide/vod', type: 'vod' },
-  { key: 'curated_jyzy', name: '金鹰资源 (院线热映)', url: 'https://jyzyapi.com/api.php/provide/vod', type: 'vod' },
-  { key: 'curated_jszy', name: '极速资源 (海外综合)', url: 'https://jszyapi.com/api.php/provide/vod', type: 'vod' },
-  { key: 'curated_hhzy', name: '豪华资源 (国内外热剧)', url: 'https://hhzyapi.com/api.php/provide/vod', type: 'vod' },
-  { key: 'curated_hyzy', name: '虎牙资源 (精选大片)', url: 'https://www.huyaapi.com/api.php/provide/vod', type: 'vod' },
-  { key: 'curated_yhzy', name: '樱花资源 (动漫番剧)', url: 'https://m3u8.apiyhzy.com/api.php/provide/vod', type: 'vod' },
-  { key: 'curated_mdzy', name: '魔都资源 (热播大厅)', url: 'https://caiji.moduapi.cc/api.php/provide/vod', type: 'vod' },
-  { key: 'curated_bdzy', name: '百度资源 (高速蓝光)', url: 'https://api.apibdzy.com/api.php/provide/vod', type: 'vod' },
+  ...CUSTOMER_SOURCES_LIST.map((s) => ({
+    key: s.key,
+    name: s.name,
+    url: s.url,
+    type: 'vod' as const,
+  })),
   { key: 'curated_live_cctv', name: '央视高清合集 (CCTV 1-17 公网稳定)', url: 'https://iptv-org.github.io/iptv/countries/cn.m3u', type: 'live' },
   { key: 'curated_live_freetv', name: '国内电视精选 (央视+卫视综合)', url: 'https://cdn.jsdelivr.net/gh/Free-TV/IPTV@master/playlists/playlist_china.m3u8', type: 'live' },
   { key: 'curated_live_special', name: '央视特色与影视专线 (高画质)', url: 'https://m3u.ibert.me/o_s_cn_cctv.m3u', type: 'live' },

@@ -17,7 +17,7 @@ import { useAppStore, resolveSource, isInDisabledSubscription, isSourceDisabled 
 import type { SourceSearchOutcome, DoubanItem, SourceConfig } from '@/lib/types';
 import { fetchDoubanFilter } from '@/lib/douban-api';
 
-type ChannelType = 'movie' | 'tv' | 'short_drama' | 'ai' | 'anime' | 'variety' | 'documentary';
+type ChannelType = 'movie' | 'tv' | 'short_drama' | 'anime' | 'variety' | 'documentary';
 
 interface ChannelConfig {
   id: ChannelType;
@@ -52,14 +52,6 @@ const CHANNELS_CONFIG: ChannelConfig[] = [
     subTitle: '热门微短剧 · 爽文逆袭 · 全集秒播',
     regions: ['全部', '都市', '古装', '战神', '甜宠', '逆袭', '重生'],
     genres: ['全部', '战神', '总裁', '甜宠', '重生', '神医', '穿越', '豪门', '赘婿', '逆袭'],
-  },
-  {
-    id: 'ai',
-    label: 'AI专区',
-    icon: '🤖',
-    subTitle: 'AIGC短剧 · 脑洞神作 · 未来科幻 · 数字生命',
-    regions: ['全部', 'AIGC短剧', '科幻脑洞', '数字生命', '未来世界', '星际探索', '机械机甲'],
-    genres: ['全部', 'AIGC精选', '脑洞科幻', '赛博朋克', '数字人', '未来纪元', '机甲觉醒', '硬核科技'],
   },
   {
     id: 'anime',
@@ -109,7 +101,6 @@ const CHANNEL_SOURCES: Record<ChannelType, CatalogSourceId[]> = {
   movie: ['cms', 'iqiyi', '360', 'douban'],
   tv: ['cms', 'iqiyi', '360', 'douban'],
   short_drama: ['cms', '360'],
-  ai: ['cms', '360'],
   anime: ['cms', 'bangumi', 'iqiyi', '360'],
   variety: ['cms', 'iqiyi', '360', 'douban'],
   documentary: ['cms', 'iqiyi', '360', 'douban'],
@@ -129,7 +120,6 @@ const CHANNEL_HOT_KEYWORDS: Record<ChannelType, string[]> = {
   movie: ['哪吒2', '热辣滚烫', '第二十条', '飞驰人生2', '沙丘2', '周处除三害', '奥本海默'],
   tv: ['庆余年2', '繁花', '凡人修仙传', '边水往事', '大奉打更人', '唐朝诡事录', '我的阿勒泰'],
   short_drama: ['战神归来', '龙王赘婿', '顾总太太', '无双世子', '重回1990', '天降神豪', '千金回归'],
-  ai: ['AIGC短剧', 'AI科幻', '数字生命', '赛博朋克', '未来世界', '机甲觉醒', '脑洞脑暴'],
   anime: ['仙逆', '完美世界', '吞噬星空', '斗破苍穹', '咒术回战', '鬼灭之刃'],
   variety: ['歌手2024', '乘风2024', '奔跑吧', '极速前进', '喜人奇妙夜'],
   documentary: ['地球脉动', '蓝色星球', '如果国宝会说话', '舌尖上的中国', '航拍中国'],
@@ -425,8 +415,6 @@ function CatalogContent() {
       let genres = '';
       if (currentChannel === 'short_drama') {
         genres = currentGenre !== '全部' ? currentGenre : '短片';
-      } else if (currentChannel === 'ai') {
-        genres = '科幻';
       } else if (currentGenre !== '全部') {
         genres = currentGenre;
       }
@@ -488,7 +476,7 @@ function CatalogContent() {
   });
 
   const rawItems = catalogQuery.data?.items ?? [];
-  const items: DoubanItem[] = currentChannel === 'short_drama' || currentChannel === 'ai'
+  const items: DoubanItem[] = currentChannel === 'short_drama'
     ? rawItems
     : rawItems.filter((item) => !isShortDramaTitle(item.title));
 

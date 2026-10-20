@@ -1,13 +1,17 @@
 import type { SourceConfig } from './types';
+import { CUSTOMER_SOURCES_LIST } from './customer-sites';
 
 /**
  * 部署者通过 DEFAULT_SOURCES 环境变量预置的采集站。
  * 格式为 JSON 数组：[{"name":"源名","url":"https://.../api.php/provide/vod","detail":"https://...","isAdult":false}]
- * 解析失败时告警并整体忽略，不影响站点运行。
+ * 未配置环境变量时，默认启用内置 76 个优质采集源 (CUSTOMER_SITES)。
+ * 解析失败时告警并兜底返回内置源，不影响站点运行。
  */
 export function getEnvSources(): SourceConfig[] {
   const raw = process.env.DEFAULT_SOURCES;
-  if (!raw || !raw.trim()) return [];
+  if (!raw || !raw.trim()) {
+    return CUSTOMER_SOURCES_LIST;
+  }
   try {
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) throw new Error('必须是 JSON 数组');
@@ -23,7 +27,13 @@ export function getEnvSources(): SourceConfig[] {
         throw new Error(`第 ${i + 1} 项的 url 必须以 http:// 或 https:// 开头`);
       }
       let safeUrl = url.trim().replace(/\/+$/, '');
-      if (safeUrl.startsWith('http://') && (safeUrl.includes('lziapi.com') || safeUrl.includes('guangsuapi.com') || safeUrl.includes('ffzyapi.com'))) {
+      if (safeUrl.startsWith('http://') && (
+        safeUrl.includes('lziapi.com') ||
+        safeUrl.includes('guangsuapi.com') ||
+        safeUrl.includes('ffzyapi.com') ||
+        safeUrl.includes('hongniuzy2.com') ||
+        safeUrl.includes('bfzyapi.com')
+      )) {
         safeUrl = safeUrl.replace('http://', 'https://');
       }
       return {
@@ -34,9 +44,9 @@ export function getEnvSources(): SourceConfig[] {
         isAdult: isAdult === true,
       };
     });
-    return list;
+    return list.length > 0 ? list : CUSTOMER_SOURCES_LIST;
   } catch (err) {
-    console.warn('[LibreTV] DEFAULT_SOURCES 解析失败，已忽略：', err instanceof Error ? err.message : err);
-    return [];
+    console.warn('[LibreTV] DEFAULT_SOURCES 解析失败，兜底使用内置源：', err instanceof Error ? err.message : err);
+    return CUSTOMER_SOURCES_LIST;
   }
 }

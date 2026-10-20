@@ -263,69 +263,77 @@ export async function fetchIqiyiRank(
 }
 
 /**
- * 热门微短剧/爽文短剧专属独立栏目（直连 CMS 短剧分类，真流 m3u8 秒播）
- * 非凡 CMS (t=36) + 暴风 CMS (t=58) 双源聚合，带集数与完结状态
+ * 热门微短剧/爽文短剧专属独立栏目（直连多端点 CMS 短剧分类，真流 m3u8 秒播）
+ * 非凡 (t=36) + 暴风 (t=58) + 量子 (t=45) 多源并发聚合与片名去重，带集数与完结状态
  */
 export async function fetchShortDramaList(pageStart = 0): Promise<DoubanItem[]> {
   const page = Math.floor(pageStart / 20) + 1;
-  const cacheKey = `short_drama_list:${page}`;
+  const cacheKey = `short_drama_list_v2:${page}`;
   const cached = getCache<DoubanItem[]>(cacheKey);
   if (cached && cached.length > 0) return cached;
 
   const endpoints = [
     `https://cj.ffzyapi.com/api.php/provide/vod/?ac=detail&t=36&pg=${page}`,
     `https://bfzyapi.com/api.php/provide/vod/?ac=detail&t=58&pg=${page}`,
+    `https://cj.lziapi.com/api.php/provide/vod/?ac=detail&t=45&pg=${page}`,
   ];
 
-  for (const url of endpoints) {
-    try {
+  const results = await Promise.allSettled(
+    endpoints.map(async (url) => {
       const res = await fetchUpstream(url, {
         timeoutMs: 6000,
         headers: { Accept: 'application/json', 'User-Agent': UA },
       });
-      if (res.ok) {
-        const json = (await res.json()) as {
-          list?: Array<{
-            vod_id?: number | string;
-            vod_name?: string;
-            vod_pic?: string;
-            vod_remarks?: string;
-            vod_score?: string | number;
-          }>;
-        };
-        const list = json.list;
-        if (Array.isArray(list) && list.length > 0) {
-          const items: DoubanItem[] = list
-            .map((v) => {
-              const title = (v.vod_name || '').trim();
-              let cover = (v.vod_pic || '').trim();
-              if (cover.startsWith('http://')) {
-                cover = cover.replace('http://', 'https://');
-              }
-              const remarks = (v.vod_remarks || '').trim();
-              let rating: string | undefined = undefined;
-              if (remarks) {
-                rating = remarks.length <= 8 ? remarks : remarks.slice(0, 8);
-              }
-              return {
-                id: `short_drama_${v.vod_id || Math.random().toString(36).slice(2)}`,
-                title,
-                cover,
-                rating: rating || '微短剧',
-                isTv: true,
-              } as DoubanItem;
-            })
-            .filter((x) => Boolean(x.title && x.cover));
+      if (!res.ok) return [];
+      const json = (await res.json()) as {
+        list?: Array<{
+          vod_id?: number | string;
+          vod_name?: string;
+          vod_pic?: string;
+          vod_remarks?: string;
+          vod_score?: string | number;
+        }>;
+      };
+      return Array.isArray(json.list) ? json.list : [];
+    })
+  );
 
-          if (items.length > 0) {
-            setCache(cacheKey, items, CACHE_TTL);
-            return items;
-          }
-        }
+  const mergedMap = new Map<string, DoubanItem>();
+
+  for (const r of results) {
+    if (r.status !== 'fulfilled' || !Array.isArray(r.value)) continue;
+    for (const v of r.value) {
+      const title = (v.vod_name || '').trim();
+      let cover = (v.vod_pic || '').trim();
+      if (!title || !cover) continue;
+
+      if (cover.startsWith('http://')) {
+        cover = cover.replace('http://', 'https://');
       }
-    } catch (err) {
-      console.warn(`[HotList] 短剧源获取异常 (${url}):`, err);
+
+      const remarks = (v.vod_remarks || '').trim();
+      let rating: string | undefined = undefined;
+      if (remarks) {
+        rating = remarks.length <= 8 ? remarks : remarks.slice(0, 8);
+      }
+
+      const normTitle = title.replace(/[\s:：·\-—]/g, '').toLowerCase();
+      if (!mergedMap.has(normTitle)) {
+        mergedMap.set(normTitle, {
+          id: `short_drama_${v.vod_id || Math.random().toString(36).slice(2)}`,
+          title,
+          cover,
+          rating: rating || '微短剧',
+          isTv: true,
+        });
+      }
     }
+  }
+
+  const items = Array.from(mergedMap.values());
+  if (items.length > 0) {
+    setCache(cacheKey, items, CACHE_TTL);
+    return items;
   }
 
   return [];

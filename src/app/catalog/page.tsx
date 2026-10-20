@@ -5,13 +5,17 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Header } from '@/components/header';
 import { SiteFooter } from '@/components/site-footer';
-import { DoubanCard } from '@/components/video-card';
+import { DoubanCard, AggregatedCard, aggregateResults } from '@/components/video-card';
+import { DetailModal } from '@/components/detail-modal';
 import { MobileFilterSheet } from '@/components/mobile-filter-sheet';
 import { api } from '@/lib/client-api';
 import { useAuth } from '@/components/auth';
 import { useTranslation } from '@/lib/i18n';
-import { buildWatchUrl, cn } from '@/lib/utils';
+import { buildWatchUrl, cn, validateSourceUrl } from '@/lib/utils';
 import { isShortDramaTitle } from '@/lib/short-drama';
+import { useAppStore, resolveSource, isInDisabledSubscription, isSourceDisabled } from '@/lib/store';
+import { useToast } from '@/components/toast';
+import type { SearchResultItem, SourceSearchOutcome, DoubanItem } from '@/lib/types';
 
 type ChannelType = 'movie' | 'tv' | 'short_drama' | 'ai' | 'anime' | 'variety' | 'documentary';
 
@@ -83,6 +87,36 @@ const CHANNELS_CONFIG: ChannelConfig[] = [
   },
 ];
 
+export type CatalogSourceId = 'iqiyi' | 'baidu' | 'maoyan' | 'bangumi' | '360' | 'douban';
+
+interface CatalogSourceMeta {
+  id: CatalogSourceId;
+  label: string;
+  icon: string;
+  badge: string;
+  subTitle: string;
+}
+
+const CATALOG_SOURCES: CatalogSourceMeta[] = [
+  { id: 'iqiyi', label: '爱奇艺热榜', icon: '💚', badge: '实时热度', subTitle: '官方全端热播榜 · 实时爆款剧集与新片' },
+  { id: 'baidu', label: '百度风云榜', icon: '📈', badge: '全网热搜', subTitle: '全网综合搜索大盘 · 实时各大平台热度' },
+  { id: 'maoyan', label: '猫眼院线榜', icon: '🎟️', badge: '票房大盘', subTitle: '影院正在热映 · 实时票房排片大盘' },
+  { id: 'bangumi', label: '新番周历', icon: '✨', badge: '连载放送', subTitle: '当季最新连载动漫 · 每日更新时间表' },
+  { id: '360', label: '全网片库', icon: '🔥', badge: '多维细选', subTitle: '按地区、年份、类型自由筛选海量片库' },
+  { id: 'douban', label: '豆瓣高分榜', icon: '🏆', badge: '口碑经典', subTitle: '每周口碑新片榜 · 影史高分 Top250' },
+];
+
+const CHANNEL_SOURCES: Record<ChannelType, CatalogSourceId[]> = {
+  movie: ['iqiyi', 'baidu', 'maoyan', '360', 'douban'],
+  tv: ['iqiyi', 'baidu', '360', 'douban'],
+  short_drama: ['360', 'iqiyi'],
+  ai: ['360', 'iqiyi'],
+  anime: ['bangumi', 'iqiyi', 'baidu', '360'],
+  variety: ['iqiyi', '360', 'douban', 'baidu'],
+  documentary: ['360', 'douban'],
+};
+
+const BANGUMI_WEEKDAYS = ['全部', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 const YEARS = ['全部', '2026', '2025', '2024', '2023', '2022', '2021', '2020', '2019', '2018', '2017', '2016', '2015', '2010', '2000'];
 
 const SORTS = [
@@ -112,6 +146,7 @@ function CatalogContent() {
   const searchParams = useSearchParams();
   const { verified } = useAuth();
   const { t } = useTranslation();
+  const { toast } = useToast();
 
   // URL 参数优先，支持外部链接与浏览器前进后退
   const rawType = searchParams.get('type') || 'movie';
@@ -119,15 +154,45 @@ function CatalogContent() {
     ? (rawType as ChannelType)
     : 'movie';
 
+  // 数据源切换
+  const rawSource = searchParams.get('source') as CatalogSourceId | null;
+  const availableSources = CHANNEL_SOURCES[currentChannel] || ['360'];
+  const currentSource: CatalogSourceId = rawSource && availableSources.includes(rawSource)
+    ? rawSource
+    : availableSources[0];
+
+  // Bangumi 星期子选项
+  const currentWeekday = searchParams.get('weekday') || '全部';
+
+  // 豆瓣子选项
+  const currentDoubanSubTab = searchParams.get('subTab') || (currentChannel === 'movie' ? 'weekly' : 'chinese');
+
+  // 片库筛选参数
   const currentRegion = searchParams.get('region') || '全部';
   const currentGenre = searchParams.get('genre') || '全部';
   const currentYear = searchParams.get('year') || '全部';
   const currentSort = (searchParams.get('sort') || 'recommend') as 'recommend' | 'time' | 'rank';
   const currentPage = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
 
+  // 片库内双模搜索状态
+  const urlQuery = searchParams.get('q') || '';
+  const [searchInput, setSearchInput] = useState(urlQuery);
+  const [searchMode, setSearchMode] = useState<'vod' | 'filter'>('vod');
+  const [filterKeyword, setFilterKeyword] = useState('');
+  const [streamedOutcomes, setStreamedOutcomes] = useState<SourceSearchOutcome[]>([]);
+  const [detailItem, setDetailItem] = useState<SearchResultItem | null>(null);
+
   const [jumpPageInput, setJumpPageInput] = useState('');
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
   const [showBackToTop, setShowBackToTop] = useState(false);
+
+  // 点播源与搜索存储
+  const customAPIs = useAppStore((s) => s.customAPIs);
+  const envSources = useAppStore((s) => s.envSources);
+  const selectedKeys = useAppStore((s) => s.selectedKeys);
+  const yellowFilter = useAppStore((s) => s.yellowFilter);
+  const sourceHealth = useAppStore((s) => s.sourceHealth);
+  const subscriptions = useAppStore((s) => s.subscriptions);
 
   useEffect(() => {
     const onScroll = () => setShowBackToTop(window.scrollY > 400);
@@ -135,25 +200,66 @@ function CatalogContent() {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
+  useEffect(() => {
+    setSearchInput(urlQuery);
+  }, [urlQuery]);
+
   const activeChannelConfig = useMemo(
     () => CHANNELS_CONFIG.find((c) => c.id === currentChannel) || CHANNELS_CONFIG[0],
     [currentChannel]
   );
 
+  const selectedSources = useMemo(() => {
+    const seen = new Set<string>();
+    return selectedKeys
+      .map((key) => resolveSource({ customAPIs, envSources }, key))
+      .filter((s): s is NonNullable<typeof s> => {
+        if (!s || !validateSourceUrl(s.url) || seen.has(s.key)) return false;
+        seen.add(s.key);
+        return true;
+      })
+      .filter((s) => !isSourceDisabled({ sourceHealth }, s.key))
+      .filter((s) => !isInDisabledSubscription({ subscriptions }, s.key));
+  }, [customAPIs, envSources, selectedKeys, sourceHealth, subscriptions]);
+
   const updateFilters = (changes: {
     type?: string;
+    source?: string;
+    weekday?: string;
+    subTab?: string;
     region?: string;
     genre?: string;
     year?: string;
     sort?: string;
     page?: number;
+    q?: string;
   }) => {
     const sp = new URLSearchParams(searchParams.toString());
     if (changes.type !== undefined) {
       sp.set('type', changes.type);
-      // 切换频道时重置地区与类型
       sp.delete('region');
       sp.delete('genre');
+      sp.delete('weekday');
+      sp.delete('subTab');
+      sp.delete('q');
+      sp.set('page', '1');
+      const validSources = CHANNEL_SOURCES[changes.type as ChannelType] || ['360'];
+      if (!validSources.includes(currentSource)) {
+        sp.set('source', validSources[0]);
+      }
+    }
+    if (changes.source !== undefined) {
+      sp.set('source', changes.source);
+      sp.set('page', '1');
+      sp.delete('q');
+    }
+    if (changes.weekday !== undefined) {
+      if (changes.weekday === '全部') sp.delete('weekday');
+      else sp.set('weekday', changes.weekday);
+      sp.set('page', '1');
+    }
+    if (changes.subTab !== undefined) {
+      sp.set('subTab', changes.subTab);
       sp.set('page', '1');
     }
     if (changes.region !== undefined) {
@@ -178,6 +284,11 @@ function CatalogContent() {
     if (changes.page !== undefined) {
       sp.set('page', String(changes.page));
     }
+    if (changes.q !== undefined) {
+      if (!changes.q) sp.delete('q');
+      else sp.set('q', changes.q);
+      sp.set('page', '1');
+    }
     router.push(`/catalog?${sp.toString()}`, { scroll: false });
   };
 
@@ -190,9 +301,50 @@ function CatalogContent() {
 
   const pageStart = (currentPage - 1) * PAGE_SIZE;
 
+  // 1. 全网采集源直搜 React Query（当 URL 存在 ?q= 触发）
+  const vodSearchQuery = useQuery({
+    queryKey: ['catalog-vod-search', urlQuery, selectedKeys, yellowFilter],
+    queryFn: ({ signal }) => {
+      setStreamedOutcomes([]);
+      return api.search(urlQuery.slice(0, 100), selectedSources, yellowFilter, {
+        signal,
+        onSource: (outcome) => {
+          setStreamedOutcomes((prev) => [...prev, outcome]);
+        },
+      });
+    },
+    enabled: Boolean(urlQuery) && selectedSources.length > 0,
+    staleTime: 300_000,
+  });
+
+  const isVodSearching = Boolean(urlQuery) && vodSearchQuery.isFetching && !vodSearchQuery.data;
+  const streamedList = useMemo(
+    () => streamedOutcomes.flatMap((o) => o.list),
+    [streamedOutcomes]
+  );
+  const searchResultList = useMemo(
+    () => vodSearchQuery.data?.list ?? (isVodSearching ? streamedList : []),
+    [vodSearchQuery.data, isVodSearching, streamedList]
+  );
+  const searchGroups = useMemo(() => aggregateResults(searchResultList), [searchResultList]);
+
+  // 2. 片库与实时热榜数据 Query
   const catalogQuery = useQuery({
-    queryKey: ['catalog', currentChannel, queryTag, currentRegion, currentGenre, currentYear, currentSort, currentPage],
+    queryKey: [
+      'catalog',
+      currentChannel,
+      currentSource,
+      currentWeekday,
+      currentDoubanSubTab,
+      queryTag,
+      currentRegion,
+      currentGenre,
+      currentYear,
+      currentSort,
+      currentPage,
+    ],
     queryFn: async ({ signal }) => {
+      // 1. 短剧或 AI 专区
       if (currentChannel === 'short_drama' || currentChannel === 'ai') {
         const res = await api.hotList('short_drama', signal, pageStart);
         const mapped = currentChannel === 'ai'
@@ -201,11 +353,75 @@ function CatalogContent() {
               rating: item.rating === '微短剧' ? 'AI精选' : item.rating,
             }))
           : res.items;
-        return {
-          items: mapped,
-          total: 200,
-        };
+        return { items: mapped, total: 200 };
       }
+
+      // 2. Bangumi 新番周历
+      if (currentSource === 'bangumi' && currentChannel === 'anime') {
+        const calendar = await api.bangumiCalendar(signal);
+        if (!calendar?.days) return { items: [], total: 0 };
+        const dayIdx = BANGUMI_WEEKDAYS.indexOf(currentWeekday);
+        if (currentWeekday === '全部' || dayIdx <= 0) {
+          const allItems = calendar.days.flatMap((d) => d.items);
+          return { items: allItems, total: allItems.length };
+        }
+        const targetDay = calendar.days.find((d) => d.weekday === dayIdx);
+        const dayItems = targetDay?.items || [];
+        return { items: dayItems, total: dayItems.length };
+      }
+
+      // 3. 爱奇艺官方实时榜
+      if (currentSource === 'iqiyi') {
+        let hotKey: 'iqiyi_tv' | 'iqiyi_movie' | 'iqiyi_anime' | 'iqiyi_variety' = 'iqiyi_movie';
+        if (currentChannel === 'tv') hotKey = 'iqiyi_tv';
+        else if (currentChannel === 'anime') hotKey = 'iqiyi_anime';
+        else if (currentChannel === 'variety') hotKey = 'iqiyi_variety';
+        else hotKey = 'iqiyi_movie';
+        const res = await api.hotList(hotKey, signal);
+        return { items: res.items, total: res.items.length };
+      }
+
+      // 4. 百度风云榜
+      if (currentSource === 'baidu') {
+        let hotKey: 'baidu_movie' | 'baidu_teleplay' | 'baidu_anime' = 'baidu_movie';
+        if (currentChannel === 'tv') hotKey = 'baidu_teleplay';
+        else if (currentChannel === 'anime') hotKey = 'baidu_anime';
+        else hotKey = 'baidu_movie';
+        const res = await api.hotList(hotKey, signal);
+        return { items: res.items, total: res.items.length };
+      }
+
+      // 5. 猫眼院线票房榜
+      if (currentSource === 'maoyan') {
+        const res = await api.hotList('maoyan_movie', signal);
+        return { items: res.items, total: res.items.length };
+      }
+
+      // 6. 豆瓣高分与周榜
+      if (currentSource === 'douban') {
+        if (currentChannel === 'movie') {
+          if (currentDoubanSubTab === 'top250' || currentSort === 'rank') {
+            const res = await api.hotList('douban_top250', signal, pageStart);
+            return { items: res.items, total: 250 };
+          }
+          const res = await api.hotList('douban_movie_weekly', signal);
+          return { items: res.items, total: res.items.length };
+        }
+        if (currentChannel === 'tv') {
+          const listId = currentDoubanSubTab === 'global' ? 'douban_tv_global' : 'douban_tv_chinese';
+          const res = await api.hotList(listId, signal);
+          return { items: res.items, total: res.items.length };
+        }
+        if (currentChannel === 'variety') {
+          const listId = currentDoubanSubTab === 'global' ? 'douban_show_global' : 'douban_show_chinese';
+          const res = await api.hotList(listId, signal);
+          return { items: res.items, total: res.items.length };
+        }
+        const res = await api.hotList('douban_movie_weekly', signal);
+        return { items: res.items, total: res.items.length };
+      }
+
+      // 7. 默认 360 全网片库多维筛选
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return api.douban(currentChannel as any, queryTag, pageStart, PAGE_SIZE, signal, currentSort, {
         area: currentRegion,
@@ -214,12 +430,20 @@ function CatalogContent() {
       });
     },
     staleTime: 5 * 60_000,
+    enabled: !urlQuery,
   });
 
   const rawItems = catalogQuery.data?.items ?? [];
-  const items = currentChannel === 'short_drama' || currentChannel === 'ai'
+  const baseItems = currentChannel === 'short_drama' || currentChannel === 'ai'
     ? rawItems
     : rawItems.filter((item) => !isShortDramaTitle(item.title));
+
+  const items: DoubanItem[] = useMemo(() => {
+    if (!filterKeyword.trim()) return baseItems;
+    const kw = filterKeyword.trim().toLowerCase();
+    return baseItems.filter((item) => item.title.toLowerCase().includes(kw));
+  }, [baseItems, filterKeyword]);
+
   const total = catalogQuery.data?.total ?? (items.length > 0 ? items.length * 10 : 0);
   const totalPages = Math.max(1, Math.min(500, Math.ceil(total / PAGE_SIZE)));
 
@@ -233,6 +457,30 @@ function CatalogContent() {
     router.push(watchUrl);
   };
 
+  const handleExecuteSearch = (val: string) => {
+    const q = val.trim();
+    if (!q) {
+      updateFilters({ q: '' });
+      setFilterKeyword('');
+      return;
+    }
+    if (searchMode === 'vod') {
+      if (selectedSources.length === 0) {
+        toast('请先在全局设置中添加并勾选点播采集源', 'warning');
+        return;
+      }
+      updateFilters({ q });
+    } else {
+      setFilterKeyword(q);
+    }
+  };
+
+  const handleClearSearch = () => {
+    setSearchInput('');
+    setFilterKeyword('');
+    updateFilters({ q: '' });
+  };
+
   const hasActiveFilters =
     currentRegion !== '全部' || currentGenre !== '全部' || currentYear !== '全部' || currentSort !== 'recommend';
   const activeFilterCount =
@@ -240,11 +488,16 @@ function CatalogContent() {
     (currentGenre !== '全部' ? 1 : 0) +
     (currentYear !== '全部' ? 1 : 0);
 
+  const activeSourceMeta = useMemo(
+    () => CATALOG_SOURCES.find((s) => s.id === currentSource) || CATALOG_SOURCES[0],
+    [currentSource]
+  );
+
   return (
     <div className="min-h-screen flex flex-col bg-bg text-content">
       <Header showSearch />
 
-      <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-5 space-y-5 pb-28 md:pb-8 overflow-x-hidden">
+      <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-5 space-y-4 pb-28 md:pb-8 overflow-x-hidden">
         {/* 频道大横幅与引导标语 */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-line/60">
           <div>
@@ -261,6 +514,108 @@ function CatalogContent() {
             <span className="text-xs text-faint bg-chip px-3 py-1.5 rounded-full border border-line/40">
               💡 点击任意海报立即全网匹配首集秒播
             </span>
+          </div>
+        </div>
+
+        {/* 片库内双模即时搜索栏 */}
+        <div className="bg-surface border border-line rounded-2xl p-3 sm:p-3.5 shadow-xs space-y-2">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleExecuteSearch(searchInput);
+            }}
+            className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2"
+          >
+            {/* 搜索模式切换 */}
+            <div className="flex items-center p-0.5 bg-chip/60 border border-line/60 rounded-xl shrink-0 self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={() => setSearchMode('vod')}
+                className={cn(
+                  'px-2.5 py-1 text-xs rounded-lg font-medium transition-all',
+                  searchMode === 'vod'
+                    ? 'bg-accent text-on-accent font-semibold shadow-xs'
+                    : 'text-muted hover:text-content'
+                )}
+                title="实时向所有勾选的真实采集站并发检索最新资源"
+              >
+                🌐 全网直搜
+              </button>
+              <button
+                type="button"
+                onClick={() => setSearchMode('filter')}
+                className={cn(
+                  'px-2.5 py-1 text-xs rounded-lg font-medium transition-all',
+                  searchMode === 'filter'
+                    ? 'bg-accent text-on-accent font-semibold shadow-xs'
+                    : 'text-muted hover:text-content'
+                )}
+                title="秒级在当前片库/热榜中按片名筛选"
+              >
+                ⚡ 榜单过滤
+              </button>
+            </div>
+
+            {/* 输入框 */}
+            <div className="relative flex-1 flex items-center">
+              <span className="absolute left-3 text-muted pointer-events-none text-xs">🔍</span>
+              <input
+                type="text"
+                value={searchInput}
+                onChange={(e) => {
+                  setSearchInput(e.target.value);
+                  if (searchMode === 'filter') {
+                    setFilterKeyword(e.target.value);
+                  }
+                }}
+                placeholder={
+                  searchMode === 'vod'
+                    ? `在全网采集源中实时直搜最新${activeChannelConfig.label}（按回车搜索）...`
+                    : `在当前【${activeSourceMeta.label}】中快速过滤片名...`
+                }
+                className="w-full pl-8 pr-8 py-2 rounded-xl bg-chip/50 hover:bg-chip focus:bg-surface border border-line/60 focus:border-accent text-xs sm:text-sm text-content placeholder:text-faint transition-all focus:outline-none"
+              />
+              {searchInput && (
+                <button
+                  type="button"
+                  onClick={handleClearSearch}
+                  className="absolute right-2.5 text-xs text-faint hover:text-content p-1"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            <button
+              type="submit"
+              className="btn-primary py-2 px-4 text-xs font-semibold rounded-xl shrink-0 active:scale-95 shadow-xs"
+            >
+              {searchMode === 'vod' ? '全网直搜' : '过滤片名'}
+            </button>
+          </form>
+
+          {/* 搜索提示或快捷热搜词 */}
+          <div className="flex items-center justify-between text-[11px] text-faint px-1">
+            <span className="truncate">
+              {urlQuery ? (
+                <span className="text-accent font-medium">
+                  正在查看全网聚合搜索 “{urlQuery}” 的结果
+                </span>
+              ) : (
+                <span>
+                  🔥 热门推荐: <button type="button" onClick={() => handleExecuteSearch('凡人修仙传')} className="hover:text-accent underline ml-1">凡人修仙传</button> · <button type="button" onClick={() => handleExecuteSearch('庆余年')} className="hover:text-accent underline ml-1">庆余年</button> · <button type="button" onClick={() => handleExecuteSearch('热辣滚烫')} className="hover:text-accent underline ml-1">热辣滚烫</button> · <button type="button" onClick={() => handleExecuteSearch('咒术回战')} className="hover:text-accent underline ml-1">咒术回战</button>
+                </span>
+              )}
+            </span>
+            {urlQuery && (
+              <button
+                type="button"
+                onClick={handleClearSearch}
+                className="text-accent hover:underline shrink-0 ml-2"
+              >
+                ✕ 清除搜索返回片库
+              </button>
+            )}
           </div>
         </div>
 
@@ -283,230 +638,434 @@ function CatalogContent() {
           ))}
         </div>
 
-        {/* 网页版多维聚合筛选器面板 (桌面端 >= 1024px) */}
-        <div className="hidden lg:block bg-chip/35 border border-line/50 rounded-2xl p-3 sm:p-4 space-y-2.5 sm:space-y-3">
-          {/* 地区行 */}
-          <FilterRow
-            label={t('catalog.region', '地区')}
-            options={activeChannelConfig.regions}
-            active={currentRegion}
-            onSelect={(r) => updateFilters({ region: r })}
-          />
+        {/* 二级数据源与榜单引擎切换器 */}
+        {!urlQuery && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2 overflow-x-auto no-scrollbar py-1">
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                {availableSources.map((srcId) => {
+                  const meta = CATALOG_SOURCES.find((s) => s.id === srcId) || CATALOG_SOURCES[0];
+                  const isSelected = currentSource === srcId;
+                  return (
+                    <button
+                      key={srcId}
+                      type="button"
+                      onClick={() => updateFilters({ source: srcId })}
+                      className={cn(
+                        'flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl text-xs font-semibold transition-all shrink-0 active:scale-95 border cursor-pointer touch-manipulation',
+                        isSelected
+                          ? 'bg-accent/15 text-accent border-accent/40 shadow-xs'
+                          : 'bg-surface hover:bg-hover text-muted hover:text-content border-line/60'
+                      )}
+                    >
+                      <span className="text-sm">{meta.icon}</span>
+                      <span>{meta.label}</span>
+                      <span
+                        className={cn(
+                          'text-[10px] px-1.5 py-0.5 rounded font-medium hidden sm:inline',
+                          isSelected ? 'bg-accent text-on-accent' : 'bg-chip text-faint'
+                        )}
+                      >
+                        {meta.badge}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
 
-          {/* 类型行 */}
-          <FilterRow
-            label={t('catalog.genre', '类型')}
-            options={activeChannelConfig.genres}
-            active={currentGenre}
-            onSelect={(g) => updateFilters({ genre: g })}
-          />
-
-          {/* 年份行 */}
-          <FilterRow
-            label={t('catalog.year', '年份')}
-            options={YEARS}
-            active={currentYear}
-            onSelect={(y) => updateFilters({ year: y })}
-          />
-
-          {/* 排序行 */}
-          <div className="flex items-center justify-between pt-1 border-t border-line/40 gap-2 flex-wrap">
-            <div className="flex items-center gap-1.5 sm:gap-2">
-              <span className="text-xs font-semibold text-faint shrink-0 w-8 sm:w-10 text-left sm:text-right">{t('catalog.sort', '排序')}:</span>
-              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-                {SORTS.map((s) => (
-                  <button
-                    key={s.id}
-                    onClick={() => updateFilters({ sort: s.id })}
-                    className={cn(
-                      'px-3 py-1 rounded-lg text-xs font-medium transition-all shrink-0 active:scale-95 touch-manipulation',
-                      currentSort === s.id
-                        ? 'bg-accent text-on-accent font-semibold shadow-xs'
-                        : 'text-muted hover:text-content hover:bg-hover bg-surface/50'
-                    )}
-                  >
-                    {s.label}
-                  </button>
-                ))}
+              {/* 源描述小标 */}
+              <div className="hidden lg:flex items-center gap-1 text-[11px] text-faint shrink-0">
+                <span>⚡ {activeSourceMeta.subTitle}</span>
               </div>
             </div>
 
-            {hasActiveFilters && (
-              <button
-                onClick={() =>
-                  router.push(`/catalog?type=${currentChannel}`, { scroll: false })
-                }
-                className="text-xs text-accent hover:underline flex items-center gap-1 shrink-0 ml-auto cursor-pointer"
-              >
-                <span>重置所有筛选</span>
-                <span>✕</span>
-              </button>
+            {/* Bangumi 专属星期选择器 */}
+            {currentSource === 'bangumi' && currentChannel === 'anime' && (
+              <div className="flex items-center gap-1.5 bg-chip/40 border border-line/60 rounded-xl p-2 overflow-x-auto no-scrollbar">
+                <span className="text-xs font-semibold text-faint shrink-0 px-1">连载周历:</span>
+                {BANGUMI_WEEKDAYS.map((day) => (
+                  <button
+                    key={day}
+                    type="button"
+                    onClick={() => updateFilters({ weekday: day })}
+                    className={cn(
+                      'px-3 py-1 rounded-lg text-xs font-medium transition-all shrink-0 active:scale-95 cursor-pointer',
+                      currentWeekday === day
+                        ? 'bg-accent text-on-accent font-semibold shadow-xs'
+                        : 'text-muted hover:text-content bg-surface/50 border border-line/40'
+                    )}
+                  >
+                    {day}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* 豆瓣专属子榜单选项 */}
+            {currentSource === 'douban' && (
+              <div className="flex items-center gap-1.5 bg-chip/40 border border-line/60 rounded-xl p-2 overflow-x-auto no-scrollbar">
+                <span className="text-xs font-semibold text-faint shrink-0 px-1">精选榜单:</span>
+                {currentChannel === 'movie' && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => updateFilters({ subTab: 'weekly' })}
+                      className={cn(
+                        'px-3 py-1 rounded-lg text-xs font-medium transition-all shrink-0 active:scale-95 cursor-pointer',
+                        currentDoubanSubTab === 'weekly'
+                          ? 'bg-accent text-on-accent font-semibold shadow-xs'
+                          : 'text-muted hover:text-content bg-surface/50 border border-line/40'
+                      )}
+                    >
+                      🔥 本周口碑周榜
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateFilters({ subTab: 'top250' })}
+                      className={cn(
+                        'px-3 py-1 rounded-lg text-xs font-medium transition-all shrink-0 active:scale-95 cursor-pointer',
+                        currentDoubanSubTab === 'top250'
+                          ? 'bg-accent text-on-accent font-semibold shadow-xs'
+                          : 'text-muted hover:text-content bg-surface/50 border border-line/40'
+                      )}
+                    >
+                      🏆 影史高分 Top250
+                    </button>
+                  </>
+                )}
+                {currentChannel === 'tv' && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => updateFilters({ subTab: 'chinese' })}
+                      className={cn(
+                        'px-3 py-1 rounded-lg text-xs font-medium transition-all shrink-0 active:scale-95 cursor-pointer',
+                        currentDoubanSubTab === 'chinese'
+                          ? 'bg-accent text-on-accent font-semibold shadow-xs'
+                          : 'text-muted hover:text-content bg-surface/50 border border-line/40'
+                      )}
+                    >
+                      🇨🇳 华语剧集周榜
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateFilters({ subTab: 'global' })}
+                      className={cn(
+                        'px-3 py-1 rounded-lg text-xs font-medium transition-all shrink-0 active:scale-95 cursor-pointer',
+                        currentDoubanSubTab === 'global'
+                          ? 'bg-accent text-on-accent font-semibold shadow-xs'
+                          : 'text-muted hover:text-content bg-surface/50 border border-line/40'
+                      )}
+                    >
+                      🌍 全球剧集周榜
+                    </button>
+                  </>
+                )}
+                {currentChannel === 'variety' && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => updateFilters({ subTab: 'chinese' })}
+                      className={cn(
+                        'px-3 py-1 rounded-lg text-xs font-medium transition-all shrink-0 active:scale-95 cursor-pointer',
+                        currentDoubanSubTab === 'chinese'
+                          ? 'bg-accent text-on-accent font-semibold shadow-xs'
+                          : 'text-muted hover:text-content bg-surface/50 border border-line/40'
+                      )}
+                    >
+                      🇨🇳 华语精选综艺
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateFilters({ subTab: 'global' })}
+                      className={cn(
+                        'px-3 py-1 rounded-lg text-xs font-medium transition-all shrink-0 active:scale-95 cursor-pointer',
+                        currentDoubanSubTab === 'global'
+                          ? 'bg-accent text-on-accent font-semibold shadow-xs'
+                          : 'text-muted hover:text-content bg-surface/50 border border-line/40'
+                      )}
+                    >
+                      🌍 全球真人秀
+                    </button>
+                  </>
+                )}
+              </div>
             )}
           </div>
-        </div>
+        )}
 
-        {/* iPad 平板端专属流式触控筛选卡片 (768px ~ 1024px) */}
-        <TabletFilterPanel
-          regions={activeChannelConfig.regions}
-          genres={activeChannelConfig.genres}
-          years={YEARS}
-          activeRegion={currentRegion}
-          activeGenre={currentGenre}
-          activeYear={currentYear}
-          activeSort={currentSort}
-          onUpdateFilters={updateFilters}
-          onReset={() => router.push(`/catalog?type=${currentChannel}`, { scroll: false })}
-          hasActiveFilters={hasActiveFilters}
-        />
+        {/* 仅在 360 全网片库模式下展示多维筛选器 */}
+        {!urlQuery && currentSource === '360' && (
+          <>
+            {/* 网页版多维聚合筛选器面板 (桌面端 >= 1024px) */}
+            <div className="hidden lg:block bg-chip/35 border border-line/50 rounded-2xl p-3 sm:p-4 space-y-2.5 sm:space-y-3">
+              {/* 地区行 */}
+              <FilterRow
+                label={t('catalog.region', '地区')}
+                options={activeChannelConfig.regions}
+                active={currentRegion}
+                onSelect={(r) => updateFilters({ region: r })}
+              />
 
-        {/* 移动端专属精炼筛选栏 (手机端) */}
-        <div className="md:hidden space-y-2">
-          <div className="flex items-center justify-between gap-2 bg-chip/50 border border-line/60 rounded-xl p-2">
-            {/* 呼出半屏抽屉 */}
-            <button
-              type="button"
-              onClick={() => setMobileFilterOpen(true)}
-              className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all active:scale-95 touch-manipulation cursor-pointer border shrink-0',
-                activeFilterCount > 0
-                  ? 'bg-accent text-on-accent border-accent shadow-xs'
-                  : 'bg-surface border-line text-content hover:bg-hover'
-              )}
-            >
-              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
-              </svg>
-              <span>筛选</span>
-              {activeFilterCount > 0 && (
-                <span className="w-4 h-4 rounded-full bg-white text-accent text-[10px] font-bold flex items-center justify-center">
-                  {activeFilterCount}
-                </span>
-              )}
-            </button>
+              {/* 类型行 */}
+              <FilterRow
+                label={t('catalog.genre', '类型')}
+                options={activeChannelConfig.genres}
+                active={currentGenre}
+                onSelect={(g) => updateFilters({ genre: g })}
+              />
 
-            {/* 排序快捷选项 */}
-            <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
-              {SORTS.map((s) => (
+              {/* 年份行 */}
+              <FilterRow
+                label={t('catalog.year', '年份')}
+                options={YEARS}
+                active={currentYear}
+                onSelect={(y) => updateFilters({ year: y })}
+              />
+
+              {/* 排序行 */}
+              <div className="flex items-center justify-between pt-1 border-t border-line/40 gap-2 flex-wrap">
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  <span className="text-xs font-semibold text-faint shrink-0 w-8 sm:w-10 text-left sm:text-right">{t('catalog.sort', '排序')}:</span>
+                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+                    {SORTS.map((s) => (
+                      <button
+                        key={s.id}
+                        onClick={() => updateFilters({ sort: s.id })}
+                        className={cn(
+                          'px-3 py-1 rounded-lg text-xs font-medium transition-all shrink-0 active:scale-95 touch-manipulation',
+                          currentSort === s.id
+                            ? 'bg-accent text-on-accent font-semibold shadow-xs'
+                            : 'text-muted hover:text-content hover:bg-hover bg-surface/50'
+                        )}
+                      >
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {hasActiveFilters && (
+                  <button
+                    onClick={() =>
+                      router.push(`/catalog?type=${currentChannel}&source=360`, { scroll: false })
+                    }
+                    className="text-xs text-accent hover:underline flex items-center gap-1 shrink-0 ml-auto cursor-pointer"
+                  >
+                    <span>重置所有筛选</span>
+                    <span>✕</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* iPad 平板端专属流式触控筛选卡片 (768px ~ 1024px) */}
+            <TabletFilterPanel
+              regions={activeChannelConfig.regions}
+              genres={activeChannelConfig.genres}
+              years={YEARS}
+              activeRegion={currentRegion}
+              activeGenre={currentGenre}
+              activeYear={currentYear}
+              activeSort={currentSort}
+              onUpdateFilters={updateFilters}
+              onReset={() => router.push(`/catalog?type=${currentChannel}&source=360`, { scroll: false })}
+              hasActiveFilters={hasActiveFilters}
+            />
+
+            {/* 移动端专属精炼筛选栏 (手机端) */}
+            <div className="md:hidden space-y-2">
+              <div className="flex items-center justify-between gap-2 bg-chip/50 border border-line/60 rounded-xl p-2">
                 <button
-                  key={s.id}
-                  onClick={() => updateFilters({ sort: s.id })}
+                  type="button"
+                  onClick={() => setMobileFilterOpen(true)}
                   className={cn(
-                    'px-2.5 py-1 rounded-lg text-xs font-medium transition-all shrink-0 active:scale-95 touch-manipulation',
-                    currentSort === s.id
-                      ? 'bg-accent text-on-accent font-semibold shadow-xs'
-                      : 'text-muted hover:text-content bg-surface border border-line/50'
+                    'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all active:scale-95 touch-manipulation cursor-pointer border shrink-0',
+                    activeFilterCount > 0
+                      ? 'bg-accent text-on-accent border-accent shadow-xs'
+                      : 'bg-surface border-line text-content hover:bg-hover'
                   )}
                 >
-                  {s.label}
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+                  </svg>
+                  <span>筛选</span>
+                  {activeFilterCount > 0 && (
+                    <span className="w-4 h-4 rounded-full bg-white text-accent text-[10px] font-bold flex items-center justify-center">
+                      {activeFilterCount}
+                    </span>
+                  )}
                 </button>
-              ))}
+
+                <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
+                  {SORTS.map((s) => (
+                    <button
+                      key={s.id}
+                      onClick={() => updateFilters({ sort: s.id })}
+                      className={cn(
+                        'px-2.5 py-1 rounded-lg text-xs font-medium transition-all shrink-0 active:scale-95 touch-manipulation',
+                        currentSort === s.id
+                          ? 'bg-accent text-on-accent font-semibold shadow-xs'
+                          : 'text-muted hover:text-content bg-surface border border-line/50'
+                      )}
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+
+                {hasActiveFilters && (
+                  <button
+                    onClick={() => router.push(`/catalog?type=${currentChannel}&source=360`, { scroll: false })}
+                    className="text-xs text-muted hover:text-accent shrink-0 p-1 active:scale-90"
+                    title="重置全部筛选"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {activeFilterCount > 0 && (
+                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar text-xs py-0.5 px-0.5">
+                  <span className="text-muted text-[11px] shrink-0">已选:</span>
+                  {currentRegion !== '全部' && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 border border-accent/30 text-accent font-medium text-[11px] shrink-0">
+                      {currentRegion}
+                      <button onClick={() => updateFilters({ region: '全部' })} className="hover:opacity-70">×</button>
+                    </span>
+                  )}
+                  {currentGenre !== '全部' && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 border border-accent/30 text-accent font-medium text-[11px] shrink-0">
+                      {currentGenre}
+                      <button onClick={() => updateFilters({ genre: '全部' })} className="hover:opacity-70">×</button>
+                    </span>
+                  )}
+                  {currentYear !== '全部' && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 border border-accent/30 text-accent font-medium text-[11px] shrink-0">
+                      {currentYear}年
+                      <button onClick={() => updateFilters({ year: '全部' })} className="hover:opacity-70">×</button>
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
 
-            {/* 重置 */}
-            {hasActiveFilters && (
-              <button
-                onClick={() => router.push(`/catalog?type=${currentChannel}`, { scroll: false })}
-                className="text-xs text-muted hover:text-accent shrink-0 p-1 active:scale-90"
-                title="重置全部筛选"
-              >
-                ✕
-              </button>
-            )}
-          </div>
-
-          {/* 已选条件小胶囊 */}
-          {activeFilterCount > 0 && (
-            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar text-xs py-0.5 px-0.5">
-              <span className="text-muted text-[11px] shrink-0">已选:</span>
-              {currentRegion !== '全部' && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 border border-accent/30 text-accent font-medium text-[11px] shrink-0">
-                  {currentRegion}
-                  <button onClick={() => updateFilters({ region: '全部' })} className="hover:opacity-70">×</button>
-                </span>
-              )}
-              {currentGenre !== '全部' && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 border border-accent/30 text-accent font-medium text-[11px] shrink-0">
-                  {currentGenre}
-                  <button onClick={() => updateFilters({ genre: '全部' })} className="hover:opacity-70">×</button>
-                </span>
-              )}
-              {currentYear !== '全部' && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 border border-accent/30 text-accent font-medium text-[11px] shrink-0">
-                  {currentYear}年
-                  <button onClick={() => updateFilters({ year: '全部' })} className="hover:opacity-70">×</button>
-                </span>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* 移动端筛选抽屉组件 */}
-        <MobileFilterSheet
-          open={mobileFilterOpen}
-          onClose={() => setMobileFilterOpen(false)}
-          regions={activeChannelConfig.regions}
-          genres={activeChannelConfig.genres}
-          years={YEARS}
-          activeRegion={currentRegion}
-          activeGenre={currentGenre}
-          activeYear={currentYear}
-          onApply={(f) => {
-            updateFilters({ region: f.region, genre: f.genre, year: f.year });
-          }}
-          totalCount={total}
-        />
+            {/* 移动端筛选抽屉组件 */}
+            <MobileFilterSheet
+              open={mobileFilterOpen}
+              onClose={() => setMobileFilterOpen(false)}
+              regions={activeChannelConfig.regions}
+              genres={activeChannelConfig.genres}
+              years={YEARS}
+              activeRegion={currentRegion}
+              activeGenre={currentGenre}
+              activeYear={currentYear}
+              onApply={(f) => {
+                updateFilters({ region: f.region, genre: f.genre, year: f.year });
+              }}
+              totalCount={total}
+            />
+          </>
+        )}
 
         {/* 统计提示与换页状态 */}
         <div className="flex items-center justify-between text-xs text-muted px-1">
           <span>
-            {catalogQuery.isLoading ? (
+            {urlQuery ? (
+              isVodSearching ? (
+                '正在全网采集站实时搜索最新片源…'
+              ) : (
+                <>
+                  全网聚合找到 <span className="text-content font-bold">{searchGroups.length}</span> 部匹配影片
+                </>
+              )
+            ) : catalogQuery.isLoading ? (
               '正在加载片单…'
-            ) : total > 0 ? (
+            ) : items.length > 0 ? (
               <>
-                共找到 <span className="text-content font-bold">{total.toLocaleString()}</span> 部影片
-                （当前第 {currentPage}/{totalPages} 页）
+                当前【{activeSourceMeta.label}】共展示 <span className="text-content font-bold">{items.length}</span> 部精选影片
+                {currentSource === '360' && `（第 ${currentPage}/${totalPages} 页，共 ${total.toLocaleString()} 部）`}
               </>
             ) : (
               '暂无影片'
             )}
           </span>
-          {catalogQuery.isFetching && !catalogQuery.isLoading && (
+          {((catalogQuery.isFetching && !catalogQuery.isLoading) || isVodSearching) && (
             <span className="text-accent flex items-center gap-1">
               <span className="w-2 h-2 rounded-full bg-accent animate-ping" />
-              刷新中…
+              实时更新中…
             </span>
           )}
         </div>
 
-        {/* 影片网格 */}
-        {catalogQuery.isLoading ? (
-          <CatalogSkeleton />
-        ) : items.length === 0 ? (
-          <div className="py-20 text-center space-y-3 border border-dashed border-line/60 rounded-2xl bg-surface/40">
-            <p className="text-4xl">🍿</p>
-            <h3 className="text-base font-semibold text-content">未找到符合该组合条件的影片</h3>
-            <p className="text-xs text-muted">请尝试切换其他地区、类型或重置筛选条件</p>
-            <button
-              onClick={() => router.push(`/catalog?type=${currentChannel}`)}
-              className="btn-primary text-xs px-4 py-1.5 rounded-lg active:scale-95"
-            >
-              清空筛选条件
-            </button>
-          </div>
+        {/* 搜索模式下的内容呈现 */}
+        {urlQuery ? (
+          isVodSearching && searchGroups.length === 0 ? (
+            <CatalogSkeleton />
+          ) : searchGroups.length === 0 ? (
+            <div className="py-20 text-center space-y-3 border border-dashed border-line/60 rounded-2xl bg-surface/40">
+              <p className="text-4xl">🔍</p>
+              <h3 className="text-base font-semibold text-content">全网采集站未搜到 “{urlQuery}”</h3>
+              <p className="text-xs text-muted">请检查关键词是否有误，或在设置中启用更多点播采集源</p>
+              <button
+                type="button"
+                onClick={handleClearSearch}
+                className="btn-primary text-xs px-4 py-1.5 rounded-lg active:scale-95"
+              >
+                返回片库大厅
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3 sm:gap-4 md:gap-4.5">
+              {searchGroups.map((group) => (
+                <AggregatedCard
+                  key={group.key}
+                  group={group}
+                  onOpen={(item) => setDetailItem(item)}
+                />
+              ))}
+            </div>
+          )
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3 sm:gap-4 md:gap-4.5">
-            {items.map((item) => (
-              <DoubanCard
-                key={item.id}
-                item={item}
-                onClick={() => handleCardClick(item.title)}
-              />
-            ))}
-          </div>
+          /* 片库模式下的内容呈现 */
+          catalogQuery.isLoading ? (
+            <CatalogSkeleton />
+          ) : items.length === 0 ? (
+            <div className="py-20 text-center space-y-3 border border-dashed border-line/60 rounded-2xl bg-surface/40">
+              <p className="text-4xl">🍿</p>
+              <h3 className="text-base font-semibold text-content">
+                {filterKeyword ? `未找到与 “${filterKeyword}” 相关的影片` : '未找到符合条件的影片'}
+              </h3>
+              <p className="text-xs text-muted">
+                {filterKeyword ? '请尝试清空搜索框或切换其他数据源' : '请尝试切换其他榜单或数据源'}
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setFilterKeyword('');
+                  setSearchInput('');
+                  router.push(`/catalog?type=${currentChannel}`, { scroll: false });
+                }}
+                className="btn-primary text-xs px-4 py-1.5 rounded-lg active:scale-95"
+              >
+                重置查看热门
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3 sm:gap-4 md:gap-4.5">
+              {items.map((item) => (
+                <DoubanCard
+                  key={item.id}
+                  item={item}
+                  onClick={() => handleCardClick(item.title)}
+                />
+              ))}
+            </div>
+          )
         )}
 
-        {/* 真分页导航条 */}
-        {totalPages > 1 && (
+        {/* 分页导航条（仅在片库多页源下展示） */}
+        {!urlQuery && (currentSource === '360' || (currentSource === 'douban' && currentDoubanSubTab === 'top250') || currentChannel === 'short_drama') && totalPages > 1 && (
           <div className="pt-6 pb-8">
             {/* 移动端大按键上一页 / 下一页 */}
             <div className="sm:hidden flex items-center justify-between w-full gap-3">
@@ -605,7 +1164,7 @@ function CatalogContent() {
                 <span>页</span>
                 <button
                   type="submit"
-                  className="px-2 py-1 rounded bg-chip hover:bg-hover border border-line text-content text-xs active:scale-95"
+                  className="px-2 py-1 rounded bg-chip hover:bg-hover border border-line text-content text-xs active:scale-95 cursor-pointer"
                 >
                   GO
                 </button>
@@ -627,6 +1186,11 @@ function CatalogContent() {
               <polyline points="18 15 12 9 6 15" />
             </svg>
           </button>
+        )}
+
+        {/* 跨源搜索详情弹窗 */}
+        {detailItem && (
+          <DetailModal item={detailItem} onClose={() => setDetailItem(null)} />
         )}
       </main>
 
@@ -714,7 +1278,7 @@ function TabletFilterPanel({
         </div>
       </div>
 
-      {/* 地区流式药丸：自动换行 flex-wrap，彻底消除横向滚动条 */}
+      {/* 地区流式药丸：自动换行 flex-wrap */}
       <div>
         <div className="flex items-center justify-between mb-1.5">
           <span className="text-xs font-semibold text-faint">地区:</span>
@@ -783,7 +1347,7 @@ function TabletFilterPanel({
         </div>
       </div>
 
-      {/* 上映年份流式药丸（仅在展开或有选中时呈现） */}
+      {/* 上映年份流式药丸 */}
       {(expanded || activeYear !== '全部') && (
         <div className="pt-2 border-t border-line/40">
           <div className="flex items-center justify-between mb-1.5">
@@ -903,7 +1467,7 @@ function renderPageNumbers(
         key={pNum}
         onClick={() => onPageSelect(pNum)}
         className={cn(
-          'w-7 h-7 sm:w-8 sm:h-8 rounded-lg text-xs font-medium transition-all active:scale-95 touch-manipulation',
+          'w-7 h-7 sm:w-8 sm:h-8 rounded-lg text-xs font-medium transition-all active:scale-95 touch-manipulation cursor-pointer',
           isCur
             ? 'bg-accent text-on-accent font-bold shadow-xs'
             : 'text-muted hover:text-content hover:bg-hover bg-chip/50'

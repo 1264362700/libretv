@@ -5,6 +5,7 @@ describe('isHotListId', () => {
   it('白名单校验', () => {
     expect(isHotListId('douban_movie_weekly')).toBe(true);
     expect(isHotListId('baidu_teleplay')).toBe(true);
+    expect(isHotListId('baidu_anime')).toBe(true);
     expect(isHotListId('iqiyi_tv')).toBe(true);
     expect(isHotListId('iqiyi_movie')).toBe(true);
     expect(isHotListId('short_drama')).toBe(true);

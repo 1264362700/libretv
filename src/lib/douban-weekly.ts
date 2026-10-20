@@ -28,6 +28,7 @@ export const HOT_LIST_IDS = [
   'douban_show_global',
   'baidu_teleplay',
   'baidu_movie',
+  'baidu_anime',
   'douban_top250',
   '360_teleplay',
   '360_movie',
@@ -369,7 +370,7 @@ export async function fetchMaoyanRank(): Promise<DoubanItem[]> {
  * 百度风云榜直连抓取：
  * 修复跨行正则匹配（[\s\S]*?），支持 <!--s-data:...--> 与 san-state 双重解析（严格过滤短剧）
  */
-export async function fetchBaiduBoard(tab: 'movie' | 'teleplay'): Promise<DoubanItem[]> {
+export async function fetchBaiduBoard(tab: 'movie' | 'teleplay' | 'anime'): Promise<DoubanItem[]> {
   const cacheKey = `baidu_board:${tab}`;
   const cached = getCache<DoubanItem[]>(cacheKey);
   if (cached && cached.length > 0) return cached;
@@ -571,6 +572,11 @@ export async function fetchHotList(id: HotListId, pageStart = 0): Promise<Douban
     items = await fetchBaiduBoard('movie');
   } else if (id === 'baidu_teleplay') {
     items = await fetchBaiduBoard('teleplay');
+  } else if (id === 'baidu_anime') {
+    items = await fetchBaiduBoard('anime');
+    if (items.length === 0) {
+      items = await fetchIqiyiRank('anime');
+    }
   }
 
   // 5. 豆瓣 Top250 经典殿堂

@@ -313,13 +313,6 @@ function HomeContent() {
               onDetail={handlePlayMedia}
             />
 
-            {/* 3. 推荐内容专区（固定位置：首屏巨幕之后、搜索栏之前）
-                渲染 RecommendSection 使设置里的「推荐数据源」真正生效。
-                该组件此前从未被任何页面引用，推荐源设置形同虚设。 */}
-            <Suspense fallback={null}>
-              <RecommendSection onPick={handlePickByTitle} />
-            </Suspense>
-
             {/* 搜索胶囊栏（带防抖联想与热词） */}
             <section className="flex flex-col items-center">
               <div ref={searchHistory.containerRef} className="relative w-full max-w-2xl">
@@ -391,6 +384,11 @@ function HomeContent() {
                 ))}
               </div>
             </section>
+
+            {/* 3. 推荐数据源专区（置于搜索栏下方，轻量流媒体轨道风格） */}
+            <Suspense fallback={null}>
+              <RecommendSection onPick={handlePickByTitle} />
+            </Suspense>
 
             {/* 3. 板块一：「📡 实时连载 · 今日最新更新剧集/动漫」（横向滑动轨道） */}
             {recentList.length > 0 && (

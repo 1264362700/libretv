@@ -125,34 +125,42 @@ export function RecommendSection({ onPick }: { onPick: (title: string) => void }
     );
   }
 
+  const currentSourceMeta = RECOMMEND_SOURCES.find((s) => s.id === recommendSource) || RECOMMEND_SOURCES[0];
+
   return (
-    <section className="my-6 space-y-3.5">
-      {/* 极简流体推荐数据源切换栏：桌面端紧凑两端对齐，移动端平滑滚动无割裂 */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 p-2 sm:p-2.5 bg-surface-raised/90 backdrop-blur-md rounded-2xl border border-line/60 shadow-xs">
-        <div className="flex items-center gap-2 px-1 shrink-0">
-          <span className="w-2 h-4 rounded-full bg-accent shrink-0 shadow-xs" />
-          <span className="text-xs sm:text-sm font-bold text-content tracking-wide">推荐数据源</span>
-          <span className="text-[11px] text-faint hidden lg:inline">· 点击即时切换</span>
+    <section className="space-y-3 pt-2">
+      {/* 头部标题与推荐源切换胶囊（100% 对齐图二流媒体规范，无厚重外框） */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-line">
+        <div className="flex items-center gap-2">
+          <span className="text-xl sm:text-2xl shrink-0">{currentSourceMeta.icon}</span>
+          <div>
+            <h2 className="text-base sm:text-lg font-extrabold tracking-tight text-content flex items-center gap-2">
+              <span>{currentSourceMeta.label}</span>
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-accent/20 text-accent border border-accent/30">
+                精选源
+              </span>
+            </h2>
+            <p className="text-[11px] text-muted">{currentSourceMeta.desc} · 点击右侧即时切换</p>
+          </div>
         </div>
 
-        {/* 交互胶囊选项组：紧凑轻量，去臃肿 tag，触感顺滑 */}
-        <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar scroll-smooth py-0.5 px-0.5 w-full md:w-auto">
+        {/* 交互胶囊选项组：紧凑轻量无边框，触感顺滑 */}
+        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-1 shrink-0">
           {RECOMMEND_SOURCES.map((s) => {
-            const active = recommendSource === s.id;
+            const isSelected = s.id === recommendSource;
             return (
               <button
                 key={s.id}
                 type="button"
                 onClick={() => handleSwitchSource(s.id)}
                 className={cn(
-                  'group relative flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all duration-200 active:scale-95 shrink-0 touch-manipulation cursor-pointer border',
-                  active
-                    ? 'bg-accent text-white border-accent shadow-sm font-semibold'
-                    : 'bg-surface hover:bg-hover text-muted hover:text-content border-line/70 hover:border-accent/40'
+                  'px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer touch-manipulation',
+                  isSelected
+                    ? 'bg-accent text-on-accent shadow-md shadow-accent/40'
+                    : 'bg-chip text-muted hover:text-content hover:bg-hover'
                 )}
                 title={`切换到 ${s.label}（${s.desc}）`}
               >
-                <span>{s.icon}</span>
                 <span>{s.label}</span>
               </button>
             );
@@ -219,7 +227,6 @@ function DoubanMultiCategoryView({ onPick }: { onPick: (title: string) => void }
 
   // 换一批真实分页页码
   const [page, setPage] = useState(1);
-  const [isShuffling, setIsShuffling] = useState(false);
 
   // 计算目标豆瓣请求参数
   const { type, tag, sort } = (() => {
@@ -297,18 +304,18 @@ function DoubanMultiCategoryView({ onPick }: { onPick: (title: string) => void }
   })();
 
   return (
-    <section aria-label="影视多维分类大厅" className="space-y-3.5">
-      {/* 核心分类与操作工具栏：分类左对齐，操作右对齐 */}
-      <div className="flex items-center justify-between gap-2 p-1.5 sm:p-2 bg-chip/30 border border-line/40 rounded-xl">
+    <section aria-label="影视多维分类大厅" className="space-y-2.5">
+      {/* 核心分类与片库入口：无厚重外框，轻量通透 */}
+      <div className="flex items-center justify-between gap-2 py-0.5">
         <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar py-0.5">
           {PRIMARY_TABS.map((tab) => (
             <button
               key={tab.id}
               className={cn(
-                'px-3 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-all duration-150 active:scale-95 shrink-0 flex items-center gap-1 touch-manipulation',
+                'px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all duration-150 active:scale-95 shrink-0 flex items-center gap-1 touch-manipulation cursor-pointer',
                 category === tab.id
-                  ? 'bg-accent text-on-accent shadow-xs font-semibold'
-                  : 'text-muted hover:text-content hover:bg-hover'
+                  ? 'bg-accent text-on-accent shadow-xs'
+                  : 'bg-chip text-muted hover:text-content hover:bg-hover'
               )}
               onClick={() => {
                 setCategory(tab.id);
@@ -321,33 +328,17 @@ function DoubanMultiCategoryView({ onPick }: { onPick: (title: string) => void }
           ))}
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0">
-          <button
-            type="button"
-            disabled={activeQuery.isFetching}
-            className="flex items-center gap-1.5 px-3 py-1 rounded-lg border border-line hover:border-accent/50 text-xs text-muted hover:text-content bg-surface hover:bg-hover transition-all active:scale-95 touch-manipulation cursor-pointer disabled:opacity-50"
-            onClick={() => {
-              setIsShuffling(true);
-              setPage((prev) => (prev % 10) + 1);
-              setTimeout(() => setIsShuffling(false), 500);
-            }}
-          >
-            <span className={cn('text-xs transition-transform duration-500', (isShuffling || activeQuery.isFetching) && 'rotate-180')}>🔄</span>
-            <span className="hidden sm:inline">换一批</span>
-            <span className="text-[11px] font-mono text-faint">{page > 1 ? `${page}/10` : ''}</span>
-          </button>
-          <Link
-            href={`/catalog?type=${category}`}
-            className="hidden sm:inline-flex items-center gap-1 px-3 py-1 rounded-lg border border-line hover:border-accent text-xs text-accent hover:bg-accent/10 transition-all font-medium"
-          >
-            <span>片库</span>
-            <span>›</span>
-          </Link>
-        </div>
+        <Link
+          href={`/catalog?type=${category}`}
+          className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs text-accent hover:text-accent-hover hover:bg-accent/10 transition-all font-semibold shrink-0"
+        >
+          <span>片库大厅</span>
+          <span>›</span>
+        </Link>
       </div>
 
-      {/* 多维网页版筛选面板：单行自适应横滑，高度精简 */}
-      <div className="bg-chip/40 border border-line/50 rounded-xl p-2 sm:p-2.5 space-y-1 sm:space-y-1.5">
+      {/* 多维筛选面板：单行自适应横滑，无厚重外框 */}
+      <div className="space-y-1 py-0.5">
         {category === 'short_drama' && (
           <>
             <FilterRow
@@ -555,16 +546,16 @@ function BangumiInlineView({ onPick }: { onPick: (title: string) => void }) {
   }
 
   return (
-    <div className="space-y-3.5">
-      <div className="flex items-center justify-between gap-2 p-1.5 sm:p-2 bg-chip/30 border border-line/40 rounded-xl">
-        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-1 overflow-x-auto no-scrollbar py-0.5">
+        <div className="flex items-center gap-1">
           <button
             type="button"
             className={cn(
-              'px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-all duration-150 active:scale-95 shrink-0',
+              'px-2.5 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition-all active:scale-95 shrink-0 cursor-pointer touch-manipulation',
               weekday === 'all'
-                ? 'bg-accent text-on-accent shadow-xs font-semibold'
-                : 'text-muted hover:text-content hover:bg-hover'
+                ? 'bg-accent text-on-accent shadow-xs'
+                : 'bg-chip text-muted hover:text-content hover:bg-hover'
             )}
             onClick={() => setWeekday('all')}
           >
@@ -575,10 +566,10 @@ function BangumiInlineView({ onPick }: { onPick: (title: string) => void }) {
               key={name}
               type="button"
               className={cn(
-                'px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-all duration-150 active:scale-95 shrink-0',
+                'px-2.5 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition-all active:scale-95 shrink-0 cursor-pointer touch-manipulation',
                 weekday === i + 1
-                  ? 'bg-accent text-on-accent shadow-xs font-semibold'
-                  : 'text-muted hover:text-content hover:bg-hover'
+                  ? 'bg-accent text-on-accent shadow-xs'
+                  : 'bg-chip text-muted hover:text-content hover:bg-hover'
               )}
               onClick={() => setWeekday(i + 1)}
             >
@@ -634,28 +625,23 @@ function Kan360HotView({ onPick }: { onPick: (title: string) => void }) {
   const items = query.data?.items ?? [];
 
   return (
-    <section aria-label="360 影视热播榜" className="space-y-3.5">
-      <div className="flex items-center justify-between gap-2 p-1.5 sm:p-2 bg-chip/30 border border-line/40 rounded-xl">
-        <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-          {KAN360_HOT_LISTS.map((l) => (
-            <button
-              key={l.id}
-              type="button"
-              onClick={() => setListId(l.id)}
-              className={cn(
-                'px-3 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-all duration-150 active:scale-95 shrink-0',
-                listId === l.id
-                  ? 'bg-accent text-on-accent shadow-xs font-semibold'
-                  : 'text-muted hover:text-content hover:bg-hover'
-              )}
-            >
-              {l.label}
-            </button>
-          ))}
-        </div>
-        <span className="text-[11px] text-faint shrink-0 hidden sm:inline-block px-2">
-          ⚡ 全网影视实时热播排行
-        </span>
+    <section aria-label="360 影视热播榜" className="space-y-3">
+      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+        {KAN360_HOT_LISTS.map((l) => (
+          <button
+            key={l.id}
+            type="button"
+            onClick={() => setListId(l.id)}
+            className={cn(
+              'px-3 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition-all active:scale-95 shrink-0 cursor-pointer touch-manipulation',
+              listId === l.id
+                ? 'bg-accent text-on-accent shadow-xs'
+                : 'bg-chip text-muted hover:text-content hover:bg-hover'
+            )}
+          >
+            {l.label}
+          </button>
+        ))}
       </div>
 
       {query.isError ? (
@@ -699,28 +685,23 @@ function BaiduTopView({ onPick }: { onPick: (title: string) => void }) {
   const items = query.data?.items ?? [];
 
   return (
-    <section aria-label="百度实时热榜" className="space-y-3.5">
-      <div className="flex items-center justify-between gap-2 p-1.5 sm:p-2 bg-chip/30 border border-line/40 rounded-xl">
-        <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-          {BAIDU_TOP_LISTS.map((l) => (
-            <button
-              key={l.id}
-              type="button"
-              onClick={() => setListId(l.id)}
-              className={cn(
-                'px-3 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-all duration-150 active:scale-95 shrink-0',
-                listId === l.id
-                  ? 'bg-accent text-on-accent shadow-xs font-semibold'
-                  : 'text-muted hover:text-content hover:bg-hover'
-              )}
-            >
-              {l.label}
-            </button>
-          ))}
-        </div>
-        <span className="text-[11px] text-faint shrink-0 hidden sm:inline-block px-2">
-          📈 百度指数搜索风云榜
-        </span>
+    <section aria-label="百度实时热榜" className="space-y-3">
+      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+        {BAIDU_TOP_LISTS.map((l) => (
+          <button
+            key={l.id}
+            type="button"
+            onClick={() => setListId(l.id)}
+            className={cn(
+              'px-3 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition-all active:scale-95 shrink-0 cursor-pointer touch-manipulation',
+              listId === l.id
+                ? 'bg-accent text-on-accent shadow-xs'
+                : 'bg-chip text-muted hover:text-content hover:bg-hover'
+            )}
+          >
+            {l.label}
+          </button>
+        ))}
       </div>
 
       {query.isError ? (
@@ -747,8 +728,7 @@ function BaiduTopView({ onPick }: { onPick: (title: string) => void }) {
 
 /** 豆瓣 Top250 经典殿堂视图：支持真实分页换一批 */
 function DoubanTop250View({ onPick }: { onPick: (title: string) => void }) {
-  const [page, setPage] = useState(1);
-  const [isShuffling, setIsShuffling] = useState(false);
+  const [page] = useState(1);
 
   const query = useQuery({
     queryKey: ['douban-top250', page],
@@ -760,26 +740,7 @@ function DoubanTop250View({ onPick }: { onPick: (title: string) => void }) {
   const items = query.data?.items ?? [];
 
   return (
-    <section aria-label="豆瓣 Top250" className="space-y-3.5">
-      <div className="flex items-center justify-between gap-2 p-1.5 sm:p-2 bg-chip/30 border border-line/40 rounded-xl">
-        <div className="flex items-center gap-2 px-1">
-          <span className="text-xs font-semibold text-content">🏆 豆瓣电影 Top 250 经典影单</span>
-          <span className="text-[11px] text-faint hidden sm:inline">影史殿堂高分传世神作</span>
-        </div>
-        <button
-          type="button"
-          disabled={query.isFetching}
-          className="flex items-center gap-1.5 px-3 py-1 rounded-lg border border-line hover:border-accent/50 text-xs text-muted hover:text-content bg-surface hover:bg-hover transition-all active:scale-95 shrink-0 cursor-pointer disabled:opacity-50"
-          onClick={() => {
-            setIsShuffling(true);
-            setPage((prev) => (prev % 12) + 1);
-            setTimeout(() => setIsShuffling(false), 500);
-          }}
-        >
-          <span className={cn('text-xs transition-transform duration-500', (isShuffling || query.isFetching) && 'rotate-180')}>🔄</span>
-          <span>换一批 {page > 1 ? `(第${page}/12组)` : ''}</span>
-        </button>
-      </div>
+    <section aria-label="豆瓣 Top250" className="space-y-3">
 
       {query.isError ? (
         <div className="text-center py-12 space-y-2">
@@ -825,28 +786,23 @@ function HotListView({ onPick }: { onPick: (title: string) => void }) {
   const items = query.data?.items ?? [];
 
   return (
-    <section aria-label="豆瓣口碑周榜" className="space-y-3.5">
-      <div className="flex items-center justify-between gap-2 p-1.5 sm:p-2 bg-chip/30 border border-line/40 rounded-xl">
-        <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-          {DOUBAN_WEEKLY_LISTS.map((l) => (
-            <button
-              key={l.id}
-              type="button"
-              onClick={() => setListId(l.id)}
-              className={cn(
-                'px-3 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-all duration-150 active:scale-95 shrink-0',
-                listId === l.id
-                  ? 'bg-accent text-on-accent shadow-xs font-semibold'
-                  : 'text-muted hover:text-content hover:bg-hover'
-              )}
-            >
-              {l.label}
-            </button>
-          ))}
-        </div>
-        <span className="text-[11px] text-faint shrink-0 hidden md:inline-block px-2">
-          📊 每周口碑风向标
-        </span>
+    <section aria-label="豆瓣口碑周榜" className="space-y-3">
+      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+        {DOUBAN_WEEKLY_LISTS.map((l) => (
+          <button
+            key={l.id}
+            type="button"
+            onClick={() => setListId(l.id)}
+            className={cn(
+              'px-3 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition-all active:scale-95 shrink-0 cursor-pointer touch-manipulation',
+              listId === l.id
+                ? 'bg-accent text-on-accent shadow-xs'
+                : 'bg-chip text-muted hover:text-content hover:bg-hover'
+            )}
+          >
+            {l.label}
+          </button>
+        ))}
       </div>
 
       {query.isError ? (
@@ -883,17 +839,7 @@ function MaoyanView({ onPick }: { onPick: (title: string) => void }) {
   const items = query.data?.items ?? [];
 
   return (
-    <section aria-label="猫眼院线票房榜" className="space-y-3.5">
-      <div className="flex items-center justify-between gap-2 p-1.5 sm:p-2 bg-chip/30 border border-line/40 rounded-xl">
-        <div className="flex items-center gap-2 px-1">
-          <span className="text-xs font-semibold text-content">🎟️ 猫眼院线实时票房大盘</span>
-          <span className="text-[11px] text-faint hidden sm:inline">院线热映票房与上座率</span>
-        </div>
-        <span className="text-[11px] text-faint shrink-0 px-2">
-          ⚡ 实时统计
-        </span>
-      </div>
-
+    <section aria-label="猫眼院线票房榜" className="space-y-3">
       {query.isError ? (
         <div className="text-center py-12 space-y-2">
           <p className="text-sm text-faint">票房大盘数据加载失败</p>
@@ -937,28 +883,23 @@ function IqiyiHotView({ onPick }: { onPick: (title: string) => void }) {
   const items = query.data?.items ?? [];
 
   return (
-    <section aria-label="爱奇艺实时热播榜" className="space-y-3.5">
-      <div className="flex items-center justify-between gap-2 p-1.5 sm:p-2 bg-chip/30 border border-line/40 rounded-xl">
-        <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-          {IQIYI_HOT_LISTS.map((l) => (
-            <button
-              key={l.id}
-              type="button"
-              onClick={() => setListId(l.id)}
-              className={cn(
-                'px-3 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-all duration-150 active:scale-95 shrink-0',
-                listId === l.id
-                  ? 'bg-accent text-on-accent shadow-xs font-semibold'
-                  : 'text-muted hover:text-content hover:bg-hover'
-              )}
-            >
-              {l.label}
-            </button>
-          ))}
-        </div>
-        <span className="text-[11px] text-faint shrink-0 hidden sm:inline-block px-2">
-          💚 爱奇艺全网主流热播榜单
-        </span>
+    <section aria-label="爱奇艺实时热播榜" className="space-y-3">
+      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+        {IQIYI_HOT_LISTS.map((l) => (
+          <button
+            key={l.id}
+            type="button"
+            onClick={() => setListId(l.id)}
+            className={cn(
+              'px-3 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition-all active:scale-95 shrink-0 cursor-pointer touch-manipulation',
+              listId === l.id
+                ? 'bg-accent text-on-accent shadow-xs'
+                : 'bg-chip text-muted hover:text-content hover:bg-hover'
+            )}
+          >
+            {l.label}
+          </button>
+        ))}
       </div>
 
       {query.isError ? (
@@ -1006,7 +947,6 @@ type VerticalShortTab = (typeof VERTICAL_SHORT_TABS)[number]['slug'];
 function ShortDramaView({ onPick }: { onPick: (title: string) => void }) {
   const [tab, setTab] = useState<VerticalShortTab>('short_drama');
   const [page, setPage] = useState(1);
-  const [isShuffling, setIsShuffling] = useState(false);
 
   const query = useQuery({
     queryKey: ['vertical-short', tab, page],
@@ -1026,63 +966,35 @@ function ShortDramaView({ onPick }: { onPick: (title: string) => void }) {
   };
 
   return (
-    <section aria-label="竖屏短内容专区" className="space-y-3.5">
-      {/* 子分类切换：窄屏横向滚动，宽屏与标题同行 */}
-      <div className="p-1.5 sm:p-2 bg-chip/30 border border-line/40 rounded-xl space-y-2">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 px-1 min-w-0">
-            <span className="text-xs font-semibold text-content shrink-0">
-              {activeTab.icon} 竖屏短内容
-            </span>
-            <span className="text-[11px] text-faint hidden sm:inline truncate">
-              {activeTab.desc} · 共 {activeTab.count}
-            </span>
-          </div>
-          <button
-            type="button"
-            disabled={query.isFetching}
-            className="flex items-center gap-1.5 px-3 py-1 rounded-lg border border-line hover:border-accent/50 text-xs text-muted hover:text-content bg-surface hover:bg-hover transition-all active:scale-95 shrink-0 cursor-pointer disabled:opacity-50"
-            onClick={() => {
-              setIsShuffling(true);
-              setPage((prev) => (prev % 10) + 1);
-              setTimeout(() => setIsShuffling(false), 500);
-            }}
-          >
-            <span className={cn('text-xs transition-transform duration-500', (isShuffling || query.isFetching) && 'rotate-180')}>🔄</span>
-            <span className="hidden sm:inline">换一批</span>
-            {page > 1 && <span className="sm:hidden">{page}</span>}
-          </button>
-        </div>
-
-        {/* Tab 条：手机可横向滑动，pad/web 直接铺开 */}
-        <div
-          className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5"
-          role="tablist"
-          aria-label="短内容子分类"
-        >
-          {VERTICAL_SHORT_TABS.map((t) => {
-            const active = t.slug === tab;
-            return (
-              <button
-                key={t.slug}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => handleTabChange(t.slug)}
-                className={cn(
-                  'flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs whitespace-nowrap shrink-0 transition-all active:scale-95 cursor-pointer',
-                  active
-                    ? 'bg-accent text-on-accent font-medium shadow-sm'
-                    : 'text-muted hover:text-content bg-surface/60 hover:bg-hover border border-line/60'
-                )}
-              >
-                <span aria-hidden>{t.icon}</span>
-                <span>{t.label}</span>
-                <span className={cn('text-[10px]', active ? 'opacity-80' : 'text-faint')}>{t.count}</span>
-              </button>
-            );
-          })}
-        </div>
+    <section aria-label="竖屏短内容专区" className="space-y-3">
+      {/* 极简子分类 Tab 条：微短剧 · AI漫剧 · 电影解说，无厚重外框 */}
+      <div
+        className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5"
+        role="tablist"
+        aria-label="短内容子分类"
+      >
+        {VERTICAL_SHORT_TABS.map((t) => {
+          const active = t.slug === tab;
+          return (
+            <button
+              key={t.slug}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => handleTabChange(t.slug)}
+              className={cn(
+                'flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs whitespace-nowrap shrink-0 transition-all active:scale-95 cursor-pointer touch-manipulation',
+                active
+                  ? 'bg-accent text-on-accent font-semibold shadow-xs'
+                  : 'bg-chip text-muted hover:text-content hover:bg-hover'
+              )}
+            >
+              <span>{t.icon}</span>
+              <span>{t.label}</span>
+              <span className="text-[10px] opacity-75 font-mono">({t.count})</span>
+            </button>
+          );
+        })}
       </div>
 
       {query.isError ? (

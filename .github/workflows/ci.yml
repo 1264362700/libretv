@@ -5,12 +5,13 @@ name: CI
 # 「已通过全部质量门禁」，可安全交给 Render 触发自动部署。
 #
 # 三道门禁拆为三个并行 job，而非一个 job 内的连续 steps：
-# GitHub Actions 的 step 默认「失败即跳过后续」，一旦 typecheck 或单测在某台
-# runner 上因内存波动失败，ESLint 会被连带跳过，日志里就只看到部分门禁在跑，
-# 既看不出真实问题，也不利于定位到底是哪一环出的问题。拆开后三者互不影响，
-# 每次运行都能拿到完整的三项结论。
+# GitHub Actions 的 step 默认「失败即跳过后续」，一旦某一环在 runner 上因环境
+# 波动失败，其余门禁会被连带跳过，日志里只看到部分检查在跑，既看不出真实问题，
+# 也无法判断是哪一环出错。拆开后三者互不影响，每次运行都能得到完整三项结论，
+# 且并行执行后总耗时取决于最慢一环而非三段相加。
 #
-# 现有 docker-publish.yml 只在 v* tag 触发，与本工作流互不干扰。
+# runner 固定 ubuntu-24.04：GitHub 公告 ubuntu-latest 将于 2026-10-19 起迁移至
+# Ubuntu 26，浮动标签会让构建环境在无人改动时静默变化。
 
 on:
   push:
@@ -32,16 +33,14 @@ permissions:
   contents: read
 
 jobs:
-  # 公共准备步骤：检出代码 + 安装依赖。三道门禁并行时各自需要一份干净副本，
-  # 用 reusable workflow 会引入额外层级，这里直接在三处复用锚点保持显式。
   typecheck:
     name: 类型检查
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -53,32 +52,32 @@ jobs:
 
   test:
     name: 单元测试
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
 
       - run: npm ci
 
-      # vitest 默认多线程会显著拉高内存占用，GitHub runner（7GB）在跑 34 个测试
-      # 文件时易被 OOM Killer 杀掉，表现为无输出的异常中断。
-      # 单 fork 单进程运行是本机已验证的稳定参数。
+      # vitest 默认多线程会显著拉高内存占用，runner 在跑 34 个测试文件时
+      # 易被 OOM Killer 杀掉，表现为无输出的异常中断。
+      # 单 fork 单进程是本机已验证的稳定参数。
       - name: vitest run
         run: npm test -- --pool=forks --poolOptions.forks.singleFork=true --poolOptions.forks.maxForks=1
 
   lint:
     name: ESLint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm

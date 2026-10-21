@@ -131,21 +131,21 @@ export function RecommendSection({ onPick }: { onPick: (title: string) => void }
     <section className="space-y-3 pt-2">
       {/* 头部标题与推荐源切换胶囊（100% 对齐图二流媒体规范，无厚重外框） */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-line">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <span className="text-xl sm:text-2xl shrink-0">{currentSourceMeta.icon}</span>
-          <div>
-            <h2 className="text-base sm:text-lg font-extrabold tracking-tight text-content flex items-center gap-2">
+          <div className="min-w-0">
+            <h2 className="text-base sm:text-lg font-extrabold tracking-tight text-content flex items-center gap-2 whitespace-nowrap">
               <span>{currentSourceMeta.label}</span>
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-accent/20 text-accent border border-accent/30">
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-accent/20 text-accent border border-accent/30 shrink-0">
                 精选源
               </span>
             </h2>
-            <p className="text-[11px] text-muted">{currentSourceMeta.desc} · 点击右侧即时切换</p>
+            <p className="text-[11px] text-muted whitespace-nowrap">{currentSourceMeta.desc} · 点击右侧即时切换</p>
           </div>
         </div>
 
-        {/* 交互胶囊选项组：紧凑轻量无边框，触感顺滑 */}
-        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-1 shrink-0">
+        {/* 交互胶囊选项组：紧凑轻量无边框，触感顺滑；flex-1 + min-w-0 让其在窄屏下收缩并内部横滚，避免挤压左侧标题 */}
+        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-1 sm:flex-1 sm:min-w-0 sm:justify-end">
           {RECOMMEND_SOURCES.map((s) => {
             const isSelected = s.id === recommendSource;
             return (

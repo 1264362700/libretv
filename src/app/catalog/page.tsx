@@ -135,17 +135,20 @@ const CHANNEL_SOURCES: Record<ChannelType, CatalogSourceId[]> = {
 };
 
 /**
- * 专属频道的优先 CMS 源（2026-10-21 实测 76 个内置源后得出）
+ * 专属频道的优先 CMS 源（2026-10-21 实测 76 个内置源 + 6 个默认源后得出）
  *
  * 这两个频道的分类 ID 在各采集站完全不统一，且相当一部分源根本没有对应分类：
- * - 电影解说：仅约 15/34 个可达源有，ID 各异（量子 35、暴风 51 ...）
+ * - 电影解说：仅约 15/34 个可达源有，ID 各异（量子 35、暴风 51、索尼 53 ...）
  * - AI 漫剧：约 16 个源有，ID 从 42 到 74 不等
- * 因此默认取「第一个可用源」极不可靠，这里按实测可用的源优先挑选，
- * 用户仍可在页面上的数据源下拉里手动切换（手动指定优先级最高）。
+ * 因此默认取「第一个可用源」极不可靠（实测会落到天涯，而天涯没有解说分类 → 空列表）。
+ *
+ * ⚠️ 这里按**域名**而非 source key 匹配：同一个站点在「内置源矩阵」与
+ * 「默认源池 FALLBACK_SEED_SOURCES」里是两套不同的 key（如量子同时有
+ * `liangzi` 与 `curated_lzzy`），按 key 匹配只能覆盖其中一套，另一套会漏掉。
  */
-const CHANNEL_PREFERRED_CMS_KEYS: Partial<Record<ChannelType, string[]>> = {
-  movie_commentary: ['baofeng', 'liangzi2', 'liangzi'],
-  ai_comic: ['baofeng', 'liangzi', 'jinying', 'guangsu'],
+const CHANNEL_PREFERRED_CMS_HOSTS: Partial<Record<ChannelType, string[]>> = {
+  movie_commentary: ['bfzyapi.com', 'lziapi.com', 'suoniapi.com'],
+  ai_comic: ['bfzyapi.com', 'lziapi.com', 'guangsuapi.com', 'jyzyapi.com'],
 };
 
 const FALLBACK_SEED_SOURCES: SourceConfig[] = [
@@ -290,10 +293,10 @@ function CatalogContent() {
     // 专属频道走实测优先源：这些频道在采集站里并非普遍存在，
     // 默认取「第一个可用源」很容易命中一个根本没有该分类的站点，
     // 结果是栏目空白或串到别的分类（红牛 t=51 是 AI漫剧、光速 t=51 是擦边短剧）。
-    const preferred = CHANNEL_PREFERRED_CMS_KEYS[currentChannel];
-    if (preferred) {
-      for (const key of preferred) {
-        const found = availableCmsSources.find((s) => s.key === key);
+    const preferredHosts = CHANNEL_PREFERRED_CMS_HOSTS[currentChannel];
+    if (preferredHosts) {
+      for (const host of preferredHosts) {
+        const found = availableCmsSources.find((s) => (s.url || '').includes(host));
         if (found) return found;
       }
     }

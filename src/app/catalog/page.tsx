@@ -134,6 +134,20 @@ const CHANNEL_SOURCES: Record<ChannelType, CatalogSourceId[]> = {
   documentary: ['cms', 'iqiyi', '360', 'douban'],
 };
 
+/**
+ * 专属频道的优先 CMS 源（2026-10-21 实测 76 个内置源后得出）
+ *
+ * 这两个频道的分类 ID 在各采集站完全不统一，且相当一部分源根本没有对应分类：
+ * - 电影解说：仅约 15/34 个可达源有，ID 各异（量子 35、暴风 51 ...）
+ * - AI 漫剧：约 16 个源有，ID 从 42 到 74 不等
+ * 因此默认取「第一个可用源」极不可靠，这里按实测可用的源优先挑选，
+ * 用户仍可在页面上的数据源下拉里手动切换（手动指定优先级最高）。
+ */
+const CHANNEL_PREFERRED_CMS_KEYS: Partial<Record<ChannelType, string[]>> = {
+  movie_commentary: ['baofeng', 'liangzi2', 'liangzi'],
+  ai_comic: ['baofeng', 'liangzi', 'jinying', 'guangsu'],
+};
+
 const FALLBACK_SEED_SOURCES: SourceConfig[] = [
   { key: 'curated_tyyszy', name: '天涯资源 (蓝光秒播·短剧专区)', url: 'https://tyyszyapi.com/api.php/provide/vod' },
   { key: 'curated_ffzy', name: '非凡资源 (极速秒播)', url: 'https://cj.ffzyapi.com/api.php/provide/vod' },
@@ -268,12 +282,23 @@ function CatalogContent() {
   }, [selectedSources]);
 
   const activeCmsSource = useMemo(() => {
+    // 用户显式指定了源就以用户为准
     if (rawCmsSourceKey) {
       const found = availableCmsSources.find((s) => s.key === rawCmsSourceKey);
       if (found) return found;
     }
+    // 专属频道走实测优先源：这些频道在采集站里并非普遍存在，
+    // 默认取「第一个可用源」很容易命中一个根本没有该分类的站点，
+    // 结果是栏目空白或串到别的分类（红牛 t=51 是 AI漫剧、光速 t=51 是擦边短剧）。
+    const preferred = CHANNEL_PREFERRED_CMS_KEYS[currentChannel];
+    if (preferred) {
+      for (const key of preferred) {
+        const found = availableCmsSources.find((s) => s.key === key);
+        if (found) return found;
+      }
+    }
     return availableCmsSources[0];
-  }, [availableCmsSources, rawCmsSourceKey]);
+  }, [availableCmsSources, rawCmsSourceKey, currentChannel]);
 
   const updateFilters = (changes: {
     type?: string;

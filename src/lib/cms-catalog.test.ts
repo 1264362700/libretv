@@ -84,6 +84,36 @@ describe('resolveCmsTypeId', () => {
   });
 });
 
+describe('resolveCmsTypeId: 专属频道不得串类', () => {
+  // 实测：仅约 15/34 个可达源有解说分类，各源 ID 各异
+  const withCommentary = [
+    { type_id: 1, type_name: '电影' },
+    { type_id: 35, type_name: '电影解说' },
+  ];
+
+  // 实测：红牛 t=51 是「AI漫剧」、光速 t=51 是「擦边短剧」、森林 t=51 是「女优系列」
+  const withoutCommentary = [
+    { type_id: 1, type_name: '电影' },
+    { type_id: 51, type_name: 'AI漫剧' },
+  ];
+
+  it('源站有解说分类时按分类名精准匹配（不依赖硬编码 ID）', () => {
+    expect(resolveCmsTypeId('movie_commentary', withCommentary)).toBe(35);
+  });
+
+  it('源站无解说分类时返回 undefined，绝不回退到同名异义的 51', () => {
+    // 51 在本源是「AI漫剧」，若沿用旧逻辑会返回 51 → 解说栏目里全是 AI 漫剧
+    expect(resolveCmsTypeId('movie_commentary', withoutCommentary)).toBeUndefined();
+  });
+
+  it('AI 漫剧同理：分类名匹配不到就返回 undefined', () => {
+    expect(resolveCmsTypeId('ai_comic', [{ type_id: 74, type_name: 'AI漫剧' }])).toBe(74);
+    expect(
+      resolveCmsTypeId('ai_comic', [{ type_id: 74, type_name: '国产剧' }])
+    ).toBeUndefined();
+  });
+});
+
 describe('fetchCmsCatalog', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -274,6 +304,101 @@ describe('fetchCmsCatalog', () => {
     // 过滤后精确对齐 pageSize 24 条
     expect(result.items).toHaveLength(24);
     expect(result.items.every((it) => it.title.startsWith('影片_'))).toBe(true);
+  });
+
+  it('专属频道在源站无对应分类时返回空，绝不省略 t 参数裸拉全站', async () => {
+    let videolistCalled = false;
+    vi.spyOn(fetchUtils, 'fetchUpstream').mockImplementation((url) => {
+      const urlStr = String(url);
+      if (urlStr.includes('ac=list')) {
+        return Promise.resolve(
+          new Response(
+            // 该源没有解说分类，t=51 是「AI漫剧」
+            JSON.stringify({
+              class: [
+                { type_id: 1, type_name: '电影' },
+                { type_id: 51, type_name: 'AI漫剧' },
+              ],
+            }),
+            { status: 200 }
+          )
+        );
+      }
+      videolistCalled = true;
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            code: 1,
+            page: 1,
+            pagecount: 100,
+            total: 2000,
+            list: [
+              { vod_id: 1, vod_name: '某部电影正片', vod_pic: 'https://img.com/1.jpg' },
+            ],
+          }),
+          { status: 200 }
+        )
+      );
+    });
+
+    const result = await fetchCmsCatalog({
+      url: 'https://api.example.com/api.php/provide/vod',
+      type: 'movie_commentary',
+      page: 15,
+      pageSize: 24,
+    });
+
+    // 关键断言：不得发起不带 t 的全站请求，否则解说栏目会被电影正片填满
+    expect(videolistCalled).toBe(false);
+    expect(result.items).toHaveLength(0);
+    expect(result.total).toBe(0);
+  });
+
+  it('专属频道在源站有对应分类时正常拉取解说内容', async () => {
+    let capturedUrl = '';
+    vi.spyOn(fetchUtils, 'fetchUpstream').mockImplementation((url) => {
+      const urlStr = String(url);
+      if (urlStr.includes('ac=list')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ class: [{ type_id: 35, type_name: '电影解说' }] }),
+            { status: 200 }
+          )
+        );
+      }
+      capturedUrl = urlStr;
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            code: 1,
+            page: 15,
+            pagecount: 1197,
+            total: 23926,
+            list: [
+              {
+                vod_id: 1,
+                vod_name: '杀妻同盟军[电影解说]',
+                vod_pic: 'https://img.com/1.jpg',
+                type_name: '电影解说',
+              },
+            ],
+          }),
+          { status: 200 }
+        )
+      );
+    });
+
+    // 注意：fetchCmsClasses 按 URL 缓存分类列表，此处须用与上个用例不同的域名，
+    // 否则会复用上一用例「无解说分类」的分类树，导致本用例拿不到 t=35
+    const result = await fetchCmsCatalog({
+      url: 'https://commentary.example.com/api.php/provide/vod',
+      type: 'movie_commentary',
+      page: 15,
+      pageSize: 24,
+    });
+
+    expect(capturedUrl).toContain('t=35');
+    expect(result.items[0].title).toBe('杀妻同盟军[电影解说]');
   });
 
   it('热门推荐（recommend）按真实热度 vod_hits 加权降序，与最新上映（time）呈现显著差异', async () => {

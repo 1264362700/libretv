@@ -140,22 +140,27 @@ export function resolveCmsTypeId(
     return cand ? cand.type_id : 54;
   }
 
-  // 2.1 AI 漫剧匹配（AI 生成竖屏短剧，实测暴风 t=74、量子 t=52）
+  // 2.1 AI 漫剧匹配（AI 生成竖屏短剧）
+  // 各源分类 ID 极不统一（实测暴风 74 / 量子 52 / 金鹰 48 / 豪华 53 / 新浪 57 ...），
+  // 因此只能按分类名匹配，命中不了就返回 undefined 交由上层判定「该源不支持」。
   if (type === 'ai_comic') {
-    const found = classes.find((c) => /AI\s*漫剧|AI漫剧|AI短剧|AI剧/i.test(c.type_name));
+    const found = classes.find((c) => /AI\s*漫剧|AI漫剧|AI短剧|AI剧|动态漫/i.test(c.type_name));
     if (found) return found.type_id;
-    const candidateIds = [74, 52];
-    const cand = classes.find((c) => candidateIds.includes(Number(c.type_id)));
-    return cand ? cand.type_id : 74;
+    const cand = classes.find((c) => [74, 52].includes(Number(c.type_id)));
+    if (cand && /AI|漫剧|动漫/i.test(cand.type_name || '')) return cand.type_id;
+    return undefined;
   }
 
-  // 2.2 电影解说匹配（竖屏解说类，实测暴风 t=51、量子 t=35）
+  // 2.2 电影解说匹配（竖屏解说类）
+  // 实测仅约 15/34 个源有解说分类，且 ID 各异（量子 35、暴风 51 等）；
+  // 无解说分类的源若回退固定 ID 会串到无关分类——实测 t=51 在红牛是「AI漫剧」、
+  // 光速是「擦边短剧」、森林是「女优系列」、360 是「反转爽剧」、ikun 是「NBA」。
   if (type === 'movie_commentary') {
     const found = classes.find((c) => /电影解说|影视解说|剧集解说|解说/.test(c.type_name));
     if (found) return found.type_id;
-    const candidateIds = [51, 35];
-    const cand = classes.find((c) => candidateIds.includes(Number(c.type_id)));
-    return cand ? cand.type_id : 51;
+    const cand = classes.find((c) => [51, 35].includes(Number(c.type_id)));
+    if (cand && /解说/.test(cand.type_name || '')) return cand.type_id;
+    return undefined;
   }
 
   // 2. 电视剧/剧集匹配
@@ -279,6 +284,15 @@ export async function fetchCmsCatalog(options: CmsCatalogOptions): Promise<CmsCa
   const classes = await fetchCmsClasses(cleanUrl);
   const subCategories = extractSubCategories(type, classes);
   const targetTypeId = typeId !== undefined ? typeId : resolveCmsTypeId(type, classes, area);
+
+  // 专属频道（AI 漫剧 / 电影解说）必须落在明确的分类 ID 上：
+  // 一旦该源没有对应分类就解析不出 ID，若此时省略 t 参数去请求，
+  // 上游会返回**全站**混合内容 —— 表现就是「影视解说栏目里全是电影正片」。
+  // 因此这里宁可返回空，也不能裸拉全站；上层会提示用户切换数据源。
+  const requiresExplicitTypeId = type === 'ai_comic' || type === 'movie_commentary';
+  if (requiresExplicitTypeId && targetTypeId === undefined) {
+    return { items: [], total: 0, pagecount: 1, page, pageSize, subCategories: [] };
+  }
 
   const cacheKey = `cms_catalog:${cleanUrl}:${type}:${targetTypeId ?? 'all'}:${keyword || ''}:${typeId || ''}:${sort}:${year || ''}:${area || ''}:${page}:${pageSize}:${filterAdult ? 1 : 0}`;
   const cached = getCache<CmsCatalogResult>(cacheKey);

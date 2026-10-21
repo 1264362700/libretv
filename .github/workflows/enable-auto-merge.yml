@@ -1,0 +1,34 @@
+name: Enable auto-merge
+
+# 仅对目标为 Master 的 PR 开启 GitHub 原生自动合并。实际合并仍受 Master
+# 分支保护规则约束：必需检查、审批和「分支须保持最新」均满足后才会合并。
+on:
+  pull_request_target:
+    types: [opened, reopened, ready_for_review, synchronize]
+    branches:
+      - Master
+
+# 这里不 checkout、不安装依赖、更不执行 PR 代码；pull_request_target 仅用于调用
+# GitHub API 开启 auto-merge，避免将仓库写权限暴露给不受信任的 PR 内容。
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  enable:
+    name: Enable squash auto-merge
+    # 只处理本仓库的受控开发分支，外部 fork、草稿 PR 和其它分支不能触发自动合并。
+    if: >-
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      (startsWith(github.event.pull_request.head.ref, 'feature/') ||
+       startsWith(github.event.pull_request.head.ref, 'fix/') ||
+       startsWith(github.event.pull_request.head.ref, 'hotfix/') ||
+       startsWith(github.event.pull_request.head.ref, 'docs/'))
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Enable GitHub auto-merge
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: gh pr merge --auto --squash "$PR_URL"

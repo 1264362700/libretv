@@ -1,16 +1,16 @@
 name: CI
 
-# 合并门禁：feature 分支推送与 Pull Request 时自动跑类型检查、单测与 Lint。
+# 合并门禁：feature 分支推送与 Pull Request 时自动跑类型检查、单测、Lint 与生产构建。
 #
 # 两种触发的分工不同，不要混淆：
 # - feature/fix/hotfix/docs 分支 push 与 PR：这是**真正的门禁**。分支保护要求
-#   「类型检查 / 单元测试 / ESLint」三项检查通过才允许合并，因此不合规的代码
+#   「类型检查 / 单元测试 / ESLint / 生产构建」四项检查通过才允许合并，因此不合规的代码
 #   进不了 Master。
 # - Master push：这是**部署记录**。Master 推送即触发 Render 自动部署，CI 是在
 #   部署之后才开始跑的，绿灯只能说明「这次部署的代码本身通过了校验」，
 #   **拦不住本次部署**。保留它是为了让每次上线在 Actions 页面留下可追溯档案。
 #
-# 三道门禁拆为三个并行 job，而非一个 job 内的连续 steps：
+# 四道门禁拆为四个并行 job，而非一个 job 内的连续 steps：
 # GitHub Actions 的 step 默认「失败即跳过后续」，一旦某一环在 runner 上因环境
 # 波动失败，其余门禁会被连带跳过，日志里只看到部分检查在跑，既看不出真实问题，
 # 也无法判断是哪一环出错。拆开后三者互不影响，每次运行都能得到完整三项结论，
@@ -99,3 +99,20 @@ jobs:
 
       - name: eslint src
         run: npm run lint
+
+  build:
+    name: 生产构建
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: next build
+        run: npm run build

@@ -1,17 +1,21 @@
-# LibreTV
+# cl.tv
 
-LibreTV Next.js 迁移版：免费在线视频聚合搜索与观看平台。基于 Next.js 15（App Router）+ TypeScript + Tailwind CSS，播放内核为 ArtPlayer + hls.js，支持亮暗双主题。
+个人维护的自托管影视与 IPTV 聚合平台，基于 Next.js 15、TypeScript 与 Tailwind CSS 构建。它支持多源搜索、播放、观看历史、直播节目单和本地化配置；项目本身不内置任何影视内容、频道或第三方账号。
 
-> 🏠 **官网**：[LibreTV 官网](https://libretv.is-an.org/)
->
-> 🌐 **演示站**：[tv.bagiinlink.eu.org](https://tv.bagiinlink.eu.org)（访问密码：`libretv`）
->
-> 📖 **完整文档**：[文档首页](https://libretv.is-an.org/wiki/) · [架构](https://libretv.is-an.org/wiki/Architecture.html) · [部署](https://libretv.is-an.org/wiki/Deployment.html) · [配置](https://libretv.is-an.org/wiki/Configuration.html) · [数据源](https://libretv.is-an.org/wiki/Data-Sources.html) · [直播 / IPTV](https://libretv.is-an.org/wiki/Live-IPTV.html) · [首页推荐](https://libretv.is-an.org/wiki/Recommendations.html) · [播放器](https://libretv.is-an.org/wiki/Player.html) · [代理与安全](https://libretv.is-an.org/wiki/Proxy-Security.html) · [FAQ](https://libretv.is-an.org/wiki/FAQ.html)
->
+> 本仓库是独立维护分支。部署、镜像与支持范围以本仓库为准，不再沿用上游项目的官网、演示站、镜像或捐赠链接。
 
-<p align="center">
- <a href="https://trendshift.io/repositories/26551?utm_source=repository-badge&amp;utm_medium=badge&amp;utm_campaign=badge-repository-26551" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/repositories/26551" alt="LibreSpark%2FLibreTV | Trendshift" width="250" height="55"/></a> <a href="https://trendshift.io/repositories/26551?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-26551" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/26551/weekly?language=JavaScript" alt="LibreSpark%2FLibreTV | Trendshift" width="250" height="55"/></a>
-</p>
+## 快速开始
+
+需要 Node.js 22（与 Docker 和 CI 保持一致）或 Docker Compose。
+
+```bash
+cp .env.example .env
+# 编辑 .env，至少设置一个强密码
+npm ci
+PASSWORD=your-password npm run dev
+```
+
+开发服务器默认运行在 `http://localhost:8080`。生产环境请使用 HTTPS，并将 `PASSWORD`、`PROXY_SECRET` 等敏感配置保存在部署平台的密钥管理中，而非提交到仓库。
 
 ## 核心特性
 
@@ -30,13 +34,7 @@ LibreTV Next.js 迁移版：免费在线视频聚合搜索与观看平台。基�
 ### Docker（推荐）
 
 ```bash
-# 在 .env 中设置 PASSWORD
-echo "PASSWORD=your-password" > .env
-
-# 方式一：拉取发布镜像（零构建）
-docker compose pull && docker compose up -d
-
-# 方式二：源码构建
+# 在 .env 中设置 PASSWORD 后，从当前源码构建并启动
 docker compose up -d --build
 ```
 
@@ -45,7 +43,7 @@ docker compose up -d --build
 ```yaml
 services:
   libretv:
-    image: ghcr.io/librespark/libretv:latest
+    build: .
     container_name: libretv
     restart: unless-stopped
     ports:
@@ -60,25 +58,16 @@ services:
       # - LIVE_ALLOW_PRIVATE=1              # 自建内网 IPTV 源时开启
 ```
 
-> 其余可选变量见下方[环境变量](#环境变量)表；仓库内的 `docker-compose.yml` 含完整注释版本（含 `build: .` 源码构建分支）。
-
-```bash
-docker compose pull && docker compose up -d
-```
+> 其余可选变量见下方[环境变量](#环境变量)表；仓库内的 `docker-compose.yml` 含完整注释版本。
 
 > ⚠️ **生产部署必须通过 HTTPS 访问**（localhost 除外）：生产模式下会话 cookie 带 `Secure` 标记，浏览器只在 HTTPS（或 localhost）下保存它。因此用 `http://服务器IP:端口` 访问时，会出现"密码正确却无法登录"的现象——登录请求实际成功，但 cookie 被浏览器丢弃。请通过反向代理（Nginx / Caddy / Traefik）或 Cloudflare 等为站点套上 TLS 后再对外提供服务；本地开发用 `localhost` 不受影响。
 
-镜像发布在 GHCR 与 Docker Hub：`ghcr.io/librespark/libretv` 与 `docker.io/bestzwei/libretv`
-（`latest` / `主.次` / 完整版本号三个 tag，`linux/amd64` 与 `linux/arm64` 双架构，
-两个 registry 的镜像 digest 一致）。需要固定版本时在 `.env` 中设置
-`LIBRETV_IMAGE=ghcr.io/librespark/libretv:2.0.1`。
-
-> 版本号以 `package.json` 为单一来源，部署后可用 `/api/status` 返回的 `version` 字段核对。详见[部署文档](https://libretv.is-an.org/wiki/Deployment.html)。
+> 当前仓库未启用镜像自动发布工作流，因此推荐从当前提交构建。版本号以 `package.json` 为单一来源，部署后可通过 `/api/status` 返回的 `version` 字段核对。
 
 ### 手动运行
 
 ```bash
-npm install
+npm ci
 PASSWORD=your-password npm run build
 PASSWORD=your-password npm start   # 监听 8080
 ```
@@ -89,7 +78,7 @@ PASSWORD=your-password npm start   # 监听 8080
 | --- | --- | --- |
 | `PASSWORD` | 是 | 访问密码；未设置时站点会提示管理员配置 |
 | `PROXY_SECRET` | 否 | 会话/代理签名密钥；不设置时从 PASSWORD 派生（多实例部署建议显式设置） |
-| `DEFAULT_SOURCES` | 否 | 预置采集站（JSON 数组），用户端自动出现且默认勾选，详见[配置文档](https://libretv.is-an.org/wiki/Configuration.html) |
+| `DEFAULT_SOURCES` | 否 | 预置采集站（JSON 数组），用户端自动出现且默认勾选 |
 | `REQUEST_TIMEOUT` | 否 | 代理上游请求超时（毫秒），默认 8000 |
 | `MAX_RETRIES` | 否 | 代理请求重试次数，默认 1 |
 | `SEARCH_MAX_PAGES` | 否 | 每个搜索源最多抓取的页数（1-50，默认 5）。第一页会读取源站 `pagecount`，实际页数 = min(源站总页数，该值)；页间并行请求，单页失败只丢该页 |
@@ -117,8 +106,6 @@ PASSWORD=your-password npm start   # 监听 8080
 2. **观看**：进入「直播」页，按分组标签筛选或搜索频道，点击即播；支持 HLS（m3u8）与 HTTP-FLV 两种直播流，直连失败自动走代理通道重试。
 3. **节目单**：频道带 `tvg-id` 且订阅配置了 EPG 地址时，展示当前/接下来节目与播放进度。
 4. **收藏与导出**：频道可收藏；订阅可一键导出为标准 M3U 文件，供 PotPlayer / VLC 等外部播放器使用。
-
-完整说明见 [直播 / IPTV 文档](https://libretv.is-an.org/wiki/Live-IPTV.html)。
 
 > ⚠️ 项目不内置任何频道源，也不存储、不制作任何直播内容，仅提供第三方公开播放列表的解析与播放能力，内容的合法性由对应数据源负责。内网自建源默认被 SSRF 防护拦截，自部署者可显式设置 `LIVE_ALLOW_PRIVATE=1` 放行。
 
@@ -192,29 +179,29 @@ PASSWORD=your-password npm start   # 监听 8080
 - **管理边界**：订阅源以远端列表为准，单独编辑会在下次同步时被覆盖，单独移除会在重新同步时恢复；如需调整请改远端列表，或直接删除整个订阅。删除订阅时点播源全部移除；直播源为**多归属共享**——同一 M3U 可被多个订阅引用（名称/EPG 以首次导入为准），删除订阅或远端列表中移除该源后再同步，都只摘除本订阅的引用，仅当不再被任何订阅引用时才移除该源，手动添加的源不受同步影响，**收藏的频道始终保留**；
 - **导出分享**：设置 → 源管理 → 数据源订阅 → 「导出数据源」，把当前全部点播源与直播源（预置 + 手动 + 订阅，按 URL 去重）导出为上述 JSON；也可用「发布为链接」，把当前**已勾选启用**的源一键上传到公开粘贴板（paste.rs，失败自动降级 0x0.st），直接返回可填入订阅框的 URL，无需自备托管。注意：发布的内容**公开可读**，且每次发布生成新链接、不支持覆盖更新，需长期稳定请用导出 + 自行托管。
 
-> 订阅由服务端拉取（经过 SSRF 校验），因此订阅地址无需配置 CORS。完整说明见 [数据源文档](https://libretv.is-an.org/wiki/Data-Sources.html)。
+> 订阅由服务端拉取（经过 SSRF 校验），因此订阅地址无需配置 CORS。
 
 ## 开发
 
 ```bash
-npm install
+npm ci
 PASSWORD=dev-password npm run dev   # http://localhost:8080
 npm test                            # 核心库单元测试（cms-parser / m3u8 / ssrf）
 npm run typecheck
 ```
 
-测试范围、发布流程与文档结构见 [开发文档](https://libretv.is-an.org/wiki/Development.html)。
+提交前请至少运行 `npm run typecheck`、`npm test` 与 `npm run lint`；CI 会对 feature、fix、hotfix、docs 分支和面向 `Master` 的 Pull Request 执行相同校验。
 
 ## 发布新版本
 
-版本号以 `package.json` 为单一来源，发布镜像由 GitHub Actions 自动完成：
+版本号以 `package.json` 为单一来源：
 
 ```bash
 npm version patch       # 或 minor / major；会更新 package.json 并打 git tag
 git push && git push --tags
 ```
 
-CI 校验通过后自动构建并推送 `ghcr.io/librespark/libretv:<版本>`（详见[部署文档](https://libretv.is-an.org/wiki/Deployment.html)）。
+当前 CI 仅负责类型检查、单元测试与 ESLint 校验；它不会自动发布镜像或自动合并 Pull Request。
 
 ## 安全说明
 
@@ -223,24 +210,10 @@ CI 校验通过后自动构建并推送 `ghcr.io/librespark/libretv:<版本>`（
 - 代理内置 SSRF 防护：拒绝内网/保留地址（含 DNS 解析后校验），仅放行 http(s)。
 - 未登录会话仅允许代理图片类目标（豆瓣封面防盗链需要）。
 
-## 衍生作品
-
-| 项目 | 说明 |
-| --- | --- |
-| [OrionTV](https://github.com/orion-lib/OrionTV) | Apple TV / Android TV 客户端（React Native TVOS + Expo），配合 MoonTV 使用 |
-| [LunaTV](https://github.com/MoonTechLab/LunaTV) | 影视聚合站（Next.js），支持 Redis / Upstash 等多存储后端 |
-| [Selene-TV](https://github.com/MoonTechLab/Selene-TV) | Android TV（Leanback）客户端，Kotlin + Compose，对接 MoonTV / Helios |
-| [EchoTV](https://github.com/hoowhoami/EchoTV) | Flutter 全平台客户端（已归档） |
-| [WarHutTV](https://github.com/OuOumm/WarHutTV) | Go + React 的自托管影视聚合站 |
-| [DecoTV](https://github.com/Decohererk/DecoTV) | 聚合播放站（原 KatelyaTV） |
-| [Joyflix](https://github.com/jeffernn/Joyflix-Mac-Objective-C) | macOS 原生影视聚合客户端（Objective-C） |
-| [MoonCakeTV](https://github.com/MoonCakeTV/MoonCakeTV) | 影视聚合搜索站（Next.js），文件存储、一键脚本部署 |
-| [OrangeTV](https://github.com/djteang/OrangeTV) | 跨平台影视聚合播放器（Next.js），Kvrocks/Redis/Upstash 多存储与多端同步 |
-
-> 旧版 LibreTV（静态 HTML + Express）完整代码见 [backup-2025 分支](https://github.com/LibreSpark/LibreTV/tree/backup-2025)。
-
 ## 免责声明
 
 本项目不存储、不制作任何视频内容，仅提供第三方公开接口的聚合与播放能力，内容的合法性由对应数据源负责。
 
-☕ 觉得有用的话，可以到 [AFDIAN](https://afdian.com/a/veehub) 请我喝杯咖啡。
+## 许可证
+
+本项目按仓库根目录的 [AGPL-3.0-or-later](LICENSE) 许可证发布。若计划改为闭源或使用不同许可证，需先确认全部上游依赖与既有贡献的授权条件。

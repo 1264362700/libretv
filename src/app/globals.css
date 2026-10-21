@@ -299,3 +299,15 @@ html[data-theme-style="eclipse"][data-theme-transition="to-light"]::view-transit
   stroke-dasharray: 10 4;
   animation: cl-logo-flow 1.6s linear infinite;
 }
+
+/* 尊重系统“减少动态效果”偏好：保留界面状态，但取消自动轮播、呼吸和主题转场等非必要动画。 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

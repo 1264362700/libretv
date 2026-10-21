@@ -255,6 +255,8 @@ function useCurrentChannelId(): string {
     if (t === 'movie') return 'movie';
     if (t === 'tv') return 'tv';
     if (t === 'short_drama') return 'short_drama';
+    if (t === 'ai_comic') return 'ai_comic';
+    if (t === 'movie_commentary') return 'movie_commentary';
     if (t === 'anime') return 'anime';
     if (t === 'variety') return 'variety';
     if (t === 'documentary') return 'documentary';
@@ -341,6 +343,8 @@ function MobileNavDrawer({
     { id: 'movie', label: '电影大厅', icon: '🎬', href: '/catalog?type=movie', desc: '院线大片 / 全球高分' },
     { id: 'tv', label: '电视剧场', icon: '📺', href: '/catalog?type=tv', desc: '热门国产剧 / 经典美剧' },
     { id: 'short_drama', label: '微短剧场', icon: '📱', href: '/catalog?type=short_drama', desc: '热门微短剧 / 爽文全集' },
+    { id: 'ai_comic', label: 'AI漫剧', icon: '🤖', href: '/catalog?type=ai_comic', desc: 'AI 动画 / 漫剧合集' },
+    { id: 'movie_commentary', label: '影视解说', icon: '🎙️', href: '/catalog?type=movie_commentary', desc: '剧情解说 / 深度解析' },
     { id: 'anime', label: '人气动漫', icon: '✨', href: '/catalog?type=anime', desc: '连载新番 / 热血神作' },
     { id: 'variety', label: '爆笑综艺', icon: '🎤', href: '/catalog?type=variety', desc: '下饭真人秀 / 脱口秀' },
     { id: 'documentary', label: '探索纪录', icon: '🌍', href: '/catalog?type=documentary', desc: '自然历史 / 科学人文' },

@@ -104,6 +104,55 @@ describe('stream-source-matcher: matchAndScoreVodItem 防串片打分', () => {
   });
 });
 
+describe('stream-source-matcher: 衍生内容（影视解说/二创）匹配特例', () => {
+  it('清洗时保留衍生标签，供后续区分解说版与同名原片', () => {
+    const res = cleanSearchKeyword('杀妻同盟军[电影解说]');
+    expect(res.cleanTitle).toBe('杀妻同盟军');
+    expect(res.season).toBe(1);
+    expect(res.derivativeTags).toContain('电影解说');
+  });
+
+  it('目标是解说时：命中带 [电影解说] 的条目，淘汰同名原片', () => {
+    const target = {
+      title: '杀妻同盟军[电影解说]',
+      cleanTitle: '杀妻同盟军',
+      season: 1,
+      allowDerivative: true,
+      derivativeTags: ['电影解说'],
+    };
+
+    const commentaryItem = { vod_name: '杀妻同盟军[电影解说]', vod_year: '2025' };
+    const originalItem = { vod_name: '杀妻同盟军', vod_year: '2025' };
+
+    expect(matchAndScoreVodItem(target, commentaryItem)).toBeGreaterThanOrEqual(90);
+    expect(matchAndScoreVodItem(target, originalItem)).toBe(0);
+  });
+
+  it('目标是正片时：解说条目仍被一票否决（防串片行为不变）', () => {
+    const target = {
+      title: '杀妻同盟军',
+      cleanTitle: '杀妻同盟军',
+      season: 1,
+    };
+
+    expect(matchAndScoreVodItem(target, { vod_name: '杀妻同盟军 全集解说' })).toBe(0);
+    expect(matchAndScoreVodItem(target, { vod_name: '杀妻同盟军 独家花絮' })).toBe(0);
+  });
+
+  it('即使是解说频道，预告/花絮等片段类噪音依然淘汰', () => {
+    const target = {
+      title: '杀妻同盟军[电影解说]',
+      cleanTitle: '杀妻同盟军',
+      season: 1,
+      allowDerivative: true,
+      derivativeTags: ['电影解说'],
+    };
+
+    expect(matchAndScoreVodItem(target, { vod_name: '杀妻同盟军 解说版预告' })).toBe(0);
+    expect(matchAndScoreVodItem(target, { vod_name: '杀妻同盟军 解说版花絮' })).toBe(0);
+  });
+});
+
 describe('stream-source-matcher: parseEpisodesFromVod', () => {
   it('优先选择包含 m3u8 的播放线路', () => {
     const item = {

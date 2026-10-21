@@ -61,11 +61,45 @@ const CN_NUM_MAP: Record<string, number> = {
 };
 
 /**
- * 1. 关键词清洗预处理
- * 去掉季数（记录 season 供后续防串片强校验），剥离特殊符号与副标题
+ * 衍生内容关键词：解说 / 二创 / 盘点。
+ * 在「影视解说」这类频道里它们就是正片本身，必须放行；其余场景一律按噪音淘汰。
  */
-export function cleanSearchKeyword(rawTitle: string): { cleanTitle: string; season: number } {
-  if (!rawTitle) return { cleanTitle: '', season: 1 };
+const DERIVATIVE_KEYWORDS = ['解说', '二创', '盘点'];
+
+/**
+ * 片段类噪音关键词：预告 / 花絮 / 彩蛋 等。
+ * 无论什么频道都不是正片，任何场景都淘汰。
+ */
+const FRAGMENT_BLACK_KEYWORDS = [
+  '花絮',
+  '预告',
+  '彩蛋',
+  '混剪',
+  '特辑',
+  '幕后',
+  '纯享',
+  '片花',
+  '看点',
+];
+
+export interface CleanKeywordResult {
+  cleanTitle: string;
+  season: number;
+  /**
+   * 从标题中剥离出来的衍生内容标签（如 "电影解说"、"影视解说"）。
+   * 保留下来是为了让打分环节能区分「解说版」与「同名原片」——
+   * 二者清洗后标题完全一致，光靠片名相似度无法分辨。
+   */
+  derivativeTags: string[];
+}
+
+/**
+ * 1. 关键词清洗预处理
+ * 去掉季数（记录 season 供后续防串片强校验），剥离特殊符号与副标题，
+ * 并把剥离出来的衍生标签原样保留在 derivativeTags 里供打分环节使用。
+ */
+export function cleanSearchKeyword(rawTitle: string): CleanKeywordResult {
+  if (!rawTitle) return { cleanTitle: '', season: 1, derivativeTags: [] };
 
   let title = rawTitle.trim();
   let season = 1;
@@ -96,19 +130,43 @@ export function cleanSearchKeyword(rawTitle: string): { cleanTitle: string; seas
   title = title.split(/[:：—\-_]/)[0].trim();
 
   // 3. 去掉括号内的说明内容（如 "繁花 (剧版)", "三体 [国语版]"）
-  title = title.replace(/[（(][^）)]*[）)]/g, ' ');
-  title = title.replace(/[【\[][^】\]]*[】\]]/g, ' ');
+  //    括号里的内容并不丢弃，收进 derivativeTags，供后续判断「是否衍生内容」
+  const derivativeTags: string[] = [];
+  const collectBracket = (matched: string): string => {
+    const inner = matched.slice(1, -1).trim();
+    if (inner) derivativeTags.push(inner);
+    return ' ';
+  };
+  title = title.replace(/[（(][^）)]*[）)]/g, collectBracket);
+  title = title.replace(/[【\[][^】\]]*[】\]]/g, collectBracket);
 
   // 4. 去除特殊干扰标点符号
   title = title.replace(/[·・“”"'`《》]/g, ' ');
 
   // 5. 收敛多余空格
-  const cleanTitle = title.replace(/\s+/g, ' ').trim();
+  let cleanTitle = title.replace(/\s+/g, ' ').trim();
+
+  // 6. 剥离裸写的衍生词（如 "某某 电影解说" 这种没带括号的写法），同样记进标签。
+  //    仅当衍生词不是标题全部内容时才剥，避免误伤本身就叫「解说」的极短标题。
+  for (const kw of DERIVATIVE_KEYWORDS) {
+    if (cleanTitle.includes(kw) && cleanTitle.length > kw.length) {
+      derivativeTags.push(kw);
+      cleanTitle = cleanTitle.split(kw).join(' ');
+    }
+  }
+  cleanTitle = cleanTitle.replace(/\s+/g, ' ').trim();
 
   return {
     cleanTitle: cleanTitle || rawTitle.trim(),
     season: Math.max(1, season),
+    derivativeTags,
   };
+}
+
+/** 判断一串标签里是否含有衍生内容关键词（用于决定要不要放宽黑名单） */
+function hasDerivativeTag(tags: string[] | undefined): boolean {
+  if (!tags || tags.length === 0) return false;
+  return tags.some((tag) => DERIVATIVE_KEYWORDS.some((kw) => tag.includes(kw)));
 }
 
 /** 规范化标题用于相似度对比（去除空格并全小写） */
@@ -122,32 +180,49 @@ function normalizeForCompare(str: string): string {
 /**
  * 2. 精准打分与防串片算法
  * 豆瓣 ID 强匹配 (100分) > 片名与季数匹配 (80分) > 年份容错 (60分)
- * 淘汰规则：解说、花絮、预告、彩蛋直接 0 分；季数不合直接 0 分
+ * 淘汰规则：花絮、预告、彩蛋等片段类噪音直接 0 分；季数不合直接 0 分
+ *
+ * 衍生内容特例：当目标本身就是「影视解说」这类衍生内容时（allowDerivative = true），
+ * 解说 / 二创 / 盘点 不再是噪音而是正片，从黑名单中释放；同时给命中衍生词的条目加分、
+ * 给同名原片重罚，避免「点解说、播原片」的串片。
  */
 export function matchAndScoreVodItem(
-  target: { title: string; cleanTitle: string; season: number; doubanId?: string; year?: string },
+  target: {
+    title: string;
+    cleanTitle: string;
+    season: number;
+    doubanId?: string;
+    year?: string;
+    allowDerivative?: boolean;
+    derivativeTags?: string[];
+  },
   item: Record<string, unknown>
 ): number {
   const vodName = String(item.vod_name || item.name || item.title || '').trim();
   if (!vodName) return 0;
 
-  // 淘汰规则 1：标题包含剧透解说/花絮等非正片
-  const blackKeywords = [
-    '解说',
-    '花絮',
-    '预告',
-    '彩蛋',
-    '混剪',
-    '特辑',
-    '幕后',
-    '纯享',
-    '片花',
-    '看点',
-    '盘点',
-    '二创',
-  ];
+  const allowDerivative = Boolean(target.allowDerivative);
+
+  // 淘汰规则 1：标题包含花絮/预告等非正片片段
+  // 解说/二创/盘点仅在「目标本身就是衍生内容」时放行
+  const blackKeywords = allowDerivative
+    ? FRAGMENT_BLACK_KEYWORDS
+    : [...FRAGMENT_BLACK_KEYWORDS, ...DERIVATIVE_KEYWORDS];
   for (const kw of blackKeywords) {
     if (vodName.includes(kw)) return 0;
+  }
+
+  // 淘汰规则 2：目标是解说/二创时，采集条目若无任何衍生标记即为「同名原片」，直接淘汰。
+  // 实测两个解说分类（bfzy t=51 / lzi t=35）的条目标题统一带 [电影解说] 后缀，
+  // 同名原片不带，据此可安全区分，避免「点解说、播原片」。
+  let derivativeBonus = 0;
+  if (allowDerivative && hasDerivativeTag(target.derivativeTags)) {
+    const candidateText = `${vodName} ${String(item.vod_remarks || '')} ${String(
+      item.type_name || ''
+    )}`;
+    const isDerivative = DERIVATIVE_KEYWORDS.some((kw) => candidateText.includes(kw));
+    if (!isDerivative) return 0;
+    derivativeBonus = 15; // 命中衍生标记，补足「包含关系」下的低分档
   }
 
   // 豆瓣 ID 强匹配（权重最高，100分）
@@ -203,6 +278,8 @@ export function matchAndScoreVodItem(
       score -= 30; // 年份相差 3 年以上，大概率是旧版或同名翻拍，重罚
     }
   }
+
+  score += derivativeBonus;
 
   return Math.max(0, Math.min(100, score));
 }
@@ -298,8 +375,12 @@ export class StreamSourceMatcher {
 
   /** 启动流式并发匹配任务 */
   public async start(): Promise<MatchedSource[]> {
-    const { cleanTitle, season } = cleanSearchKeyword(this.target.title);
+    const { cleanTitle, season, derivativeTags } = cleanSearchKeyword(this.target.title);
     if (!cleanTitle) return [];
+
+    // 目标片名自带 [电影解说] 这类衍生标记时自动放宽衍生词黑名单，
+    // 无需调用方额外传参——播放页拿到的 title 本身就携带了频道语义。
+    const allowDerivative = hasDerivativeTag(derivativeTags);
 
     const targetParsed = {
       title: this.target.title,
@@ -307,6 +388,8 @@ export class StreamSourceMatcher {
       season,
       doubanId: this.target.doubanId,
       year: this.target.year,
+      allowDerivative,
+      derivativeTags,
     };
 
     const enabledSources = sortSourcesByPriority(
@@ -355,6 +438,8 @@ export class StreamSourceMatcher {
       season: number;
       doubanId?: string;
       year?: string;
+      allowDerivative?: boolean;
+      derivativeTags?: string[];
     }
   ): Promise<void> {
     const startMs = Date.now();

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import Artplayer from 'artplayer';
 import Hls, { type HlsConfig } from 'hls.js';
 
@@ -48,7 +48,22 @@ interface PlayerShellProps {
   onRequestSwitchSource?: (reason: string) => void;
 }
 
-export function PlayerShell({
+/**
+ * 播放器对外控制句柄：供父组件（如「是否切换到更快线路」的确认弹框）在不重建
+ * 播放器实例的前提下暂停/恢复播放。
+ */
+export interface PlayerShellHandle {
+  /** 暂停播放；返回是否成功 */
+  pause: () => boolean;
+  /** 恢复播放；wasPlaying 为 true 时表示此前处于播放态 */
+  play: () => void;
+  /** 当前是否处于播放中 */
+  isPlaying: () => boolean;
+  /** 当前播放秒数 */
+  getCurrentTime: () => number;
+}
+
+export function PlayerShellInner({
   url,
   title,
   adFilter,
@@ -61,7 +76,8 @@ export function PlayerShell({
   onEnded,
   onPause,
   onRequestSwitchSource,
-}: PlayerShellProps) {
+  ref,
+}: PlayerShellProps & { ref?: React.Ref<PlayerShellHandle> }) {
   const containerRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const artRef = useRef<any>(null);
@@ -71,6 +87,28 @@ export function PlayerShell({
   // 起播前的品牌占位图（沿用旧版 nomedia 素材），实际开始播放后隐藏
   const [showPoster, setShowPoster] = useState(true);
   const hintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 对外暴露播放控制：弹框暂停 / 取消后恢复，均走 ArtPlayer 既有 API，
+  // 不触碰 HLS 实例，避免与换集、预加载逻辑产生竞态
+  useImperativeHandle(
+    ref,
+    () => ({
+      pause: () => {
+        const art = artRef.current;
+        if (!art || typeof art.pause !== 'function') return false;
+        art.pause();
+        return true;
+      },
+      play: () => {
+        const art = artRef.current;
+        if (!art || typeof art.play !== 'function') return;
+        art.play();
+      },
+      isPlaying: () => Boolean(artRef.current?.playing),
+      getCurrentTime: () => Number(artRef.current?.currentTime || 0),
+    }),
+    []
+  );
 
   // 始终持有最新 props/回调，避免重建播放器
   const propsRef = useRef({
@@ -699,3 +737,6 @@ export function PlayerShell({
     </div>
   );
 }
+
+/** 导出为 forwardRef 组件，父组件可持有 PlayerShellHandle 控制播放状态 */
+export const PlayerShell = forwardRef(PlayerShellInner);

@@ -21,6 +21,7 @@ import { enqueueDownload } from '@/components/download-manager';
 import { Icon } from '@/components/icon';
 import { useAuth } from '@/components/auth';
 import { useToast } from '@/components/toast';
+import type { PlayerShellHandle } from '@/components/player-shell';
 import { resolveSource, useAppStore } from '@/lib/store';
 import type { SourceConfig, SearchResultItem } from '@/lib/types';
 import {
@@ -41,6 +42,10 @@ interface CandidateItem {
   source: SourceConfig;
   result: SearchResultItem;
   ms?: number;
+  /** 测速对比基准：当前线路的耗时（仅最优线路提示弹框用） */
+  baselineMs?: number;
+  /** 相对基准的提速百分比（仅最优线路提示弹框用） */
+  gainPercent?: number;
 }
 
 /** 演员与主创姓名解析：按逗号/斜杠/顿号/空格拆分为纯净字符串数组 */
@@ -120,6 +125,19 @@ function WatchContent() {
   const [streamMatchedList, setStreamMatchedList] = useState<MatchedSource[]>([]);
   const [matchingDone, setMatchingDone] = useState(false);
   const [isMatching, setIsMatching] = useState(false);
+
+  // —— 后台测速与最优线路提示 ——
+  // 匹配全部结束后，对各候选线路并发测速；若存在明显快于当前线路者则询问是否切换。
+  // 弹框期间暂停播放，用户取消则恢复播放（原先是否在播放由 pausedByPrompt 记录）。
+  const [speedSuggestion, setSpeedSuggestion] = useState<CandidateItem | null>(null);
+  const [speedTesting, setSpeedTesting] = useState(false);
+  const playerRef = useRef<PlayerShellHandle | null>(null);
+  const pausedByPromptRef = useRef(false);
+  // 本次会话已就当前线路询问过，避免换集/换源后反复弹同一个框
+  const speedPromptedKeyRef = useRef<string>('');
+
+  /** 快于当前线路多少才值得打扰用户（相对节省比例） */
+  const SPEED_GAIN_THRESHOLD = 0.3;
 
   // 记录当前播放秒数，供换源时无缝保留时间戳
   const currentPosRef = useRef(0);
@@ -260,6 +278,95 @@ function WatchContent() {
     }
     return list;
   }, [candidatesQuery.data, streamMatchedList, source, vodId, videoTitle]);
+
+  /**
+   * 后台测速 → 最优线路提示。
+   *
+   * 触发时机：流式匹配全部完成（matchingDone）后，对除当前线路外的候选并发测速，
+   * 若存在快出阈值以上的线路则弹框询问。选「后台匹配完成后」而非「达到条数阈值」，
+   * 是为了确保参与比较的是全集命中，速度排名才有意义。
+   *
+   * 弹框期间暂停播放；用户选择切换走 switchToCandidate（保留进度），
+   * 选择保持则恢复播放，避免"问一句就打断一次"。
+   */
+  useEffect(() => {
+    if (!matchingDone || !verified || speedSuggestion || speedTesting) return;
+    if (!source || !vodId) return;
+
+    // 候选不足 2 条时无从比较
+    const others = candidates.filter((c) => c.source.key !== source.key && c.result.vodId);
+    if (others.length === 0) return;
+
+    // 同一线路同一集只询问一次。indexParam 定义在本 effect 之前，
+    // 而 currentIndex 是 indexParam 经 episodes 边界收敛后的结果，两者对
+    // 「当前是第几集」的判定在此处等价——这里用 indexParam 以避免引用后声明的变量。
+    const promptKey = `${source.key}:${vodId}:${indexParam}`;
+    if (speedPromptedKeyRef.current === promptKey) return;
+    speedPromptedKeyRef.current = promptKey;
+
+    let cancelled = false;
+    const controller = new AbortController();
+    setSpeedTesting(true);
+
+    (async () => {
+      try {
+        // 先测当前线路作为基准（播放器已在播，但此处重测一次取可比口径）
+        const currentSample = await api.detailSpeed(vodId, source, controller.signal);
+        if (cancelled) return;
+        const baseline = currentSample.ok ? currentSample.ms : null;
+        if (baseline === null || baseline <= 0) return;
+
+        // 并发测速其余候选
+        const results = await Promise.all(
+          others.map(async (c) => {
+            const r = await api.detailSpeed(c.result.vodId, c.source, controller.signal);
+            return { cand: c, ok: r.ok, ms: r.ms };
+          })
+        );
+        if (cancelled) return;
+
+        const faster = results
+          .filter((r) => r.ok && r.ms !== undefined)
+          .filter((r) => (r.ms as number) < baseline * (1 - SPEED_GAIN_THRESHOLD))
+          .sort((a, b) => (a.ms as number) - (b.ms as number));
+
+        if (faster.length === 0) return;
+
+        const best = faster[0];
+        const saved = Math.round((1 - (best.ms as number) / baseline) * 100);
+
+        // 弹框前先暂停；记录原先是否在播，取消时按原状态恢复
+        const handle = playerRef.current;
+        if (handle) {
+          if (handle.isPlaying()) {
+            pausedByPromptRef.current = true;
+            handle.pause();
+          } else {
+            pausedByPromptRef.current = false;
+          }
+        }
+        setSpeedSuggestion({
+          ...best.cand,
+          ms: best.ms,
+          // 附带基准耗时与提速幅度，供弹框展示（当前源耗时 → 推荐源耗时）
+          baselineMs: baseline,
+          gainPercent: saved,
+        } as CandidateItem);
+      } catch {
+        // 测速失败（用户已离开页面 / 网络中断）静默忽略，不打扰用户
+      } finally {
+        if (!cancelled) setSpeedTesting(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+    // candidates 变化频繁（含 ms 字段），此处刻意只依赖匹配完成的信号与当前线路，
+    // 避免候选数组引用变化导致反复测速。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matchingDone, verified, source, vodId, indexParam, speedSuggestion, speedTesting]);
 
   // 影片元数据提取（豆瓣官方门面优先，采集源详情与候选兜底）
   const doubanMeta = doubanQuery.data;
@@ -491,6 +598,23 @@ function WatchContent() {
     },
     [sourceKey, currentIndex, videoTitle, router]
   );
+
+  /** 关闭最优线路提示：不切换线路，若此前因弹框暂停则恢复播放 */
+  const dismissSpeedSuggestion = useCallback(() => {
+    setSpeedSuggestion(null);
+    if (pausedByPromptRef.current) {
+      pausedByPromptRef.current = false;
+      playerRef.current?.play();
+    }
+  }, []);
+
+  /** 确认切换到推荐线路：走既有换源逻辑，保留集数与播放进度 */
+  const acceptSpeedSuggestion = useCallback(() => {
+    const target = speedSuggestion;
+    setSpeedSuggestion(null);
+    pausedByPromptRef.current = false;
+    if (target) switchToCandidate(target, true);
+  }, [speedSuggestion, switchToCandidate]);
 
   // 全自动故障换源逻辑
   const autoFailoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -743,6 +867,7 @@ function WatchContent() {
             <div className="relative aspect-video max-h-[72vh] w-full bg-black rounded-xl overflow-hidden shadow-2xl border border-line/40">
               {currentUrl ? (
                 <PlayerShell
+                  ref={playerRef}
                   url={currentUrl}
                   title={videoTitle}
                   adFilter={store.adFilter}
@@ -833,8 +958,12 @@ function WatchContent() {
                   </span>
                   <span className="text-[11px] text-faint">
                     {isMatching || candidatesQuery.isLoading
-                      ? '正在流式并发探测可用线路...'
-                      : `共 ${candidates.length} 条高速线路`}
+                      ? streamProgress
+                        ? `正在流式并发探测可用线路... 已检测 ${streamProgress.completed}/${streamProgress.total}，命中 ${streamProgress.matched} 条`
+                        : '正在流式并发探测可用线路...'
+                      : speedTesting
+                        ? '线路匹配完成，正在测速比优...'
+                        : `共 ${candidates.length} 条高速线路`}
                   </span>
                 </div>
                 <button
@@ -1180,6 +1309,106 @@ function WatchContent() {
           onClose={() => setSwitchOpen(false)}
         />
       )}
+
+      {speedSuggestion && (
+        <SpeedSuggestionDialog
+          currentSourceName={source?.name || sourceKey}
+          target={speedSuggestion}
+          onAccept={acceptSpeedSuggestion}
+          onDismiss={dismissSpeedSuggestion}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * 最优线路提示弹框。
+ *
+ * 展示时机：后台匹配与测速完成后，发现有线路明显快于当前线路时。
+ * 弹出期间播放已在父组件中暂停（仅当原本处于播放态才暂停），
+ * 选择「保持当前线路」会恢复播放，避免问一句就打断一次观看。
+ * 点击遮罩或按 Esc 均视为「保持当前」，与直觉一致。
+ */
+function SpeedSuggestionDialog({
+  currentSourceName,
+  target,
+  onAccept,
+  onDismiss,
+}: {
+  currentSourceName: string;
+  target: CandidateItem;
+  onAccept: () => void;
+  onDismiss: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onDismiss();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onDismiss]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 px-4 animate-fade-in"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onDismiss();
+      }}
+      role="dialog"
+      aria-modal="true"
+      aria-label="切换到更快的播放线路"
+    >
+      <div className="w-full max-w-sm rounded-xl border border-line bg-surface-raised p-5 shadow-2xl">
+        <div className="flex items-start gap-3 mb-4">
+          <span className="mt-0.5 w-8 h-8 rounded-lg bg-accent/15 text-accent flex items-center justify-center shrink-0">
+            <Icon name="bolt" className="w-4 h-4" />
+          </span>
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold text-content leading-snug">发现更快的播放线路</h3>
+            <p className="text-xs text-muted mt-1 leading-relaxed">
+              已为你暂停播放。切换后会保留当前集数与播放进度。
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 text-xs mb-5">
+          <span className="flex-1 min-w-0 px-2.5 py-2 rounded-lg bg-chip/50 text-muted truncate">
+            当前 · {currentSourceName}
+            {target.baselineMs ? ` · ${target.baselineMs}ms` : ''}
+          </span>
+          <svg className="w-4 h-4 text-faint shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+          <span className="flex-1 min-w-0 px-2.5 py-2 rounded-lg bg-accent/15 text-accent font-medium truncate">
+            推荐 · {target.source.name}
+            {target.ms ? ` · ${target.ms}ms` : ''}
+          </span>
+        </div>
+
+        {target.gainPercent ? (
+          <p className="text-[11px] text-emerald-500 mb-4 text-center">
+            首集预计快 {target.gainPercent}%
+          </p>
+        ) : null}
+
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={onDismiss}
+            className="btn-ghost btn-sm flex-1 !py-2 text-xs"
+          >
+            保持当前线路
+          </button>
+          <button
+            type="button"
+            onClick={onAccept}
+            className="btn-primary btn-sm flex-1 !py-2 text-xs"
+          >
+            立即切换
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

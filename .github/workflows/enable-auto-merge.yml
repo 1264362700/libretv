@@ -24,7 +24,8 @@ jobs:
       (startsWith(github.event.pull_request.head.ref, 'feature/') ||
        startsWith(github.event.pull_request.head.ref, 'fix/') ||
        startsWith(github.event.pull_request.head.ref, 'hotfix/') ||
-       startsWith(github.event.pull_request.head.ref, 'docs/'))
+       startsWith(github.event.pull_request.head.ref, 'docs/') ||
+       startsWith(github.event.pull_request.head.ref, 'refactor/'))
     runs-on: ubuntu-24.04
     steps:
       - name: Enable GitHub auto-merge

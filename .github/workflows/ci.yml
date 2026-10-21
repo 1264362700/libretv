@@ -3,7 +3,7 @@ name: CI
 # 合并门禁：feature 分支推送与 Pull Request 时自动跑类型检查、单测、Lint 与生产构建。
 #
 # 两种触发的分工不同，不要混淆：
-# - feature/fix/hotfix/docs 分支 push 与 PR：这是**真正的门禁**。分支保护要求
+# - feature/fix/hotfix/docs/refactor 分支 push 与 PR：这是**真正的门禁**。分支保护要求
 #   「类型检查 / 单元测试 / ESLint / 生产构建」四项检查通过才允许合并，因此不合规的代码
 #   进不了 Master。
 # - Master push：这是**部署记录**。Master 推送即触发 Render 自动部署，CI 是在
@@ -26,6 +26,7 @@ on:
       - 'fix/**'
       - 'hotfix/**'
       - 'docs/**'
+      - 'refactor/**'
       - 'Master'
   pull_request:
     branches:

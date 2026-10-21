@@ -15,19 +15,10 @@ import { Icon } from './icon';
 import { SpotlightModal } from './spotlight-modal';
 import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
+import { DRAWER_NAV, HEADER_NAV } from '@/lib/channels';
 
-export const CHANNELS = [
-  { id: 'home', label: '首页', href: '/' },
-  { id: 'movie', label: '电影', href: '/catalog?type=movie' },
-  { id: 'tv', label: '电视剧', href: '/catalog?type=tv' },
-  { id: 'short_drama', label: '短剧', href: '/catalog?type=short_drama' },
-  { id: 'ai_comic', label: 'AI漫剧', href: '/catalog?type=ai_comic' },
-  { id: 'movie_commentary', label: '影视解说', href: '/catalog?type=movie_commentary' },
-  { id: 'anime', label: '动漫', href: '/catalog?type=anime' },
-  { id: 'variety', label: '综艺', href: '/catalog?type=variety' },
-  { id: 'documentary', label: '纪录片', href: '/catalog?type=documentary' },
-  { id: 'live', label: '直播', href: '/live' },
-];
+/** 顶栏导航项：频道部分由 @/lib/channels 单一来源派生，此处仅做转出兼容旧引用 */
+export const CHANNELS = HEADER_NAV;
 
 /** 顶部导航：Logo、全频道大厅入口、搜索框、历史、设置与移动端专属频道栏 */
 export function Header(_props?: { showSearch?: boolean }) {
@@ -338,19 +329,7 @@ function MobileNavDrawer({
     router.push(`/?s=${encodeURIComponent(q)}`);
   };
 
-  const navItems = [
-    { id: 'home', label: '首页精选', icon: '🏠', href: '/', desc: '热播大屏 · 快速搜索' },
-    { id: 'movie', label: '电影大厅', icon: '🎬', href: '/catalog?type=movie', desc: '院线大片 / 全球高分' },
-    { id: 'tv', label: '电视剧场', icon: '📺', href: '/catalog?type=tv', desc: '热门国产剧 / 经典美剧' },
-    { id: 'short_drama', label: '微短剧场', icon: '📱', href: '/catalog?type=short_drama', desc: '热门微短剧 / 爽文全集' },
-    { id: 'ai_comic', label: 'AI漫剧', icon: '🤖', href: '/catalog?type=ai_comic', desc: 'AI 动画 / 漫剧合集' },
-    { id: 'movie_commentary', label: '影视解说', icon: '🎙️', href: '/catalog?type=movie_commentary', desc: '剧情解说 / 深度解析' },
-    { id: 'anime', label: '人气动漫', icon: '✨', href: '/catalog?type=anime', desc: '连载新番 / 热血神作' },
-    { id: 'variety', label: '爆笑综艺', icon: '🎤', href: '/catalog?type=variety', desc: '下饭真人秀 / 脱口秀' },
-    { id: 'documentary', label: '探索纪录', icon: '🌍', href: '/catalog?type=documentary', desc: '自然历史 / 科学人文' },
-    { id: 'catalog', label: '全能片库', icon: '🎞️', href: '/catalog', desc: '多维多重条件自由探索' },
-    { id: 'live', label: '电视直播', icon: '📡', href: '/live', desc: '央视卫视高清在线' },
-  ];
+  const navItems = DRAWER_NAV;
 
   return (
     <Drawer open={open} onClose={onClose} title="cl 导航" side="left" width="max-w-[290px]">

@@ -8,23 +8,15 @@ import { TRENDING_SEARCH_KEYWORDS } from './search-history';
 import { Icon } from './icon';
 import { cn } from '@/lib/utils';
 import { useTranslation } from '@/lib/i18n';
+import { QUICK_CHANNELS as QUICK_CHANNELS_SOURCE } from '@/lib/channels';
 
 interface SpotlightModalProps {
   open: boolean;
   onClose: () => void;
 }
 
-const QUICK_CHANNELS = [
-  { label: '电影', icon: '🎬', href: '/catalog?type=movie' },
-  { label: '电视剧', icon: '📺', href: '/catalog?type=tv' },
-  { label: '短剧', icon: '📱', href: '/catalog?type=short_drama' },
-  { label: 'AI漫剧', icon: '🎨', href: '/catalog?type=ai_comic' },
-  { label: '影视解说', icon: '🎙️', href: '/catalog?type=movie_commentary' },
-  { label: '动漫', icon: '✨', href: '/catalog?type=anime' },
-  { label: '综艺', icon: '🎤', href: '/catalog?type=variety' },
-  { label: '纪录片', icon: '🌍', href: '/catalog?type=documentary' },
-  { label: '电视直播', icon: '📡', href: '/live' },
-];
+/** 快捷频道入口由 @/lib/channels 单一来源派生（含首页/直播的固定项） */
+const QUICK_CHANNELS = QUICK_CHANNELS_SOURCE;
 
 export function SpotlightModal({ open, onClose }: SpotlightModalProps) {
   const router = useRouter();

@@ -17,92 +17,10 @@ import { useAppStore, resolveSource, isInDisabledSubscription, isSourceDisabled 
 import type { SourceSearchOutcome, DoubanItem, SourceConfig } from '@/lib/types';
 import { fetchDoubanFilter } from '@/lib/douban-api';
 import { fetchDoubanCollectionItems } from '@/lib/media-library-service';
+import { CHANNELS, type ChannelType } from '@/lib/channels';
 
-type ChannelType =
-  | 'movie'
-  | 'tv'
-  | 'short_drama'
-  | 'ai_comic'
-  | 'movie_commentary'
-  | 'anime'
-  | 'variety'
-  | 'documentary';
-
-interface ChannelConfig {
-  id: ChannelType;
-  label: string;
-  icon: string;
-  subTitle: string;
-  regions: string[];
-  genres: string[];
-}
-
-const CHANNELS_CONFIG: ChannelConfig[] = [
-  {
-    id: 'movie',
-    label: '电影',
-    icon: '🎬',
-    subTitle: '院线大片 · 经典佳作 · 全球高分',
-    regions: ['全部', '大陆', '香港', '台湾', '美国', '韩国', '日本', '英国', '法国'],
-    genres: ['全部', '动作', '喜剧', '爱情', '科幻', '悬疑', '恐怖', '战争', '动画', '剧情', '奇幻', '犯罪', '纪录片'],
-  },
-  {
-    id: 'tv',
-    label: '电视剧',
-    icon: '📺',
-    subTitle: '热门华语剧 · 经典美剧 · 精彩韩剧日剧',
-    regions: ['全部', '大陆', '美国', '韩国', '日本', '香港', '台湾', '英国', '泰国'],
-    genres: ['全部', '言情', '古装', '都市', '剧情', '悬疑', '喜剧', '科幻', '武侠', '谍战', '历史', '伦理', '偶像'],
-  },
-  {
-    id: 'short_drama',
-    label: '短剧',
-    icon: '📱',
-    subTitle: '热门微短剧 · 爽文逆袭 · 全集秒播',
-    regions: ['全部', '都市', '古装', '战神', '甜宠', '逆袭', '重生'],
-    genres: ['全部', '战神', '总裁', '甜宠', '重生', '神医', '穿越', '豪门', '赘婿', '逆袭'],
-  },
-  {
-    id: 'ai_comic',
-    label: 'AI 漫剧',
-    icon: '🎨',
-    subTitle: 'AI 生成竖屏短剧 · 约 2.9 万条 · 每周更新',
-    regions: ['全部', '都市', '古装', '玄幻', '悬疑'],
-    genres: ['全部', '爽文', '逆袭', '重生', '穿越', '修仙', '总裁', '神医'],
-  },
-  {
-    id: 'movie_commentary',
-    label: '电影解说',
-    icon: '🎬',
-    subTitle: '竖屏解说速看 · 约 3.7 万条 · 几分钟看完一部片',
-    regions: ['全部', '悬疑', '犯罪', '动作', '科幻', '剧情'],
-    genres: ['全部', '解说', '速看', '解说版', '完整版'],
-  },
-  {
-    id: 'anime',
-    label: '动漫',
-    icon: '✨',
-    subTitle: '连载新番 · 热血神作 · 剧场版经典',
-    regions: ['全部', '日本', '大陆', '美国'],
-    genres: ['全部', '热血', '冒险', '搞笑', '奇幻', '科幻', '战斗', '恋爱', '校园', '悬疑', '治愈', '机战', '运动', '励志'],
-  },
-  {
-    id: 'variety',
-    label: '综艺',
-    icon: '🎤',
-    subTitle: '爆笑下饭 · 音乐舞台 · 真实真人秀',
-    regions: ['全部', '大陆', '韩国', '香港', '台湾', '美国'],
-    genres: ['全部', '真人秀', '脱口秀', '音乐', '访谈', '晚会', '文化', '情感', '搞笑', '美食', '竞技'],
-  },
-  {
-    id: 'documentary',
-    label: '纪录片',
-    icon: '🌍',
-    subTitle: '探索自然 · 揭秘历史 · 人文科学',
-    regions: ['全部', '大陆', '美国', '英国', '法国', '日本'],
-    genres: ['全部', '自然', '历史', '科学', '人文', '美食', '军事', '探险', '地理'],
-  },
-];
+/** 频道定义统一来自 @/lib/channels，此处保留别名以免大面积改动引用点 */
+const CHANNELS_CONFIG = CHANNELS;
 
 export type CatalogSourceId = 'cms' | 'iqiyi' | '360' | 'douban' | 'bangumi';
 

@@ -7,6 +7,12 @@ out/
 vitest-results.json
 *.log
 
+# Playwright 端到端产物
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+
 # AI 工具产物（本机会话/缓存数据，不入库）
 .mimosa/
 .zcode/

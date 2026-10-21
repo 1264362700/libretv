@@ -18,7 +18,15 @@ import type { SourceSearchOutcome, DoubanItem, SourceConfig } from '@/lib/types'
 import { fetchDoubanFilter } from '@/lib/douban-api';
 import { fetchDoubanCollectionItems } from '@/lib/media-library-service';
 
-type ChannelType = 'movie' | 'tv' | 'short_drama' | 'anime' | 'variety' | 'documentary';
+type ChannelType =
+  | 'movie'
+  | 'tv'
+  | 'short_drama'
+  | 'ai_comic'
+  | 'movie_commentary'
+  | 'anime'
+  | 'variety'
+  | 'documentary';
 
 interface ChannelConfig {
   id: ChannelType;
@@ -53,6 +61,22 @@ const CHANNELS_CONFIG: ChannelConfig[] = [
     subTitle: '热门微短剧 · 爽文逆袭 · 全集秒播',
     regions: ['全部', '都市', '古装', '战神', '甜宠', '逆袭', '重生'],
     genres: ['全部', '战神', '总裁', '甜宠', '重生', '神医', '穿越', '豪门', '赘婿', '逆袭'],
+  },
+  {
+    id: 'ai_comic',
+    label: 'AI 漫剧',
+    icon: '🎨',
+    subTitle: 'AI 生成竖屏短剧 · 约 2.9 万条 · 每周更新',
+    regions: ['全部', '都市', '古装', '玄幻', '悬疑'],
+    genres: ['全部', '爽文', '逆袭', '重生', '穿越', '修仙', '总裁', '神医'],
+  },
+  {
+    id: 'movie_commentary',
+    label: '电影解说',
+    icon: '🎬',
+    subTitle: '竖屏解说速看 · 约 3.7 万条 · 几分钟看完一部片',
+    regions: ['全部', '悬疑', '犯罪', '动作', '科幻', '剧情'],
+    genres: ['全部', '解说', '速看', '解说版', '完整版'],
   },
   {
     id: 'anime',
@@ -102,6 +126,9 @@ const CHANNEL_SOURCES: Record<ChannelType, CatalogSourceId[]> = {
   movie: ['cms', 'iqiyi', '360', 'douban'],
   tv: ['cms', 'iqiyi', '360', 'douban'],
   short_drama: ['cms', '360'],
+  // AI 漫剧与电影解说目前只有 CMS 分类源有对应内容，不挂豆瓣/爱奇艺
+  ai_comic: ['cms'],
+  movie_commentary: ['cms'],
   anime: ['cms', 'bangumi', 'iqiyi', '360'],
   variety: ['cms', 'iqiyi', '360', 'douban'],
   documentary: ['cms', 'iqiyi', '360', 'douban'],
@@ -121,6 +148,8 @@ const CHANNEL_HOT_KEYWORDS: Record<ChannelType, string[]> = {
   movie: ['哪吒2', '热辣滚烫', '第二十条', '飞驰人生2', '沙丘2', '周处除三害', '奥本海默'],
   tv: ['庆余年2', '繁花', '凡人修仙传', '边水往事', '大奉打更人', '唐朝诡事录', '我的阿勒泰'],
   short_drama: ['战神归来', '龙王赘婿', '顾总太太', '无双世子', '重回1990', '天降神豪', '千金回归'],
+  ai_comic: ['落魄厨神摆摊', '妖王大人偷听我心声', '崽崽怎么褪色了', '朕和爱妃的系统绑反了'],
+  movie_commentary: ['杀妻同盟军', '叛我更幸福', '小心许愿'],
   anime: ['仙逆', '完美世界', '吞噬星空', '斗破苍穹', '咒术回战', '鬼灭之刃'],
   variety: ['歌手2024', '乘风2024', '奔跑吧', '极速前进', '喜人奇妙夜'],
   documentary: ['地球脉动', '蓝色星球', '如果国宝会说话', '舌尖上的中国', '航拍中国'],
@@ -435,6 +464,9 @@ function CatalogContent() {
       else if (currentChannel === 'anime') tags = '动漫';
       else if (currentChannel === 'variety') tags = '综艺';
       else if (currentChannel === 'documentary') tags = '纪录片';
+      // AI 漫剧与电影解说不走豆瓣门面（CHANNEL_SOURCES 只挂 cms），此处兜底避免落到「电影」
+      else if (currentChannel === 'ai_comic') tags = '动漫';
+      else if (currentChannel === 'movie_commentary') tags = '电影';
 
       let sort = 'U';
       if (currentSort === 'time') sort = 'R';
@@ -546,9 +578,12 @@ function CatalogContent() {
   });
 
   const rawItems: DoubanItem[] = (catalogQuery.data?.items as DoubanItem[]) ?? [];
-  const items: DoubanItem[] = currentChannel === 'short_drama'
-    ? rawItems
-    : rawItems.filter((item: DoubanItem) => !isShortDramaTitle(item.title));
+  // AI 漫剧与电影解说的标题本身就是短剧/解说套路词（如「妖王大人偷听我心声」），
+  // 若沿用默认过滤会被 isShortDramaTitle 全部剔除，因此与短剧频道一样豁免。
+  const items: DoubanItem[] =
+    currentChannel === 'short_drama' || currentChannel === 'ai_comic' || currentChannel === 'movie_commentary'
+      ? rawItems
+      : rawItems.filter((item: DoubanItem) => !isShortDramaTitle(item.title));
 
   const total = catalogQuery.data?.total ?? (items.length > 0 ? items.length * 10 : 0);
   const totalPages = Math.max(

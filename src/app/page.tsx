@@ -7,6 +7,7 @@ import { Header } from '@/components/header';
 import { HeroBillboardBanner } from '@/components/hero-billboard-banner';
 import { MediaCarouselRow } from '@/components/media-carousel-row';
 import { WeeklySchedule } from '@/components/weekly-schedule';
+import { RecommendSection } from '@/components/douban-section';
 import { AggregatedCard, aggregateResults } from '@/components/video-card';
 import {
   useAppStore,
@@ -160,6 +161,16 @@ function HomeContent() {
     router.push(watchUrl);
   };
 
+  /** RecommendSection 的 onPick 契约为「纯片名」，这里把片名包装成 MediaItem
+   *  复用 handlePlayMedia 的登录校验与跳转逻辑，避免重复实现 */
+  const handlePickByTitle = (title: string) => {
+    handlePlayMedia({
+      id: '',
+      title,
+      cover: '',
+    });
+  };
+
   // URL 驱动搜索逻辑
   useEffect(() => {
     if (urlQuery) setInput(urlQuery);
@@ -301,6 +312,13 @@ function HomeContent() {
               onPlay={handlePlayMedia}
               onDetail={handlePlayMedia}
             />
+
+            {/* 3. 推荐内容专区（固定位置：首屏巨幕之后、搜索栏之前）
+                渲染 RecommendSection 使设置里的「推荐数据源」真正生效。
+                该组件此前从未被任何页面引用，推荐源设置形同虚设。 */}
+            <Suspense fallback={null}>
+              <RecommendSection onPick={handlePickByTitle} />
+            </Suspense>
 
             {/* 搜索胶囊栏（带防抖联想与热词） */}
             <section className="flex flex-col items-center">

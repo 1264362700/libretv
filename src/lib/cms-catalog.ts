@@ -134,10 +134,28 @@ export function resolveCmsTypeId(
   if (type === 'short_drama') {
     const found = classes.find((c) => /短剧|微短剧|爽文/.test(c.type_name));
     if (found) return found.type_id;
-    // 常见 CMS 短剧固定分类 ID 备选（54 为天涯影视等 MacCMS 标准，36/58/45 为常见源）
+    // 常见 CMS 短剧固定分类 ID 备选（54 为天涯影视等 MacCMS 标准，36/58 为常见源）
     const candidateIds = [54, 36, 58, 45, 23];
     const cand = classes.find((c) => candidateIds.includes(Number(c.type_id)));
     return cand ? cand.type_id : 54;
+  }
+
+  // 2.1 AI 漫剧匹配（AI 生成竖屏短剧，实测暴风 t=74、量子 t=52）
+  if (type === 'ai_comic') {
+    const found = classes.find((c) => /AI\s*漫剧|AI漫剧|AI短剧|AI剧/i.test(c.type_name));
+    if (found) return found.type_id;
+    const candidateIds = [74, 52];
+    const cand = classes.find((c) => candidateIds.includes(Number(c.type_id)));
+    return cand ? cand.type_id : 74;
+  }
+
+  // 2.2 电影解说匹配（竖屏解说类，实测暴风 t=51、量子 t=35）
+  if (type === 'movie_commentary') {
+    const found = classes.find((c) => /电影解说|影视解说|剧集解说|解说/.test(c.type_name));
+    if (found) return found.type_id;
+    const candidateIds = [51, 35];
+    const cand = classes.find((c) => candidateIds.includes(Number(c.type_id)));
+    return cand ? cand.type_id : 51;
   }
 
   // 2. 电视剧/剧集匹配
@@ -222,6 +240,10 @@ export function extractSubCategories(
     matcher = /大陆综艺|内地综艺|港台综艺|日韩综艺|欧美综艺|真人秀|脱口秀/;
   } else if (type === 'short_drama') {
     matcher = /短剧|微短剧|爽文|现代都市|古代言情|玄幻武侠|重生逆袭/;
+  } else if (type === 'ai_comic') {
+    matcher = /AI\s*漫剧|AI短剧|AI剧|动态漫|竖屏漫/;
+  } else if (type === 'movie_commentary') {
+    matcher = /电影解说|影视解说|剧集解说|解说/;
   }
 
   if (matcher) {
@@ -546,7 +568,12 @@ export async function fetchCmsCatalog(options: CmsCatalogOptions): Promise<CmsCa
         title,
         cover,
         rating: ratingBadge,
-        isTv: type === 'tv' || type === 'anime' || type === 'short_drama',
+        isTv:
+          type === 'tv' ||
+          type === 'anime' ||
+          type === 'short_drama' ||
+          type === 'ai_comic' ||
+          type === 'movie_commentary',
       };
     })
     .filter((x): x is DoubanItem => Boolean(x));

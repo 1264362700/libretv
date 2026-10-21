@@ -1015,45 +1015,111 @@ function IqiyiHotView({ onPick }: { onPick: (title: string) => void }) {
   );
 }
 
-/** 热门微短剧/爽文专区视图：直连 CMS 短剧分类真流，支持真实分页换一批 */
+/**
+ * 竖屏短内容子分类定义。
+ * slug 与 /api/hot-list 的 id 对齐；count 为实测条目量级，仅用于展示。
+ */
+const VERTICAL_SHORT_TABS = [
+  { slug: 'short_drama', label: '微短剧', icon: '📱', desc: '爽文短剧全集直连', count: '2.4万+' },
+  { slug: 'ai_comic', label: 'AI 漫剧', icon: '🎨', desc: 'AI 生成竖屏短剧', count: '2.9万+' },
+  { slug: 'movie_commentary', label: '电影解说', icon: '🎬', desc: '竖屏解说速看', count: '3.7万+' },
+] as const;
+
+type VerticalShortTab = (typeof VERTICAL_SHORT_TABS)[number]['slug'];
+
+/**
+ * 竖屏短内容专区视图：微短剧 / AI 漫剧 / 电影解说三个子分类共用一套版式。
+ *
+ * 响应式策略（手机 / 平板 / Web 通用）：
+ * - 子分类 tab 用横向滚动（overflow-x-auto + 隐藏滚动条），窄屏不换行、不挤压「换一批」按钮
+ * - 卡片网格沿用项目既有断点：2 列（手机）→ 3（sm）→ 4（md）→ 5（lg）→ 6（xl）→ 7（2xl）
+ * - 标题副文案在窄屏隐藏（hidden sm:inline），避免与 tab 同行导致溢出
+ */
 function ShortDramaView({ onPick }: { onPick: (title: string) => void }) {
+  const [tab, setTab] = useState<VerticalShortTab>('short_drama');
   const [page, setPage] = useState(1);
   const [isShuffling, setIsShuffling] = useState(false);
 
   const query = useQuery({
-    queryKey: ['short-drama', page],
-    queryFn: ({ signal }) => api.hotList('short_drama', signal, (page - 1) * 20),
+    queryKey: ['vertical-short', tab, page],
+    queryFn: ({ signal }) => api.hotList(tab, signal, (page - 1) * 20),
     staleTime: 30_000,
     refetchOnMount: true,
   });
 
   const items = query.data?.items ?? [];
+  const activeTab = VERTICAL_SHORT_TABS.find((t) => t.slug === tab) ?? VERTICAL_SHORT_TABS[0];
+
+  // 切换子分类时回到第一页，避免停留在新分类的越界页码
+  const handleTabChange = (next: VerticalShortTab) => {
+    if (next === tab) return;
+    setTab(next);
+    setPage(1);
+  };
 
   return (
-    <section aria-label="热门微短剧专区" className="space-y-3.5">
-      <div className="flex items-center justify-between gap-2 p-1.5 sm:p-2 bg-chip/30 border border-line/40 rounded-xl">
-        <div className="flex items-center gap-2 px-1">
-          <span className="text-xs font-semibold text-content">📱 热门微短剧 / 爽文精选</span>
-          <span className="text-[11px] text-faint hidden sm:inline">全集直连 · 超爽连播 · 极速秒看</span>
+    <section aria-label="竖屏短内容专区" className="space-y-3.5">
+      {/* 子分类切换：窄屏横向滚动，宽屏与标题同行 */}
+      <div className="p-1.5 sm:p-2 bg-chip/30 border border-line/40 rounded-xl space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 px-1 min-w-0">
+            <span className="text-xs font-semibold text-content shrink-0">
+              {activeTab.icon} 竖屏短内容
+            </span>
+            <span className="text-[11px] text-faint hidden sm:inline truncate">
+              {activeTab.desc} · 共 {activeTab.count}
+            </span>
+          </div>
+          <button
+            type="button"
+            disabled={query.isFetching}
+            className="flex items-center gap-1.5 px-3 py-1 rounded-lg border border-line hover:border-accent/50 text-xs text-muted hover:text-content bg-surface hover:bg-hover transition-all active:scale-95 shrink-0 cursor-pointer disabled:opacity-50"
+            onClick={() => {
+              setIsShuffling(true);
+              setPage((prev) => (prev % 10) + 1);
+              setTimeout(() => setIsShuffling(false), 500);
+            }}
+          >
+            <span className={cn('text-xs transition-transform duration-500', (isShuffling || query.isFetching) && 'rotate-180')}>🔄</span>
+            <span className="hidden sm:inline">换一批</span>
+            {page > 1 && <span className="sm:hidden">{page}</span>}
+          </button>
         </div>
-        <button
-          type="button"
-          disabled={query.isFetching}
-          className="flex items-center gap-1.5 px-3 py-1 rounded-lg border border-line hover:border-accent/50 text-xs text-muted hover:text-content bg-surface hover:bg-hover transition-all active:scale-95 shrink-0 cursor-pointer disabled:opacity-50"
-          onClick={() => {
-            setIsShuffling(true);
-            setPage((prev) => (prev % 10) + 1);
-            setTimeout(() => setIsShuffling(false), 500);
-          }}
+
+        {/* Tab 条：手机可横向滑动，pad/web 直接铺开 */}
+        <div
+          className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5"
+          role="tablist"
+          aria-label="短内容子分类"
         >
-          <span className={cn('text-xs transition-transform duration-500', (isShuffling || query.isFetching) && 'rotate-180')}>🔄</span>
-          <span>换一批 {page > 1 ? `(第${page}/10组)` : ''}</span>
-        </button>
+          {VERTICAL_SHORT_TABS.map((t) => {
+            const active = t.slug === tab;
+            return (
+              <button
+                key={t.slug}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => handleTabChange(t.slug)}
+                className={cn(
+                  'flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs whitespace-nowrap shrink-0 transition-all active:scale-95 cursor-pointer',
+                  active
+                    ? 'bg-accent text-on-accent font-medium shadow-sm'
+                    : 'text-muted hover:text-content bg-surface/60 hover:bg-hover border border-line/60'
+                )}
+              >
+                <span aria-hidden>{t.icon}</span>
+                <span>{t.label}</span>
+                <span className={cn('text-[10px]', active ? 'opacity-80' : 'text-faint')}>{t.count}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {query.isError ? (
         <div className="text-center py-12 space-y-2">
-          <p className="text-sm text-faint">短剧数据加载失败</p>
+          <p className="text-sm text-faint">{activeTab.label}数据加载失败</p>
           <button
             type="button"
             className="px-3 py-1 text-xs rounded-full bg-accent text-on-accent"
@@ -1065,8 +1131,9 @@ function ShortDramaView({ onPick }: { onPick: (title: string) => void }) {
       ) : query.isLoading ? (
         <GridSkeleton />
       ) : items.length === 0 ? (
-        <p className="text-center text-sm text-faint py-12">暂无短剧数据</p>
+        <p className="text-center text-sm text-faint py-12">暂无{activeTab.label}数据</p>
       ) : (
+        // 断点沿用项目通用卡片网格：2/3/4/5/6/7 列覆盖手机到超宽屏
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-2.5 sm:gap-3.5">
           {items.slice(0, 14).map((item) => (
             <DoubanCard key={item.id} item={item} onClick={() => onPick(item.title)} />

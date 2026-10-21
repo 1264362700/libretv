@@ -30,6 +30,9 @@ on:
   pull_request:
     branches:
       - Master
+  # 手动触发：Actions 页面右上角 "Run workflow" 下拉可手动跑一次，
+  # 选中任意分支即可，不必为验证而专门推一个空提交。
+  workflow_dispatch:
 
 # 同一个 PR 的连续推送取消更早的未完成运行，避免旧代码抢跑导致误判。
 # 注意 group 用 github.ref：PR 事件是 refs/pull/N/merge，与分支 push 的

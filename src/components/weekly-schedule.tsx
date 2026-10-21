@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useRef } from 'react';
 import type { BangumiDaySchedule, MediaItem } from '@/lib/media-library-service';
 import { MediaCard } from './media-card';
 import { cn } from '@/lib/utils';
@@ -41,6 +41,14 @@ export function WeeklySchedule({
   }, []);
 
   const [activeDay, setActiveDay] = useState<number>(currentDayId);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const scroll = (direction: 'left' | 'right') => {
+    if (!scrollRef.current) return;
+    const clientWidth = scrollRef.current.clientWidth;
+    const scrollAmount = direction === 'left' ? -clientWidth * 0.75 : clientWidth * 0.75;
+    scrollRef.current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+  };
 
   const currentItems = useMemo(() => {
     const found = schedule.find((s) => s.weekdayId === activeDay);
@@ -48,7 +56,7 @@ export function WeeklySchedule({
   }, [schedule, activeDay]);
 
   return (
-    <section className="space-y-4 pt-2">
+    <section className="space-y-3 pt-2 group/row">
       {/* 头部标题与周历切换胶囊 */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-line">
         <div className="flex items-center gap-2">
@@ -91,29 +99,53 @@ export function WeeklySchedule({
         </div>
       </div>
 
-      {/* 当天新番列表卡片网格 */}
+      {/* 单行平滑横向滚动卡片轨道（严格单行，不允许换行） */}
       {isLoading ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4">
-          {Array.from({ length: 12 }).map((_, i) => (
+        <div className="flex gap-3 sm:gap-4 overflow-hidden py-1">
+          {Array.from({ length: 6 }).map((_, i) => (
             <div
               key={i}
-              className="aspect-[2/3] rounded-xl bg-chip animate-pulse border border-line/40"
+              className="w-[140px] sm:w-[170px] md:w-[190px] shrink-0 aspect-[2/3] rounded-xl bg-chip animate-pulse border border-line/40"
             />
           ))}
         </div>
       ) : currentItems.length > 0 ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4">
-          {currentItems.map((item) => (
-            <MediaCard
-              key={item.id}
-              item={item}
-              cmsRemarksMap={cmsRemarksMap}
-              onClick={() => onPick(item)}
-            />
-          ))}
+        <div className="relative">
+          {/* PC 端 hover 左右翻页微箭头 */}
+          <button
+            type="button"
+            onClick={() => scroll('left')}
+            className="w-8 h-8 rounded-full bg-chip hover:bg-hover text-muted hover:text-content border border-line/60 flex items-center justify-center transition-all opacity-0 group-hover/row:opacity-100 cursor-pointer hidden sm:flex absolute -left-3 top-1/2 -translate-y-1/2 z-10 shadow-md"
+            title="向左滚动"
+          >
+            ‹
+          </button>
+          <button
+            type="button"
+            onClick={() => scroll('right')}
+            className="w-8 h-8 rounded-full bg-chip hover:bg-hover text-muted hover:text-content border border-line/60 flex items-center justify-center transition-all opacity-0 group-hover/row:opacity-100 cursor-pointer hidden sm:flex absolute -right-3 top-1/2 -translate-y-1/2 z-10 shadow-md"
+            title="向右滚动"
+          >
+            ›
+          </button>
+
+          <div
+            ref={scrollRef}
+            className="flex gap-3 sm:gap-4 overflow-x-auto no-scrollbar scroll-smooth py-1 px-0.5"
+          >
+            {currentItems.map((item) => (
+              <div key={item.id} className="w-[140px] sm:w-[170px] md:w-[190px] shrink-0">
+                <MediaCard
+                  item={item}
+                  cmsRemarksMap={cmsRemarksMap}
+                  onClick={() => onPick(item)}
+                />
+              </div>
+            ))}
+          </div>
         </div>
       ) : (
-        <div className="py-12 text-center text-xs text-muted border border-dashed border-line/60 rounded-xl bg-surface/30">
+        <div className="py-8 text-center text-xs text-muted border border-dashed border-line/60 rounded-xl bg-surface/30">
           周历数据加载中或本日暂无新番连载…
         </div>
       )}

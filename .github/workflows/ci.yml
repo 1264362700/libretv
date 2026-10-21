@@ -1,0 +1,88 @@
+name: CI
+
+# 合并门禁：feature 分支推送与 Pull Request 时自动跑类型检查、单测与 Lint。
+# Master 受分支保护强制要求 PR 审核 + 本工作流通过，因此「Master 变绿」等价于
+# 「已通过全部质量门禁」，可安全交给 Render 触发自动部署。
+#
+# 三道门禁拆为三个并行 job，而非一个 job 内的连续 steps：
+# GitHub Actions 的 step 默认「失败即跳过后续」，一旦某一环在 runner 上因环境
+# 波动失败，其余门禁会被连带跳过，日志里只看到部分检查在跑，既看不出真实问题，
+# 也无法判断是哪一环出错。拆开后三者互不影响，每次运行都能得到完整三项结论，
+# 且并行执行后总耗时取决于最慢一环而非三段相加。
+#
+# runner 固定 ubuntu-24.04：GitHub 公告 ubuntu-latest 将于 2026-10-19 起迁移至
+# Ubuntu 26，浮动标签会让构建环境在无人改动时静默变化。
+
+on:
+  push:
+    branches:
+      - 'feature/**'
+      - 'fix/**'
+      - 'hotfix/**'
+      - 'docs/**'
+  pull_request:
+    branches:
+      - Master
+
+# 同一个 PR 的连续推送取消更早的未完成运行，避免旧代码抢跑导致误判
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  typecheck:
+    name: 类型检查
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: tsc --noEmit
+        run: npm run typecheck
+
+  test:
+    name: 单元测试
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # vitest 默认多线程会显著拉高内存占用，runner 在跑 34 个测试文件时
+      # 易被 OOM Killer 杀掉，表现为无输出的异常中断。
+      # 单 fork 单进程是本机已验证的稳定参数。
+      - name: vitest run
+        run: npm test -- --pool=forks --poolOptions.forks.singleFork=true --poolOptions.forks.maxForks=1
+
+  lint:
+    name: ESLint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: eslint src
+        run: npm run lint

@@ -136,6 +136,18 @@ function WatchContent() {
     detail: searchParams.get('detail') || undefined,
   });
 
+  /**
+   * URL 带来的点播源是否已失效。
+   *
+   * 除「完全没带 source」外，还有一类更隐蔽的死链：切换 DEFAULT_SOURCES / 内置源 /
+   * 订阅源后，用户观看历史或收藏里的 `source=` 旧 key（如 `env`）已不存在于新配置中，
+   * 但 resolveSource 仍返回 undefined。这类 URL 过去直接落到「点播源不存在」报错页，
+   * 没有任何自愈路径——片明明还在，匹配器也明明能命中。
+   *
+   * 判定：URL 声称带了一个 sourceKey，但解析不出来 → 视为失效，可退回按片名重新匹配。
+   */
+  const hasStaleSource = Boolean(sourceKey && !source);
+
   // 详情查询：无 id（纯直连链接分享）时跳过
   const detailQuery = useQuery({
     queryKey: ['detail', sourceKey, vodId, source?.url],
@@ -562,7 +574,10 @@ function WatchContent() {
     setMatchingDone(false);
     setStreamMatchedList([]);
 
-    const hasInitialSource = Boolean(sourceKey && vodId);
+    // 以「能否解析出真实源」而非「URL 是否带 source 参数」为准：
+    // sourceKey 存在但已失效（如切换源配置后遗留的 env 旧 key）时同样按无源处理，
+    // 这样首次命中即可替换成合法 URL，避免直接落到「点播源不存在」死页。
+    const hasInitialSource = Boolean(source && vodId);
 
     const matcher = new StreamSourceMatcher(
       {
@@ -579,8 +594,8 @@ function WatchContent() {
             if (prev.some((m) => m.source.key === matched.source.key)) return prev;
             return [...prev, matched];
           });
-          // 仅在初始无确定源（豆瓣门面直跳入）且首次命中有效源时，触发首源秒播替换路由
-          if (isFirst && !hasInitialSource && !sourceKey) {
+          // 触发首源秒播替换路由：无有效源时（未带 source，或带的 source 已失效）
+          if (isFirst && !hasInitialSource) {
             router.replace(
               buildWatchUrl({
                 sourceKey: matched.source.key,
@@ -609,7 +624,9 @@ function WatchContent() {
     return () => {
       matcher.abort();
     };
-  }, [sourceKey, vodId, titleParam, videoTitle, doubanIdParam, yearParam, verified, allCandidateSources, router, indexParam]);
+    // 依赖里带 source / hasStaleSource：切换源配置后旧的 sourceKey 从「有效」变为
+    // 「失效」时，source 的引用会变化，需要重新启动匹配器走一遍自愈流程。
+  }, [sourceKey, source, hasStaleSource, vodId, titleParam, videoTitle, doubanIdParam, yearParam, verified, allCandidateSources, router, indexParam]);
 
   if (!verified) {
     return (
@@ -621,11 +638,17 @@ function WatchContent() {
   }
 
   if (!source) {
+    // 失效源（如历史记录里的 env 旧 key）与「根本没带源」同路处理：
+    // 先按片名重新匹配，匹配器会在首次命中时把 URL 换成合法源。
     if (titleParam && !matchingDone) {
       return (
         <div className="min-h-screen flex flex-col items-center justify-center gap-3 px-4">
           <Spinner size="lg" />
-          <p className="text-sm text-content font-medium">正在流式并发匹配「{titleParam}」播放源并秒开...</p>
+          <p className="text-sm text-content font-medium">
+            {hasStaleSource
+              ? `原播放源已失效，正在为「${titleParam}」重新匹配可用线路...`
+              : `正在流式并发匹配「${titleParam}」播放源并秒开...`}
+          </p>
           <p className="text-xs text-faint">
             {streamProgress
               ? `已检测 ${streamProgress.completed}/${streamProgress.total} 个源，命中 ${streamProgress.matched} 条线路`
@@ -641,7 +664,9 @@ function WatchContent() {
           <div className="text-center max-w-md">
             <h1 className="text-content font-semibold text-lg mb-2">未找到该片源</h1>
             <p className="text-sm text-muted mb-5 leading-relaxed">
-              当前启用的点播源中暂未匹配到「{titleParam}」。建议在右上角「设置」中开启更多点播源，或返回片库选择其他精彩影片。
+              {hasStaleSource
+                ? `原播放源「${sourceKey}」已不存在，且当前启用的点播源中未匹配到「${titleParam}」。可在设置中重新添加该源，或返回首页重新选择。`
+                : `当前启用的点播源中暂未匹配到「${titleParam}」。建议在右上角「设置」中开启更多点播源，或返回片库选择其他精彩影片。`}
             </p>
             <div className="flex justify-center gap-3">
               <Link href="/catalog" className="btn-primary">进入片库大厅</Link>
@@ -652,12 +677,17 @@ function WatchContent() {
       );
     }
 
+    // 走到这里说明既无可用源、也没有片名可供重新匹配（纯死链）。
+    // 多为观看历史/收藏里的旧链接，已失去按片名自愈的条件。
     return (
       <div className="min-h-screen flex items-center justify-center px-4">
         <div className="text-center max-w-md">
           <h1 className="text-content font-medium mb-2">点播源不存在</h1>
           <p className="text-sm text-muted mb-4">
             该视频来自点播源「{sourceKey || '未知'}」，但它可能已被删除。请在设置中重新添加后重试。
+          </p>
+          <p className="text-xs text-faint mb-5">
+            若这是从观看历史或收藏打开的旧链接，源配置变更后已无法自动恢复，建议删除该条记录或返回首页重新选择。
           </p>
           <Link href="/" className="btn-primary">返回首页</Link>
         </div>

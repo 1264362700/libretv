@@ -449,6 +449,11 @@ function WatchContent() {
     return 'movie';
   }, [typeText, videoTitle]);
 
+  // 判断是否为剧集或动漫，以决定是否呈现当前单集介绍
+  const isTvOrAnime = useMemo(() => {
+    return recommendCategory === 'tv' || recommendCategory === 'anime' || episodes.length > 1;
+  }, [recommendCategory, episodes.length]);
+
   const [recPage, setRecPage] = useState(0);
   const [recRefreshing, setRecRefreshing] = useState(false);
   useEffect(() => {
@@ -507,6 +512,35 @@ function WatchContent() {
     if (episodes.length > 0) return Math.min(Math.max(indexParam, 0), episodes.length - 1);
     return indexParam;
   }, [episodes, indexParam]);
+
+  const [epDescExpanded, setEpDescExpanded] = useState(false);
+  useEffect(() => {
+    setEpDescExpanded(false);
+  }, [currentIndex, videoTitle]);
+
+  // 当前分集剧情看点数据拉取（Bangumi / 上游分集剧情）
+  const episodeIntroQuery = useQuery({
+    queryKey: ['episode-intro', videoTitle, currentIndex + 1, recommendCategory],
+    queryFn: async ({ signal }) => {
+      if (!videoTitle || videoTitle === '未知视频') return null;
+      const res = await fetch(
+        `/api/media/episode-intro?title=${encodeURIComponent(videoTitle)}&episode=${currentIndex + 1}&type=${recommendCategory}`,
+        { signal }
+      );
+      if (!res.ok) return null;
+      return (await res.json()) as {
+        ok: boolean;
+        episode: number;
+        title?: string;
+        desc?: string;
+        airdate?: string;
+        duration?: string;
+        source?: string;
+      };
+    },
+    enabled: isTvOrAnime && Boolean(videoTitle && videoTitle !== '未知视频'),
+    staleTime: 60 * 60_000,
+  });
 
   const goEpisode = useCallback(
     (index: number) => {
@@ -1079,6 +1113,65 @@ function WatchContent() {
                 快捷键：空格 播放/暂停 · ←/→ 快退/快进 · ↑/↓ 音量 · F 全屏 · Alt+←/→ 切集
               </p>
             </div>
+
+            {/* 1.5 当前单集剧情看点 (仅动漫/电视剧且剧集多于 1 集时呈现) */}
+            {isTvOrAnime && episodes.length > 1 && (
+              <div className="bg-surface-raised rounded-xl p-3 sm:p-3.5 border border-line shadow-sm space-y-2 animate-fade-in">
+                <div className="flex items-center justify-between gap-2 border-b border-line/40 pb-2">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="w-1.5 h-3.5 rounded-full bg-accent shrink-0" />
+                    <span className="text-xs font-bold text-content shrink-0">
+                      第 {currentIndex + 1} 集看点
+                    </span>
+                    {episodeIntroQuery.data?.title && (
+                      <span className="text-xs font-semibold text-accent truncate">
+                        · {episodeIntroQuery.data.title}
+                      </span>
+                    )}
+                  </div>
+                  {(episodeIntroQuery.data?.duration || episodeIntroQuery.data?.airdate) && (
+                    <span className="text-[11px] font-mono text-faint shrink-0">
+                      {episodeIntroQuery.data.airdate || episodeIntroQuery.data.duration}
+                    </span>
+                  )}
+                </div>
+
+                {episodeIntroQuery.isLoading ? (
+                  <div className="py-2.5 flex items-center gap-2 text-xs text-faint">
+                    <span className="w-3 h-3 rounded-full border-2 border-accent border-t-transparent animate-spin" />
+                    <span>正在检索本集看点与剧情…</span>
+                  </div>
+                ) : episodeIntroQuery.data?.desc ? (
+                  <div>
+                    <p
+                      className={cn(
+                        'text-muted leading-relaxed text-xs transition-all duration-300',
+                        !epDescExpanded && 'line-clamp-3'
+                      )}
+                    >
+                      {episodeIntroQuery.data.desc}
+                    </p>
+                    {episodeIntroQuery.data.desc.length > 80 && (
+                      <button
+                        type="button"
+                        onClick={() => setEpDescExpanded((v) => !v)}
+                        className="inline-flex items-center gap-1 text-[11px] text-accent hover:underline mt-1 font-medium cursor-pointer"
+                      >
+                        <span>{epDescExpanded ? '收起剧情' : '查看本集完整剧情'}</span>
+                        <Icon
+                          name="arrowDown"
+                          className={cn('w-3 h-3 transition-transform duration-200', epDescExpanded && 'rotate-180')}
+                        />
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-faint text-xs leading-relaxed">
+                    当前播放第 {currentIndex + 1} 集（共 {episodes.length} 集），剧情紧跟主线推进，可展开下方全剧概述查阅核心背景。
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* 2. 影片档案卡片（海报 + 备用剧照微相册 + 演员表 + 剧情概述折叠） */}
             <div className="relative p-3.5 sm:p-4 bg-surface-raised rounded-xl border border-line shadow-sm overflow-hidden min-w-0">

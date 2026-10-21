@@ -79,6 +79,7 @@ export interface DoubanItem {
   region?: string;
   area?: string;
   remarks?: string;
+  episodes_info?: string;
 }
 
 export interface SourceSearchOutcome {

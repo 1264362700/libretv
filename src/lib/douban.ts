@@ -24,6 +24,8 @@ interface MovieItem360 {
   score?: string | number | null;
   comment?: string;
   pubdate?: string;
+  total?: number | string;
+  upinfo?: number | string;
 }
 
 interface FilterResponse360 {
@@ -172,12 +174,36 @@ export async function fetchDoubanRecommend(
               }
             }
 
+            // 剧集与动漫更新集数提取 (upinfo: 当前更新集, total: 总集数)
+            let episodeBadge: string | undefined;
+            if (catId === 2 || catId === 4) {
+              const upNum = typeof m.upinfo === 'number' ? m.upinfo : parseInt(String(m.upinfo || '0'), 10) || 0;
+              const totalNum = typeof m.total === 'number' ? m.total : parseInt(String(m.total || '0'), 10) || 0;
+              if (upNum > 0) {
+                if (totalNum > 0 && upNum >= totalNum) {
+                  episodeBadge = `全${totalNum}集`;
+                } else {
+                  episodeBadge = `更新至${upNum}集`;
+                }
+              }
+            }
+
+            // 年份提取 (如 pubdate: "2024-08-26")
+            let pubYear: string | undefined;
+            if (typeof m.pubdate === 'string') {
+              const ym = m.pubdate.match(/\b(19\d{2}|20\d{2})\b/);
+              if (ym) pubYear = ym[1];
+            }
+
             return {
               id: `360_${m.id || Math.random().toString(36).slice(2)}`,
               title: m.title?.trim() || '',
               cover,
               rating: score,
               isTv: catId === 2,
+              year: pubYear,
+              remarks: episodeBadge,
+              episodes_info: episodeBadge,
             };
           })
           .filter((item) => item.title && item.cover);

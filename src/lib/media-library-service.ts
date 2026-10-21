@@ -208,6 +208,13 @@ export async function fetchDoubanCollectionItems(
       const year = raw?.year ? String(raw.year) : undefined;
       const title = String(raw?.title || '').trim();
 
+      const epInfo =
+        typeof raw?.episodes_info === 'string' && raw.episodes_info
+          ? raw.episodes_info
+          : typeof raw?.remarks === 'string' && raw.remarks
+          ? raw.remarks
+          : undefined;
+
       return {
         id: String(raw?.id || ''),
         title,
@@ -216,7 +223,7 @@ export async function fetchDoubanCollectionItems(
         year,
         typeName,
         card_subtitle: year ? `${year} · ${typeName}` : typeName,
-        episodes_info: undefined,
+        episodes_info: epInfo,
       };
     });
 

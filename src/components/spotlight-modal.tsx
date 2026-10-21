@@ -17,6 +17,9 @@ interface SpotlightModalProps {
 const QUICK_CHANNELS = [
   { label: '电影', icon: '🎬', href: '/catalog?type=movie' },
   { label: '电视剧', icon: '📺', href: '/catalog?type=tv' },
+  { label: '短剧', icon: '📱', href: '/catalog?type=short_drama' },
+  { label: 'AI漫剧', icon: '🎨', href: '/catalog?type=ai_comic' },
+  { label: '影视解说', icon: '🎙️', href: '/catalog?type=movie_commentary' },
   { label: '动漫', icon: '✨', href: '/catalog?type=anime' },
   { label: '综艺', icon: '🎤', href: '/catalog?type=variety' },
   { label: '纪录片', icon: '🌍', href: '/catalog?type=documentary' },

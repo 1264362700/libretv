@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/client-api';
@@ -491,11 +491,7 @@ function DoubanMultiCategoryView({ onPick }: { onPick: (title: string) => void }
       ) : items.length === 0 ? (
         <p className="text-center text-sm text-faint py-12">该分类组合暂无内容，请尝试其他标签</p>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-2.5 sm:gap-3.5">
-          {items.slice(0, 14).map((item) => (
-            <DoubanCard key={item.id} item={item} onClick={() => onPick(item.title)} />
-          ))}
-        </div>
+        <HorizontalCardRow items={items} onPick={onPick} />
       )}
     </section>
   );
@@ -602,11 +598,7 @@ function BangumiInlineView({ onPick }: { onPick: (title: string) => void }) {
       ) : items.length === 0 ? (
         <p className="text-center text-sm text-faint py-12">暂无新番连载数据</p>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-2.5 sm:gap-3.5">
-          {items.map((item) => (
-            <DoubanCard key={item.id} item={item} onClick={() => onPick(item.title)} />
-          ))}
-        </div>
+        <HorizontalCardRow items={items} onPick={onPick} maxItems={24} />
       )}
     </div>
   );
@@ -682,11 +674,7 @@ function Kan360HotView({ onPick }: { onPick: (title: string) => void }) {
       ) : items.length === 0 ? (
         <p className="text-center text-sm text-faint py-12">暂无热播内容，请尝试其他分类</p>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-2.5 sm:gap-3.5">
-          {items.slice(0, 14).map((item) => (
-            <DoubanCard key={item.id} item={item} onClick={() => onPick(item.title)} />
-          ))}
-        </div>
+        <HorizontalCardRow items={items} onPick={onPick} />
       )}
     </section>
   );
@@ -751,11 +739,7 @@ function BaiduTopView({ onPick }: { onPick: (title: string) => void }) {
       ) : items.length === 0 ? (
         <p className="text-center text-sm text-faint py-12">暂无热播内容，请尝试其他分类</p>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-2.5 sm:gap-3.5">
-          {items.slice(0, 14).map((item) => (
-            <DoubanCard key={item.id} item={item} onClick={() => onPick(item.title)} />
-          ))}
-        </div>
+        <HorizontalCardRow items={items} onPick={onPick} />
       )}
     </section>
   );
@@ -813,11 +797,7 @@ function DoubanTop250View({ onPick }: { onPick: (title: string) => void }) {
       ) : items.length === 0 ? (
         <p className="text-center text-sm text-faint py-12">暂无内容</p>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-2.5 sm:gap-3.5">
-          {items.slice(0, 14).map((item) => (
-            <DoubanCard key={item.id} item={item} onClick={() => onPick(item.title)} />
-          ))}
-        </div>
+        <HorizontalCardRow items={items} onPick={onPick} />
       )}
     </section>
   );
@@ -885,11 +865,7 @@ function HotListView({ onPick }: { onPick: (title: string) => void }) {
       ) : items.length === 0 ? (
         <p className="text-center text-sm text-faint py-12">暂无口碑榜单内容</p>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-2.5 sm:gap-3.5">
-          {items.slice(0, 14).map((item) => (
-            <DoubanCard key={item.id} item={item} onClick={() => onPick(item.title)} />
-          ))}
-        </div>
+        <HorizontalCardRow items={items} onPick={onPick} />
       )}
     </section>
   );
@@ -934,11 +910,7 @@ function MaoyanView({ onPick }: { onPick: (title: string) => void }) {
       ) : items.length === 0 ? (
         <p className="text-center text-sm text-faint py-12">暂无票房内容</p>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-2.5 sm:gap-3.5">
-          {items.slice(0, 14).map((item) => (
-            <DoubanCard key={item.id} item={item} onClick={() => onPick(item.title)} />
-          ))}
-        </div>
+        <HorizontalCardRow items={items} onPick={onPick} />
       )}
     </section>
   );
@@ -1005,11 +977,7 @@ function IqiyiHotView({ onPick }: { onPick: (title: string) => void }) {
       ) : items.length === 0 ? (
         <p className="text-center text-sm text-faint py-12">暂无热播内容，请尝试其他分类</p>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-2.5 sm:gap-3.5">
-          {items.slice(0, 14).map((item) => (
-            <DoubanCard key={item.id} item={item} onClick={() => onPick(item.title)} />
-          ))}
-        </div>
+        <HorizontalCardRow items={items} onPick={onPick} />
       )}
     </section>
   );
@@ -1134,11 +1102,7 @@ function ShortDramaView({ onPick }: { onPick: (title: string) => void }) {
         <p className="text-center text-sm text-faint py-12">暂无{activeTab.label}数据</p>
       ) : (
         // 断点沿用项目通用卡片网格：2/3/4/5/6/7 列覆盖手机到超宽屏
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-2.5 sm:gap-3.5">
-          {items.slice(0, 14).map((item) => (
-            <DoubanCard key={item.id} item={item} onClick={() => onPick(item.title)} />
-          ))}
-        </div>
+        <HorizontalCardRow items={items} onPick={onPick} />
       )}
     </section>
   );
@@ -1146,13 +1110,65 @@ function ShortDramaView({ onPick }: { onPick: (title: string) => void }) {
 
 function GridSkeleton() {
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-2.5 sm:gap-3.5">
-      {Array.from({ length: 14 }).map((_, i) => (
-        <div key={i}>
-          <div className="aspect-[2/3] rounded-lg bg-chip animate-pulse" />
-          <div className="h-3 mt-2 rounded bg-chip animate-pulse" />
+    <div className="flex gap-2.5 sm:gap-3.5 overflow-hidden py-1 px-0.5">
+      {Array.from({ length: 8 }).map((_, i) => (
+        <div key={i} className="w-[125px] sm:w-[145px] md:w-[160px] shrink-0">
+          <div className="aspect-[2/3] rounded-xl bg-chip animate-pulse border border-line/40" />
+          <div className="h-3 mt-2 rounded bg-chip animate-pulse w-3/4" />
         </div>
       ))}
+    </div>
+  );
+}
+
+/** 推荐源单行横向平滑滚动卡片轨道（收敛垂直空间，桌面端 hover 箭头，触屏原生滑动） */
+function HorizontalCardRow({
+  items,
+  onPick,
+  maxItems = 16,
+}: {
+  items: DoubanItem[];
+  onPick: (title: string) => void;
+  maxItems?: number;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const scroll = (direction: 'left' | 'right') => {
+    if (!scrollRef.current) return;
+    const clientWidth = scrollRef.current.clientWidth;
+    const scrollAmount = direction === 'left' ? -clientWidth * 0.75 : clientWidth * 0.75;
+    scrollRef.current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+  };
+
+  return (
+    <div className="relative group/row">
+      <button
+        type="button"
+        onClick={() => scroll('left')}
+        className="absolute -left-2.5 top-1/2 -translate-y-1/2 z-10 w-7 h-7 rounded-full bg-surface-raised/95 border border-line shadow-md text-content hidden md:flex items-center justify-center opacity-0 group-hover/row:opacity-100 hover:scale-110 active:scale-95 transition-all cursor-pointer"
+        title="向左滚动"
+      >
+        ‹
+      </button>
+      <button
+        type="button"
+        onClick={() => scroll('right')}
+        className="absolute -right-2.5 top-1/2 -translate-y-1/2 z-10 w-7 h-7 rounded-full bg-surface-raised/95 border border-line shadow-md text-content hidden md:flex items-center justify-center opacity-0 group-hover/row:opacity-100 hover:scale-110 active:scale-95 transition-all cursor-pointer"
+        title="向右滚动"
+      >
+        ›
+      </button>
+
+      <div
+        ref={scrollRef}
+        className="flex gap-2.5 sm:gap-3.5 overflow-x-auto no-scrollbar scroll-smooth py-1 px-0.5"
+      >
+        {items.slice(0, maxItems).map((item) => (
+          <div key={item.id} className="w-[125px] sm:w-[145px] md:w-[160px] shrink-0">
+            <DoubanCard item={item} onClick={() => onPick(item.title)} />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

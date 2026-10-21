@@ -15,7 +15,7 @@ const PlayerShell = dynamic(() => import('@/components/player-shell').then((m) =
     </div>
   ),
 });
-import { EmptyState, LoadingState, Spinner } from '@/components/states';
+import { EmptyState, Spinner } from '@/components/states';
 import { SwitchSourceModal } from '@/components/switch-source';
 import { enqueueDownload } from '@/components/download-manager';
 import { Icon } from '@/components/icon';
@@ -33,49 +33,15 @@ import {
   db,
 } from '@/lib/db';
 import { buildWatchUrl, cn } from '@/lib/utils';
-import { SmartImage } from '@/components/smart-image';
 import { DoubanCard } from '@/components/video-card';
 import { StreamSourceMatcher, type MatchedSource } from '@/lib/stream-source-matcher';
 import { fetchDoubanDetail } from '@/lib/douban-api';
+import type { CandidateItem } from '@/features/watch/watch-types';
+import { parseNames, sanitizeDesc } from '@/features/watch/watch-utils';
+import { SpeedSuggestionDialog } from '@/features/watch/watch-dialogs';
+import { BackButton, HomeButton } from '@/features/watch/watch-buttons';
+import { WatchSidebar } from '@/features/watch/watch-sidebar';
 
-interface CandidateItem {
-  source: SourceConfig;
-  result: SearchResultItem;
-  ms?: number;
-  /** 测速对比基准：当前线路的耗时（仅最优线路提示弹框用） */
-  baselineMs?: number;
-  /** 相对基准的提速百分比（仅最优线路提示弹框用） */
-  gainPercent?: number;
-}
-
-/** 演员与主创姓名解析：按逗号/斜杠/顿号/空格拆分为纯净字符串数组 */
-function parseNames(raw: string | undefined): string[] {
-  if (!raw) return [];
-  return raw
-    .split(/[/,，、\s|]+/)
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0 && s !== '未知' && s !== '暂无' && s !== '无');
-}
-
-/** 剧情概述净化：去除采集站常见 HTML 实体与 CMS 标签 */
-function sanitizeDesc(raw: string | undefined): string {
-  if (!raw) return '';
-  return raw
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/&amp;/gi, '&')
-    .replace(/&quot;/gi, '"')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-/**
- * 播放页（唯一入口，替代旧版 watch.html → player.html 跳转链）。
- * 状态全部由 URL 驱动：/watch?source=xx&id=..&index=..&title=..
- * 集数列表由服务端详情接口获取；进度与历史走 IndexedDB。
- */
 export default function WatchPage() {
   return (
     <Suspense>
@@ -1068,275 +1034,34 @@ function WatchContent() {
           </div>
 
           {/* 右侧侧栏（Web 模式下：剧集选集 + 影片海报/演职员/概述；移动端顺位在播放器下方） */}
-          <aside className="space-y-3.5 min-w-0 w-full">
-            {/* 1. 剧集选集卡片 */}
-            <div className="bg-surface-raised rounded-xl p-3 sm:p-3.5 border border-line shadow-sm">
-              <div className="flex items-center justify-between gap-2 mb-3">
-                <div className="flex items-center gap-1.5">
-                  <h3 className="text-sm font-semibold text-content">剧集列表</h3>
-                  {episodes.length > 0 && <span className="text-xs text-faint">({episodes.length})</span>}
-                </div>
-                {episodes.length > 1 && (
-                  <button
-                    type="button"
-                    className="btn-ghost btn-sm !px-2 !py-1 text-xs shrink-0 flex items-center gap-1"
-                    onClick={() => setReversed((v) => !v)}
-                    title="切换剧集列表排列顺序"
-                  >
-                    <Icon
-                      name="arrowDown"
-                      className={cn('w-3.5 h-3.5 transition-transform mr-0.5', reversed && 'rotate-180')}
-                    />
-                    <span>{reversed ? '倒序' : '正序'}</span>
-                  </button>
-                )}
-              </div>
-              {episodes.length === 0 ? (
-                detailQuery.isLoading ? (
-                  <LoadingState />
-                ) : (
-                  <EmptyState variant="plain" title={detailQuery.isError ? '获取剧集失败' : '暂无剧集信息'} />
-                )
-              ) : (
-                <div className="grid grid-cols-6 sm:grid-cols-8 lg:grid-cols-4 gap-1.5 max-h-[30vh] sm:max-h-[34vh] overflow-y-auto scrollbar-thin pr-1">
-                  {orderedEpisodes.map((realIndex) => (
-                    <EpisodeButton
-                      key={realIndex}
-                      index={realIndex}
-                      active={realIndex === currentIndex}
-                      onClick={() => goEpisode(realIndex)}
-                    />
-                  ))}
-                </div>
-              )}
-              <p className="hidden lg:block text-[10px] text-faint mt-3 leading-relaxed">
-                快捷键：空格 播放/暂停 · ←/→ 快退/快进 · ↑/↓ 音量 · F 全屏 · Alt+←/→ 切集
-              </p>
-            </div>
-
-            {/* 1.5 当前单集剧情看点 (仅动漫/电视剧且剧集多于 1 集时呈现) */}
-            {isTvOrAnime && episodes.length > 1 && (
-              <div className="bg-surface-raised rounded-xl p-3 sm:p-3.5 border border-line shadow-sm space-y-2 animate-fade-in">
-                <div className="flex items-center justify-between gap-2 border-b border-line/40 pb-2">
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <span className="w-1.5 h-3.5 rounded-full bg-accent shrink-0" />
-                    <span className="text-xs font-bold text-content shrink-0">
-                      第 {currentIndex + 1} 集看点
-                    </span>
-                    {episodeIntroQuery.data?.title && (
-                      <span className="text-xs font-semibold text-accent truncate">
-                        · {episodeIntroQuery.data.title}
-                      </span>
-                    )}
-                  </div>
-                  {(episodeIntroQuery.data?.duration || episodeIntroQuery.data?.airdate) && (
-                    <span className="text-[11px] font-mono text-faint shrink-0">
-                      {episodeIntroQuery.data.airdate || episodeIntroQuery.data.duration}
-                    </span>
-                  )}
-                </div>
-
-                {episodeIntroQuery.isLoading ? (
-                  <div className="py-2.5 flex items-center gap-2 text-xs text-faint">
-                    <span className="w-3 h-3 rounded-full border-2 border-accent border-t-transparent animate-spin" />
-                    <span>正在检索本集看点与剧情…</span>
-                  </div>
-                ) : episodeIntroQuery.data?.desc ? (
-                  <div>
-                    <p
-                      className={cn(
-                        'text-muted leading-relaxed text-xs transition-all duration-300',
-                        !epDescExpanded && 'line-clamp-3'
-                      )}
-                    >
-                      {episodeIntroQuery.data.desc}
-                    </p>
-                    {episodeIntroQuery.data.desc.length > 80 && (
-                      <button
-                        type="button"
-                        onClick={() => setEpDescExpanded((v) => !v)}
-                        className="inline-flex items-center gap-1 text-[11px] text-accent hover:underline mt-1 font-medium cursor-pointer"
-                      >
-                        <span>{epDescExpanded ? '收起剧情' : '查看本集完整剧情'}</span>
-                        <Icon
-                          name="arrowDown"
-                          className={cn('w-3 h-3 transition-transform duration-200', epDescExpanded && 'rotate-180')}
-                        />
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                  <p className="text-faint text-xs leading-relaxed">
-                    当前播放第 {currentIndex + 1} 集（共 {episodes.length} 集），剧情紧跟主线推进，可展开下方全剧概述查阅核心背景。
-                  </p>
-                )}
-              </div>
-            )}
-
-            {/* 2. 影片档案卡片（海报 + 备用剧照微相册 + 演员表 + 剧情概述折叠） */}
-            <div className="relative p-3.5 sm:p-4 bg-surface-raised rounded-xl border border-line shadow-sm overflow-hidden min-w-0">
-              {/* 背景微弱环境氛围微晕 */}
-              {activePoster && (
-                <div
-                  className="absolute -right-12 -bottom-12 w-64 h-64 rounded-full bg-cover bg-center opacity-[0.04] dark:opacity-[0.08] blur-3xl pointer-events-none select-none"
-                  style={{ backgroundImage: `url(${activePoster})` }}
-                  aria-hidden
-                />
-              )}
-
-              <div className="flex flex-col gap-3">
-                {/* 顶部：海报 + 核心信息 */}
-                <div className="flex gap-3 items-start">
-                  {/* 封面海报 */}
-                  <div className="shrink-0 flex flex-col items-center gap-1.5">
-                    <div className="relative w-24 sm:w-28 aspect-[2/3] rounded-lg overflow-hidden bg-chip shadow-md border border-line/50 shrink-0 group">
-                      {activePoster ? (
-                        <SmartImage
-                          url={activePoster}
-                          mode={store.imageProxyMode}
-                          customProxy={store.customImageProxy}
-                          alt={videoTitle}
-                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-faint">
-                          <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={1.5}
-                              d="M7 4v16m10-16v16M3 6a1 1 0 011-1h1a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V6zm4 0a1 1 0 011-1h1a1 1 0 011 1v12a1 1 0 01-1 1h-1a1 1 0 01-1-1V6zm8 0a1 1 0 011-1h1a1 1 0 011 1v12a1 1 0 01-1 1h-1a1 1 0 01-1-1V6zm4 0a1 1 0 011-1h1a1 1 0 011 1v12a1 1 0 01-1 1h-1a1 1 0 01-1-1V6z"
-                            />
-                          </svg>
-                        </div>
-                      )}
-                      {remarksText && (
-                        <span className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-black/75 text-white/90 backdrop-blur-sm pointer-events-none truncate max-w-[90%]">
-                          {remarksText}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* 多图联动：展示其他源探测到的剧照/海报缩略图 */}
-                    {extraPics.length > 1 && (
-                      <div className="flex items-center gap-1 overflow-x-auto no-scrollbar max-w-[112px] py-0.5">
-                        {extraPics.slice(0, 4).map((pic, idx) => (
-                          <button
-                            key={pic + idx}
-                            type="button"
-                            onClick={() => setSelectedPoster(pic)}
-                            className={cn(
-                              'w-6 h-8 rounded border overflow-hidden shrink-0 transition-all cursor-pointer',
-                              activePoster === pic ? 'ring-2 ring-accent border-accent scale-105' : 'opacity-70 hover:opacity-100 border-line'
-                            )}
-                            title={`查看第 ${idx + 1} 张封面/剧照`}
-                          >
-                            <SmartImage
-                              url={pic}
-                              mode={store.imageProxyMode}
-                              customProxy={store.customImageProxy}
-                              alt=""
-                              className="w-full h-full object-cover"
-                            />
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* 核心标签与导演 */}
-                  <div className="flex-1 min-w-0 space-y-2">
-                    <h3 className="text-sm sm:text-base font-bold text-content leading-snug break-words">
-                      {videoTitle}
-                    </h3>
-
-                    {/* 元数据标签组 */}
-                    <div className="flex flex-wrap items-center gap-1 text-[11px]">
-                      {typeText && <span className="tag bg-accent/15 text-accent">{typeText}</span>}
-                      {yearText && <span className="tag bg-purple-500/15 text-purple-600 dark:text-purple-300">{yearText}</span>}
-                      {areaText && <span className="tag bg-chip text-muted">{areaText}</span>}
-                    </div>
-
-                    {/* 导演 */}
-                    {directorList.length > 0 && (
-                      <div className="text-xs text-muted flex items-center gap-1 flex-wrap">
-                        <span className="text-faint shrink-0">导演：</span>
-                        <div className="flex flex-wrap gap-1">
-                          {directorList.map((d) => (
-                            <button
-                              key={d}
-                              type="button"
-                              onClick={() => router.push(`/?s=${encodeURIComponent(d)}`)}
-                              className="text-content hover:text-accent hover:underline cursor-pointer"
-                              title={`点击搜索 ${d} 执导的作品`}
-                            >
-                              {d}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* 演员表（芯片徽章 Pill 模式，支持点击直接搜索） */}
-                {actorList.length > 0 && (
-                  <div className="text-xs pt-1 border-t border-line/40">
-                    <div className="text-faint mb-1.5 flex items-center justify-between text-[11px]">
-                      <span>演员阵容 ({actorList.length})</span>
-                      <span className="text-[10px] text-faint">点击演员搜片</span>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto scrollbar-thin pr-1">
-                      {actorList.map((act) => (
-                        <button
-                          key={act}
-                          type="button"
-                          onClick={() => router.push(`/?s=${encodeURIComponent(act)}`)}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-chip/60 hover:bg-accent/15 text-content hover:text-accent border border-line/60 hover:border-accent/40 transition-colors touch-manipulation cursor-pointer"
-                          title={`搜索 ${act} 参演的作品`}
-                        >
-                          <span className="w-1.5 h-1.5 rounded-full bg-accent/70 shrink-0" />
-                          <span>{act}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* 剧情简介 / 概述 */}
-                <div className="text-xs pt-2 border-t border-line/40">
-                  <div className="text-faint text-[11px] mb-1 font-medium">剧情概述</div>
-                  {cleanDesc ? (
-                    <div>
-                      <p
-                        className={cn(
-                          'text-muted leading-relaxed transition-all duration-300 text-xs sm:text-sm',
-                          !descExpanded && 'line-clamp-3'
-                        )}
-                      >
-                        {cleanDesc}
-                      </p>
-                      {cleanDesc.length > 80 && (
-                        <button
-                          type="button"
-                          onClick={() => setDescExpanded((v) => !v)}
-                          className="inline-flex items-center gap-1 text-xs text-accent hover:underline mt-1 font-medium cursor-pointer"
-                        >
-                          <span>{descExpanded ? '收起简介' : '展开全文'}</span>
-                          <Icon
-                            name="arrowDown"
-                            className={cn('w-3 h-3 transition-transform duration-200', descExpanded && 'rotate-180')}
-                          />
-                        </button>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="text-faint text-xs">暂无剧情简介</p>
-                  )}
-                </div>
-              </div>
-            </div>
-          </aside>
+          <WatchSidebar
+            episodes={episodes}
+            orderedEpisodes={orderedEpisodes}
+            currentIndex={currentIndex}
+            goEpisode={goEpisode}
+            reversed={reversed}
+            setReversed={setReversed}
+            detailQuery={detailQuery}
+            isTvOrAnime={isTvOrAnime}
+            episodeIntroQuery={episodeIntroQuery}
+            epDescExpanded={epDescExpanded}
+            setEpDescExpanded={setEpDescExpanded}
+            descExpanded={descExpanded}
+            setDescExpanded={setDescExpanded}
+            videoTitle={videoTitle}
+            yearText={yearText}
+            typeText={typeText}
+            areaText={areaText}
+            remarksText={remarksText}
+            actorList={actorList}
+            directorList={directorList}
+            cleanDesc={cleanDesc}
+            extraPics={extraPics}
+            activePoster={activePoster}
+            setSelectedPoster={setSelectedPoster}
+            store={store}
+            router={router}
+          />
         </div>
 
         {/* 猜你喜欢（全宽智能推荐流，iPad & Mobile 自适应多列网格） */}
@@ -1423,140 +1148,3 @@ function WatchContent() {
  * 选择「保持当前线路」会恢复播放，避免问一句就打断一次观看。
  * 点击遮罩或按 Esc 均视为「保持当前」，与直觉一致。
  */
-function SpeedSuggestionDialog({
-  currentSourceName,
-  target,
-  onAccept,
-  onDismiss,
-}: {
-  currentSourceName: string;
-  target: CandidateItem;
-  onAccept: () => void;
-  onDismiss: () => void;
-}) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onDismiss();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onDismiss]);
-
-  return (
-    <div
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 px-4 animate-fade-in"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onDismiss();
-      }}
-      role="dialog"
-      aria-modal="true"
-      aria-label="切换到更快的播放线路"
-    >
-      <div className="w-full max-w-sm rounded-xl border border-line bg-surface-raised p-5 shadow-2xl">
-        <div className="flex items-start gap-3 mb-4">
-          <span className="mt-0.5 w-8 h-8 rounded-lg bg-accent/15 text-accent flex items-center justify-center shrink-0">
-            <Icon name="bolt" className="w-4 h-4" />
-          </span>
-          <div className="min-w-0">
-            <h3 className="text-sm font-semibold text-content leading-snug">发现更快的播放线路</h3>
-            <p className="text-xs text-muted mt-1 leading-relaxed">
-              已为你暂停播放。切换后会保留当前集数与播放进度。
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 text-xs mb-5">
-          <span className="flex-1 min-w-0 px-2.5 py-2 rounded-lg bg-chip/50 text-muted truncate">
-            当前 · {currentSourceName}
-            {target.baselineMs ? ` · ${target.baselineMs}ms` : ''}
-          </span>
-          <svg className="w-4 h-4 text-faint shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-          </svg>
-          <span className="flex-1 min-w-0 px-2.5 py-2 rounded-lg bg-accent/15 text-accent font-medium truncate">
-            推荐 · {target.source.name}
-            {target.ms ? ` · ${target.ms}ms` : ''}
-          </span>
-        </div>
-
-        {target.gainPercent ? (
-          <p className="text-[11px] text-emerald-500 mb-4 text-center">
-            首集预计快 {target.gainPercent}%
-          </p>
-        ) : null}
-
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={onDismiss}
-            className="btn-ghost btn-sm flex-1 !py-2 text-xs"
-          >
-            保持当前线路
-          </button>
-          <button
-            type="button"
-            onClick={onAccept}
-            className="btn-primary btn-sm flex-1 !py-2 text-xs"
-          >
-            立即切换
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/** 集数按钮：激活时自动滚动进可视区（长剧列表），统一高度与高质感圆角 */
-function EpisodeButton({ index, active, onClick }: { index: number; active: boolean; onClick: () => void }) {
-  const ref = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (active) ref.current?.scrollIntoView({ block: 'nearest' });
-  }, [active]);
-
-  return (
-    <button
-      ref={ref}
-      className={cn(
-        'btn btn-sm !px-1 h-9 font-medium text-xs rounded-lg transition-all',
-        active ? 'episode-active font-bold shadow-sm' : 'btn-ghost bg-surface hover:bg-hover'
-      )}
-      onClick={onClick}
-    >
-      {index + 1}
-    </button>
-  );
-}
-
-function BackButton() {
-  const router = useRouter();
-  return (
-    <button
-      className="p-1.5 rounded-lg text-muted hover:text-content hover:bg-hover transition-colors shrink-0"
-      onClick={() => {
-        if (window.history.length > 1) router.back();
-        else router.push('/');
-      }}
-      aria-label="返回"
-      title="返回"
-    >
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-      </svg>
-    </button>
-  );
-}
-
-/** 首页按钮：直达首页，避免从外链进入时逐级 back */
-function HomeButton() {
-  return (
-    <Link
-      href="/"
-      className="p-1.5 rounded-lg text-muted hover:text-content hover:bg-hover transition-colors shrink-0"
-      aria-label="回首页"
-      title="回首页"
-    >
-      <Icon name="home" className="w-5 h-5" />
-    </Link>
-  );
-}

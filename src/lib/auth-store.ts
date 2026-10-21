@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import os from 'node:os';
 import { getEnvSources } from './env-sources';
 import { getEnvLiveSources } from './env-live-sources';
 import { CUSTOMER_SOURCES_LIST } from './customer-sites';
@@ -47,88 +46,11 @@ export type {
 // 兼容别名
 export type GistSyncState = GistBackupState;
 
-let hasWarnedEphemeral = false;
-let isEphemeralDir = false;
+import { atomicWriteJsonSync, getDataDir, getStoreFilePath, isStorageEphemeral } from './json-store';
 
-export function isStorageEphemeral(): boolean {
-  return isEphemeralDir;
-}
+// 存储层实现已迁至 ./json-store，此处再导出以保持既有引用不变
+export { atomicWriteJsonSync, getDataDir, getStoreFilePath, isStorageEphemeral };
 
-/** 原子安全写入 JSON 文件：写入临时文件后 rename，杜绝截断与损坏，并自动生成 .prev.json 世代快照容灾 */
-export function atomicWriteJsonSync(filePath: string, data: unknown): void {
-  const dir = path.dirname(filePath);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-
-  // 1. 世代滚动快照：在写入前，若目标文件存在且非空（> 10 字节），自动克隆为 .prev.json 备份
-  try {
-    if (fs.existsSync(filePath)) {
-      const stat = fs.statSync(filePath);
-      if (stat.size > 10) {
-        fs.copyFileSync(filePath, `${filePath}.prev.json`);
-      }
-    }
-  } catch (err) {
-    console.warn(`[LibreTV] 世代滚动快照备份提示 (${filePath}.prev.json):`, err);
-  }
-
-  // 2. 临时文件原子 rename 写入
-  const tempFile = `${filePath}.tmp.${Date.now()}.${Math.random().toString(36).slice(2, 8)}`;
-  fs.writeFileSync(tempFile, JSON.stringify(data, null, 2), 'utf-8');
-  fs.renameSync(tempFile, filePath);
-}
-
-// 支持 DATA_DIR 环境变量并针对容器环境做权限容灾兜底
-export function getDataDir(): string {
-  const envDir = process.env.DATA_DIR?.trim();
-  if (envDir) {
-    try {
-      if (!fs.existsSync(envDir)) {
-        fs.mkdirSync(envDir, { recursive: true });
-      }
-      fs.accessSync(envDir, fs.constants.W_OK);
-      isEphemeralDir = false;
-      return envDir;
-    } catch (e) {
-      console.warn(`[LibreTV] DATA_DIR '${envDir}' 不可写，尝试工作区目录:`, e);
-    }
-  }
-
-  const defaultDir = path.join(process.cwd(), 'data');
-  try {
-    if (!fs.existsSync(defaultDir)) {
-      fs.mkdirSync(defaultDir, { recursive: true });
-    }
-    fs.accessSync(defaultDir, fs.constants.W_OK);
-    isEphemeralDir = false;
-    return defaultDir;
-  } catch {
-    isEphemeralDir = true;
-    const tmpDir = path.join(os.tmpdir(), 'libretv-data');
-    if (!hasWarnedEphemeral) {
-      hasWarnedEphemeral = true;
-      console.error(
-        `\n================================================================================\n` +
-        `[CRITICAL ALERT] 默认数据目录 '${defaultDir}' 权限不足 (EACCES)！\n` +
-        `已平滑降级至临时易失目录: '${tmpDir}'\n` +
-        `================================================================================\n`
-      );
-    }
-    try {
-      if (!fs.existsSync(tmpDir)) {
-        fs.mkdirSync(tmpDir, { recursive: true });
-      }
-      return tmpDir;
-    } catch {
-      return os.tmpdir();
-    }
-  }
-}
-
-export function getStoreFilePath(): string {
-  return path.join(getDataDir(), 'auth-store.json');
-}
 
 /** 顶级秒播蓝光 CMS 矩阵 (全量注入 76 个优质采集源) + IPv4 高可用直播矩阵 */
 const CURATED_DEFAULT_SOURCES: { key: string; name: string; url: string; type: 'vod' | 'live' }[] = [

@@ -10,6 +10,16 @@ export const runtime = 'nodejs';
 /** 详情结果短缓存：换源测速/多人观看同一影片时避免重复打上游 */
 const DETAIL_CACHE_TTL = 60 * 1000;
 
+/**
+ * 详情结果变化很慢（剧集列表按天更新），因此让浏览器也缓存一份。
+ * 此前只做了服务端内存缓存、没给 HTTP 头，导致每次进播放页都要重新请求，
+ * 而服务端缓存又只是内存级、进程重启即失效。
+ * 用 private：详情请求带用户源配置参数，不应进 CDN 共享缓存。
+ */
+const DETAIL_CACHE_HEADERS = {
+  'Cache-Control': 'private, max-age=60, stale-while-revalidate=300',
+} as const;
+
 function parseSource(raw: string | null): SourceConfig | null {
   if (!raw) return null;
   try {
@@ -47,7 +57,7 @@ export async function GET(req: Request) {
     const cacheKey = `detail:${source.url}|${detailRootForCache}|${id}`;
     const cached = getCache<VideoDetail>(cacheKey);
     if (cached) {
-      return NextResponse.json(cached);
+      return NextResponse.json(cached, { headers: DETAIL_CACHE_HEADERS });
     }
 
     // 用户可控地址发起服务端请求，先过 SSRF 校验（协议白名单 + 内网/保留地址）
@@ -96,7 +106,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: '未找到播放资源' }, { status: 404 });
     }
     setCache(cacheKey, resolved, DETAIL_CACHE_TTL);
-    return NextResponse.json(resolved);
+    return NextResponse.json(resolved, { headers: DETAIL_CACHE_HEADERS });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : '获取详情失败' },

@@ -1,8 +1,14 @@
 name: CI
 
 # 合并门禁：feature 分支推送与 Pull Request 时自动跑类型检查、单测与 Lint。
-# Master 受分支保护强制要求 PR 审核 + 本工作流通过，因此「Master 变绿」等价于
-# 「已通过全部质量门禁」，可安全交给 Render 触发自动部署。
+#
+# 两种触发的分工不同，不要混淆：
+# - feature/fix/hotfix/docs 分支 push 与 PR：这是**真正的门禁**。分支保护要求
+#   「类型检查 / 单元测试 / ESLint」三项检查通过才允许合并，因此不合规的代码
+#   进不了 Master。
+# - Master push：这是**部署记录**。Master 推送即触发 Render 自动部署，CI 是在
+#   部署之后才开始跑的，绿灯只能说明「这次部署的代码本身通过了校验」，
+#   **拦不住本次部署**。保留它是为了让每次上线在 Actions 页面留下可追溯档案。
 #
 # 三道门禁拆为三个并行 job，而非一个 job 内的连续 steps：
 # GitHub Actions 的 step 默认「失败即跳过后续」，一旦某一环在 runner 上因环境
@@ -20,11 +26,15 @@ on:
       - 'fix/**'
       - 'hotfix/**'
       - 'docs/**'
+      - 'Master'
   pull_request:
     branches:
       - Master
 
-# 同一个 PR 的连续推送取消更早的未完成运行，避免旧代码抢跑导致误判
+# 同一个 PR 的连续推送取消更早的未完成运行，避免旧代码抢跑导致误判。
+# 注意 group 用 github.ref：PR 事件是 refs/pull/N/merge，与分支 push 的
+# refs/heads/xxx 不同，因此二者不会被互相取消（这正是我们要的，PR 检查不能被
+# 分支推送取消掉）。
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true

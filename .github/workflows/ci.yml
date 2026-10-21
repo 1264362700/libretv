@@ -4,6 +4,12 @@ name: CI
 # Master 受分支保护强制要求 PR 审核 + 本工作流通过，因此「Master 变绿」等价于
 # 「已通过全部质量门禁」，可安全交给 Render 触发自动部署。
 #
+# 三道门禁拆为三个并行 job，而非一个 job 内的连续 steps：
+# GitHub Actions 的 step 默认「失败即跳过后续」，一旦 typecheck 或单测在某台
+# runner 上因内存波动失败，ESLint 会被连带跳过，日志里就只看到部分门禁在跑，
+# 既看不出真实问题，也不利于定位到底是哪一环出的问题。拆开后三者互不影响，
+# 每次运行都能拿到完整的三项结论。
+#
 # 现有 docker-publish.yml 只在 v* tag 触发，与本工作流互不干扰。
 
 on:
@@ -26,11 +32,12 @@ permissions:
   contents: read
 
 jobs:
-  verify:
-    name: 类型检查 · 单测 · Lint
+  # 公共准备步骤：检出代码 + 安装依赖。三道门禁并行时各自需要一份干净副本，
+  # 用 reusable workflow 会引入额外层级，这里直接在三处复用锚点保持显式。
+  typecheck:
+    name: 类型检查
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -39,19 +46,44 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: 安装依赖
-        run: npm ci
+      - run: npm ci
 
-      # 单进程 fork：vitest 默认多线程会拉高内存占用，CI 容器上易被 OOM Killer 杀掉
-      - name: 类型检查
+      - name: tsc --noEmit
         run: npm run typecheck
 
-      - name: 单元测试
-        run: npm test -- --pool=forks --poolOptions.forks.singleFork=true
+  test:
+    name: 单元测试
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
 
-      - name: ESLint
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # vitest 默认多线程会显著拉高内存占用，GitHub runner（7GB）在跑 34 个测试
+      # 文件时易被 OOM Killer 杀掉，表现为无输出的异常中断。
+      # 单 fork 单进程运行是本机已验证的稳定参数。
+      - name: vitest run
+        run: npm test -- --pool=forks --poolOptions.forks.singleFork=true --poolOptions.forks.maxForks=1
+
+  lint:
+    name: ESLint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: eslint src
         run: npm run lint
-
-      # 与本机保持同一套校验顺序，任一环节失败即阻断合并
-      - name: 汇总
-        run: echo "类型检查、单测与 Lint 全部通过" && git log --oneline -1

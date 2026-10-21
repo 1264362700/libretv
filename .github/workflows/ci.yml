@@ -1,0 +1,57 @@
+name: CI
+
+# 合并门禁：feature 分支推送与 Pull Request 时自动跑类型检查、单测与 Lint。
+# Master 受分支保护强制要求 PR 审核 + 本工作流通过，因此「Master 变绿」等价于
+# 「已通过全部质量门禁」，可安全交给 Render 触发自动部署。
+#
+# 现有 docker-publish.yml 只在 v* tag 触发，与本工作流互不干扰。
+
+on:
+  push:
+    branches:
+      - 'feature/**'
+      - 'fix/**'
+      - 'hotfix/**'
+      - 'docs/**'
+  pull_request:
+    branches:
+      - Master
+
+# 同一个 PR 的连续推送取消更早的未完成运行，避免旧代码抢跑导致误判
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: 类型检查 · 单测 · Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      # 单进程 fork：vitest 默认多线程会拉高内存占用，CI 容器上易被 OOM Killer 杀掉
+      - name: 类型检查
+        run: npm run typecheck
+
+      - name: 单元测试
+        run: npm test -- --pool=forks --poolOptions.forks.singleFork=true
+
+      - name: ESLint
+        run: npm run lint
+
+      # 与本机保持同一套校验顺序，任一环节失败即阻断合并
+      - name: 汇总
+        run: echo "类型检查、单测与 Lint 全部通过" && git log --oneline -1

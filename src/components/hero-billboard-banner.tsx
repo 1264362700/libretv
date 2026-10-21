@@ -57,16 +57,29 @@ export function HeroBillboardBanner({
 }: HeroBillboardBannerProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
+  const [reduceMotion, setReduceMotion] = useState(false);
+  const [userPaused, setUserPaused] = useState(false);
 
   const banners = items.slice(0, 6);
 
+  // 尊重系统「减少动态效果」设置：开启后默认不自动轮播
   useEffect(() => {
-    if (banners.length <= 1 || isPaused) return;
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const sync = () => setReduceMotion(mq.matches);
+    sync();
+    mq.addEventListener('change', sync);
+    return () => mq.removeEventListener('change', sync);
+  }, []);
+
+  useEffect(() => {
+    // 悬停 / 键盘聚焦 / 用户手动暂停 / 减少动态效果，任一成立即停止自动轮播
+    if (banners.length <= 1 || isPaused || userPaused || reduceMotion) return;
     const timer = setInterval(() => {
       setCurrentIndex((prev) => (prev + 1) % banners.length);
     }, 6000);
     return () => clearInterval(timer);
-  }, [banners.length, isPaused]);
+  }, [banners.length, isPaused, userPaused, reduceMotion]);
 
   if (banners.length === 0) return null;
   const current = banners[currentIndex] || banners[0];
@@ -87,11 +100,15 @@ export function HeroBillboardBanner({
         'relative w-full overflow-hidden rounded-2xl sm:rounded-3xl mb-8 group select-none transition-all duration-300',
         'border border-slate-200/90 dark:border-slate-800/80',
         'bg-slate-100 dark:bg-[#0B0F19]',
-        'shadow-lg dark:shadow-2xl'
+        'shadow-lg dark:shadow-2xl',
+        // 移动端收敛到 300px，避免首屏被 Banner 占满；sm 以上恢复 380px
+        'min-h-[300px] sm:min-h-[380px]'
       )}
-      style={{ minHeight: '380px', height: 'clamp(380px, 58vh, 560px)' }}
+      style={{ height: 'clamp(300px, 58vh, 560px)' }}
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
+      onFocus={() => setIsPaused(true)}
+      onBlur={() => setIsPaused(false)}
     >
       {/* 背景巨幕大图（多图平滑切换） */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -138,8 +155,9 @@ export function HeroBillboardBanner({
               </span>
             )}
 
+            {/* 只在有真实数据可依据时才展示；没有评分就回落到分类名，不使用无法验证的宣传语 */}
             <span className="px-2.5 py-1 rounded-lg bg-blue-500/10 dark:bg-blue-600/30 border border-blue-500/20 dark:border-blue-500/40 text-blue-600 dark:text-blue-400 text-xs font-semibold backdrop-blur-md">
-              4K 极速秒播
+              {current.rating ? `★ ${current.rating}` : current.typeName || '多源聚合'}
             </span>
           </div>
 
@@ -213,6 +231,24 @@ export function HeroBillboardBanner({
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
             </svg>
+          </button>
+          {/* 自动轮播开关：可访问性要求提供显式暂停入口，而非仅靠悬停 */}
+          <button
+            type="button"
+            onClick={() => setUserPaused((prev) => !prev)}
+            aria-label={userPaused ? '继续自动轮播' : '暂停自动轮播'}
+            aria-pressed={userPaused}
+            className="absolute right-3 bottom-3 z-20 w-9 h-9 rounded-full flex items-center justify-center bg-white/70 hover:bg-white dark:bg-black/40 dark:hover:bg-black/70 backdrop-blur-md border border-slate-200/60 dark:border-white/10 text-slate-800 dark:text-white opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-all cursor-pointer shadow-sm active:scale-90"
+          >
+            {userPaused ? (
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+            ) : (
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M6 5h4v14H6zM14 5h4v14h-4z" />
+              </svg>
+            )}
           </button>
         </>
       )}

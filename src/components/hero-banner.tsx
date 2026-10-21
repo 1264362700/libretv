@@ -33,10 +33,10 @@ export function HeroBanner({ items, onPick }: HeroBannerProps) {
 
   return (
     <div
-      className="relative w-full overflow-hidden rounded-2xl mb-8 group select-none shadow-2xl border border-line/40 bg-surface-raised"
+      className="relative w-full overflow-hidden rounded-2xl mb-8 group select-none shadow-2xl border border-line/40 bg-surface-raised min-h-[300px] sm:min-h-[380px]"
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
-      style={{ minHeight: '380px', height: 'clamp(380px, 46vw, 540px)' }}
+      style={{ height: 'clamp(300px, 46vw, 540px)' }}
     >
       {/* 背景海报（超宽微模糊发光，营造 9zhoukj 沉浸式影院氛围） */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">

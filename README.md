@@ -6,7 +6,7 @@
 
 ## 快速开始
 
-需要 Node.js 22（与 Docker 和 CI 保持一致）或 Docker Compose。
+需要 Node.js 22（与 Docker 和 CI 保持一致）或 Docker Compose。仓库根目录提供 `.nvmrc`，可直接 `nvm use` 切换。
 
 ```bash
 cp .env.example .env
@@ -16,6 +16,14 @@ PASSWORD=your-password npm run dev
 ```
 
 开发服务器默认运行在 `http://localhost:8080`。生产环境请使用 HTTPS，并将 `PASSWORD`、`PROXY_SECRET` 等敏感配置保存在部署平台的密钥管理中，而非提交到仓库。
+
+依赖安装请统一使用 `npm ci`，不要用 `npm install` 更新锁文件；变更依赖时显式提交 `package-lock.json`。提交前建议执行一次统一检查：
+
+```bash
+npm run check   # typecheck + lint + test + build
+```
+
+完整工程与协作规范见 [DEVELOPMENT.md](DEVELOPMENT.md)。
 
 ## 核心特性
 

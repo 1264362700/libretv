@@ -20,10 +20,6 @@ function BannerImage({ cover, title }: { cover?: string; title: string }) {
 
   const candidates: string[] = (() => {
     if (!cover) return [];
-    if (cover.includes('doubanio.com')) {
-      const weserv = `https://images.weserv.nl/?url=${encodeURIComponent(cover)}`;
-      return [cover, weserv];
-    }
     return [cover];
   })();
 

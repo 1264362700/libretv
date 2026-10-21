@@ -33,10 +33,6 @@ export function MediaCard({
   const candidates = useMemo(() => {
     const raw = item.cover || '';
     if (!raw) return [];
-    if (raw.includes('doubanio.com')) {
-      const weserv = `https://images.weserv.nl/?url=${encodeURIComponent(raw)}`;
-      return [raw, weserv];
-    }
     return [raw];
   }, [item.cover]);
 

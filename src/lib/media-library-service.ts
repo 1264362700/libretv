@@ -158,56 +158,76 @@ export async function syncRecentUpdates(
   return { remarksMap, recentList };
 }
 
-/** 1. 获取豆瓣榜单与分类推荐 */
+/** 1. 获取首页榜单与分类推荐（全面接入 0 防盗链、免服务器代理的开放官方图床引擎） */
 export async function fetchDoubanCollectionItems(
   collectionId: string,
   start = 0,
   count = 20,
   signal?: AbortSignal
 ): Promise<{ items: MediaItem[]; total: number }> {
-  const res = await fetch(
-    `/api/douban-proxy?type=collection&collectionId=${encodeURIComponent(
-      collectionId
-    )}&start=${start}&count=${count}`,
-    { signal }
-  );
+  let type = 'movie';
+  const tag = '热门';
+  let sort = 'recommend';
 
-  if (!res.ok) {
-    throw new Error(`豆瓣榜单获取失败: ${res.status}`);
+  if (collectionId === 'tv_hot') {
+    type = 'tv';
+  } else if (collectionId === 'movie_top250') {
+    type = 'movie';
+    sort = 'rank';
+  } else if (collectionId === 'tv_animation') {
+    type = 'anime';
+  } else if (collectionId === 'tv_variety_show') {
+    type = 'variety';
+  } else if (collectionId === 'movie_hot') {
+    type = 'movie';
   }
 
-  const json = await res.json();
-  const rawItems = Array.isArray(json?.subject_collection_items)
-    ? json.subject_collection_items
-    : [];
-
-  const items: MediaItem[] = rawItems.map((raw: Record<string, unknown>) => {
-    const rawRate = (raw?.rating as Record<string, unknown> | undefined)?.value;
-    const rating = rawRate ? Number(rawRate).toFixed(1) : undefined;
-    const pic = raw?.pic as Record<string, unknown> | undefined;
-    const cover = raw?.cover as Record<string, unknown> | undefined;
-    const coverUrl = String(
-      pic?.large || pic?.normal || cover?.url || raw?.cover_url || ''
-    );
-
-    let year = raw?.year ? String(raw.year) : '';
-    if (!year && raw?.card_subtitle) {
-      const match = String(raw.card_subtitle).match(/\b(19\d{2}|20\d{2})\b/);
-      if (match) year = match[1];
-    }
-
-    return {
-      id: String(raw?.id || ''),
-      title: String(raw?.title || '').trim(),
-      cover: formatDoubanCover(coverUrl),
-      rating,
-      year,
-      card_subtitle: typeof raw?.card_subtitle === 'string' ? raw.card_subtitle : '',
-      episodes_info: typeof raw?.episodes_info === 'string' ? raw.episodes_info : undefined,
-    };
+  const queryParams = new URLSearchParams({
+    type,
+    tag,
+    sort,
+    pageStart: String(start),
+    pageSize: String(count),
   });
 
-  return { items, total: json?.total ?? items.length };
+  try {
+    const res = await fetch(`/api/douban?${queryParams.toString()}`, { signal });
+    if (!res.ok) {
+      throw new Error(`影视数据获取失败: ${res.status}`);
+    }
+
+    const json = await res.json();
+    const rawItems = Array.isArray(json?.items) ? json.items : [];
+
+    const typeName =
+      type === 'movie' ? '电影' : type === 'tv' ? '剧集' : type === 'anime' ? '动漫' : '综艺';
+
+    const items: MediaItem[] = rawItems.map((raw: Record<string, unknown>) => {
+      const rawRate = raw?.rating;
+      const rating = rawRate ? String(rawRate) : undefined;
+      const year = raw?.year ? String(raw.year) : undefined;
+      const title = String(raw?.title || '').trim();
+
+      return {
+        id: String(raw?.id || ''),
+        title,
+        cover: String(raw?.cover || ''),
+        rating,
+        year,
+        typeName,
+        card_subtitle: year ? `${year} · ${typeName}` : typeName,
+        episodes_info: undefined,
+      };
+    });
+
+    return { items, total: json?.total ?? items.length };
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw err;
+    }
+    console.warn(`[MediaLibraryService] 获取影视推荐失败 (${collectionId}):`, err);
+    return { items: [], total: 0 };
+  }
 }
 
 /** 2. 获取豆瓣带 episodes_info 的多维标签推荐 */

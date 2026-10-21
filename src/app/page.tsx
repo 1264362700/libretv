@@ -146,8 +146,8 @@ function HomeContent() {
 
   // 播放前强制校验登录并直通播放页
   const handlePlayMedia = (item: MediaItem) => {
-    const isCustomRecent = item.id.startsWith('recent_');
-    const doubanId = isCustomRecent ? undefined : item.id;
+    const isDoubanId = /^\d+$/.test(item.id);
+    const doubanId = isDoubanId ? item.id : undefined;
     const watchUrl = buildWatchUrl({
       title: item.title,
       doubanId,

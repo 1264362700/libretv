@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   normalizeTitleForMatch,
   resolveEpisodeBadge,
+  fetchDoubanCollectionItems,
 } from './media-library-service';
 
 describe('media-library-service: normalizeTitleForMatch', () => {
@@ -71,5 +72,43 @@ describe('media-library-service: resolveEpisodeBadge 集数角标优先级', () 
 
     const badge = resolveEpisodeBadge(doubanItem, cmsMap);
     expect(badge).toBe('热播');
+  });
+});
+
+describe('media-library-service: fetchDoubanCollectionItems', () => {
+  it('全面请求 /api/douban 开放图床并映射为直连 MediaItem 结构', async () => {
+    let capturedUrl = '';
+    const mockItems = [
+      {
+        id: '360_test_101',
+        title: '抓特务',
+        cover: 'https://p0.qhimg.com/d/dy_180dbcd5a8635102d926f6387993700e.jpg',
+        rating: '7.8',
+        year: '2026',
+      },
+    ];
+
+    vi.stubGlobal('fetch', (url: string | URL | Request) => {
+      capturedUrl = String(url);
+      return Promise.resolve(
+        new Response(JSON.stringify({ items: mockItems, total: 1 }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      );
+    });
+
+    const res = await fetchDoubanCollectionItems('movie_top250', 0, 14);
+
+    expect(capturedUrl).toContain('/api/douban');
+    expect(capturedUrl).toContain('type=movie');
+    expect(capturedUrl).toContain('sort=rank');
+    expect(capturedUrl).toContain('pageSize=14');
+    expect(res.items).toHaveLength(1);
+    expect(res.items[0].cover).toBe('https://p0.qhimg.com/d/dy_180dbcd5a8635102d926f6387993700e.jpg');
+    expect(res.items[0].title).toBe('抓特务');
+    expect(res.items[0].typeName).toBe('电影');
+
+    vi.unstubAllGlobals();
   });
 });

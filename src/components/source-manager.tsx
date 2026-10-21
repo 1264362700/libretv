@@ -749,7 +749,7 @@ function HomePanel() {
           }}
           options={[
             { value: 'douban', label: '豆瓣精选大厅', hint: '多维分类与深度筛选' },
-            { value: 'short-drama', label: '热门微短剧专区', hint: '微短剧爽文合集 · 全集秒播' },
+            { value: 'short-drama', label: '竖屏短内容专区', hint: '微短剧 / AI 漫剧 / 电影解说 · 共 9万+ 条' },
             { value: 'iqiyi-hot', label: '爱奇艺官方热播榜', hint: '电视剧/电影/综艺/动漫全端热播' },
             { value: '360-hot', label: '360 影视热播榜', hint: '全网热播电视剧/电影/综艺/动漫' },
             { value: 'baidu-top', label: '百度实时热榜', hint: '极速直连 · 亿级搜索风云榜' },

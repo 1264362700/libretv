@@ -19,7 +19,10 @@ function apiBase(): string {
   return (process.env['60S_API_BASE'] || 'https://60s.viki.moe').replace(/\/+$/, '');
 }
 
-/** 榜单标识：豆瓣周榜 + 百度实时榜 + 豆瓣 Top250 + 360 实时热播榜 + 猫眼大盘 + 爱奇艺热播榜 + 热门微短剧专区 */
+/**
+ * 榜单标识：豆瓣周榜 + 百度实时榜 + 豆瓣 Top250 + 360 实时热播榜 + 猫眼大盘 +
+ * 爱奇艺热播榜 + 竖屏短内容专区（微短剧 / AI 漫剧 / 电影解说）
+ */
 export const HOT_LIST_IDS = [
   'douban_movie_weekly',
   'douban_tv_chinese',
@@ -40,6 +43,8 @@ export const HOT_LIST_IDS = [
   'iqiyi_variety',
   'iqiyi_anime',
   'short_drama',
+  'ai_comic',
+  'movie_commentary',
 ] as const;
 
 export type HotListId = (typeof HOT_LIST_IDS)[number];
@@ -262,38 +267,85 @@ export async function fetchIqiyiRank(
   return { items: fallbackItems, total: fallbackItems.length };
 }
 
+/** 竖屏短内容的一个聚合分类：若干 CMS 端点 + 缓存键前缀 + 默认角标 */
+interface VerticalShortCategory {
+  /** 缓存键前缀，区分不同分类 */
+  slug: string;
+  /** 无状态信息时展示的角标文案 */
+  badge: string;
+  /** 并发抓取的分类端点 */
+  endpoints: string[];
+}
+
 /**
- * 热门微短剧/爽文短剧专属独立栏目（直连多端点 CMS 短剧分类，真流 m3u8 秒播）
- * 非凡 (t=36) + 暴风 (t=58) + 量子 (t=45) 多源并发聚合与片名去重，带集数与完结状态
+ * 竖屏短内容分类端点表（分类 ID 于 2026-10 实测校准）。
+ *
+ * 重要修正：量子（lziapi）的短剧分类是 t=46，此前代码写的 t=45 是**空分类**，
+ * 导致该源长期拉不到任何短剧（约 24,252 条 / 1,213 页的内容白白浪费）。
  */
-export async function fetchShortDramaList(pageStart = 0): Promise<DoubanItem[]> {
+const VERTICAL_SHORT_CATEGORIES: Record<string, (page: number) => VerticalShortCategory> = {
+  // 常规微短剧：非凡 t=36 + 暴风 t=58（短剧大全）+ 量子 t=46（短剧）
+  short_drama: (page) => ({
+    slug: 'short_drama',
+    badge: '微短剧',
+    endpoints: [
+      `https://cj.ffzyapi.com/api.php/provide/vod/?ac=detail&t=36&pg=${page}`,
+      `https://bfzyapi.com/api.php/provide/vod/?ac=detail&t=58&pg=${page}`,
+      `https://cj.lziapi.com/api.php/provide/vod/?ac=detail&t=46&pg=${page}`,
+    ],
+  }),
+
+  // AI 漫剧（竖屏 AI 生成短剧，实测约 29,500 条）：暴风 t=74 + 量子 t=52
+  ai_comic: (page) => ({
+    slug: 'ai_comic',
+    badge: 'AI 漫剧',
+    endpoints: [
+      `https://bfzyapi.com/api.php/provide/vod/?ac=detail&t=74&pg=${page}`,
+      `https://cj.lziapi.com/api.php/provide/vod/?ac=detail&t=52&pg=${page}`,
+    ],
+  }),
+
+  // 电影解说（竖屏解说类，实测约 37,100 条）：暴风 t=51 + 量子 t=35
+  movie_commentary: (page) => ({
+    slug: 'movie_commentary',
+    badge: '电影解说',
+    endpoints: [
+      `https://bfzyapi.com/api.php/provide/vod/?ac=detail&t=51&pg=${page}`,
+      `https://cj.lziapi.com/api.php/provide/vod/?ac=detail&t=35&pg=${page}`,
+    ],
+  }),
+};
+
+interface CmsVodItem {
+  vod_id?: number | string;
+  vod_name?: string;
+  vod_pic?: string;
+  vod_remarks?: string;
+  vod_score?: string | number;
+}
+
+/**
+ * 竖屏短内容通用聚合器：多端点并发拉取 → 按归一化片名去重合并。
+ * 单端点失败仅缺该源，allSettled 保证其余端点结果仍能返回。
+ */
+export async function fetchVerticalShortList(slug: string, pageStart = 0): Promise<DoubanItem[]> {
   const page = Math.floor(pageStart / 20) + 1;
-  const cacheKey = `short_drama_list_v2:${page}`;
+  const makeCategory = VERTICAL_SHORT_CATEGORIES[slug];
+  if (!makeCategory) return [];
+  const category = makeCategory(page);
+
+  const cacheKey = `${category.slug}_list_v3:${page}`;
   const cached = getCache<DoubanItem[]>(cacheKey);
   if (cached && cached.length > 0) return cached;
 
-  const endpoints = [
-    `https://cj.ffzyapi.com/api.php/provide/vod/?ac=detail&t=36&pg=${page}`,
-    `https://bfzyapi.com/api.php/provide/vod/?ac=detail&t=58&pg=${page}`,
-    `https://cj.lziapi.com/api.php/provide/vod/?ac=detail&t=45&pg=${page}`,
-  ];
-
   const results = await Promise.allSettled(
-    endpoints.map(async (url) => {
+    category.endpoints.map(async (url) => {
       const res = await fetchUpstream(url, {
         timeoutMs: 6000,
         headers: { Accept: 'application/json', 'User-Agent': UA },
       });
       if (!res.ok) return [];
-      const json = (await res.json()) as {
-        list?: Array<{
-          vod_id?: number | string;
-          vod_name?: string;
-          vod_pic?: string;
-          vod_remarks?: string;
-          vod_score?: string | number;
-        }>;
-      };
+      const json = (await res.json()) as { list?: CmsVodItem[] };
       return Array.isArray(json.list) ? json.list : [];
     })
   );
@@ -312,18 +364,15 @@ export async function fetchShortDramaList(pageStart = 0): Promise<DoubanItem[]> 
       }
 
       const remarks = (v.vod_remarks || '').trim();
-      let rating: string | undefined = undefined;
-      if (remarks) {
-        rating = remarks.length <= 8 ? remarks : remarks.slice(0, 8);
-      }
+      const rating = remarks ? (remarks.length <= 8 ? remarks : remarks.slice(0, 8)) : undefined;
 
       const normTitle = title.replace(/[\s:：·\-—]/g, '').toLowerCase();
       if (!mergedMap.has(normTitle)) {
         mergedMap.set(normTitle, {
-          id: `short_drama_${v.vod_id || Math.random().toString(36).slice(2)}`,
+          id: `${category.slug}_${v.vod_id || Math.random().toString(36).slice(2)}`,
           title,
           cover,
-          rating: rating || '微短剧',
+          rating: rating || category.badge,
           isTv: true,
         });
       }
@@ -333,10 +382,31 @@ export async function fetchShortDramaList(pageStart = 0): Promise<DoubanItem[]> 
   const items = Array.from(mergedMap.values());
   if (items.length > 0) {
     setCache(cacheKey, items, CACHE_TTL);
-    return items;
   }
+  return items;
+}
 
-  return [];
+/** 已开放的竖屏短内容分类标识 */
+export const VERTICAL_SHORT_SLUGS = ['short_drama', 'ai_comic', 'movie_commentary'] as const;
+export type VerticalShortSlug = (typeof VERTICAL_SHORT_SLUGS)[number];
+
+export function isVerticalShortSlug(slug: string): slug is VerticalShortSlug {
+  return (VERTICAL_SHORT_SLUGS as readonly string[]).includes(slug);
+}
+
+/** 热门微短剧/爽文短剧（多源并发聚合与片名去重，带集数与完结状态） */
+export function fetchShortDramaList(pageStart = 0): Promise<DoubanItem[]> {
+  return fetchVerticalShortList('short_drama', pageStart);
+}
+
+/** AI 漫剧（竖屏 AI 生成短剧，实测约 29,500 条 / 1,475 页） */
+export function fetchAiComicList(pageStart = 0): Promise<DoubanItem[]> {
+  return fetchVerticalShortList('ai_comic', pageStart);
+}
+
+/** 电影解说（竖屏解说类，实测约 37,100 条 / 1,858 页） */
+export function fetchMovieCommentaryList(pageStart = 0): Promise<DoubanItem[]> {
+  return fetchVerticalShortList('movie_commentary', pageStart);
 }
 
 /**

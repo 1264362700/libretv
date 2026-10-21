@@ -1,5 +1,11 @@
 import { NextResponse } from 'next/server';
-import { fetchHotList, fetchIqiyiRank, fetchDoubanTop250, fetchShortDramaList, isHotListId } from '@/lib/douban-weekly';
+import {
+  fetchHotList,
+  fetchIqiyiRank,
+  fetchDoubanTop250,
+  fetchVerticalShortList,
+  isHotListId,
+} from '@/lib/douban-weekly';
 
 export const runtime = 'nodejs';
 
@@ -44,12 +50,18 @@ export async function GET(req: Request) {
       );
     }
 
-    // 3. 微短剧专属片库（支持真分页）
-    if (id === 'short_drama') {
+    // 3. 竖屏短内容专属片库：微短剧 / AI 漫剧 / 电影解说（统一 20 条/页真分页）
+    if (id === 'short_drama' || id === 'ai_comic' || id === 'movie_commentary') {
       const safeStart = (page - 1) * 20;
-      const items = await fetchShortDramaList(safeStart);
+      const items = await fetchVerticalShortList(id, safeStart);
+      // 各分类实测总页数不同，这里给出量级用于前端展示，翻页本身由 pageStart 驱动
+      const totalMap: Record<string, number> = {
+        short_drama: 2000,
+        ai_comic: 1500,
+        movie_commentary: 1900,
+      };
       return NextResponse.json(
-        { items, total: 500, page, pageSize: 20 },
+        { items, total: totalMap[id] ?? 500, page, pageSize: 20 },
         {
           headers: {
             'Cache-Control': 'public, max-age=1800, stale-while-revalidate=3600',

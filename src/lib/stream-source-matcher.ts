@@ -15,6 +15,8 @@ export interface TargetMediaInfo {
   title: string;
   doubanId?: string;
   year?: string;
+  /** 最低期望集数（如用户当前正在观看第 N 集时传入 N，优先命中集数达标的源） */
+  minEpisodes?: number;
 }
 
 export interface MatchedEpisode {
@@ -254,18 +256,23 @@ export function matchAndScoreVodItem(
   // 片名完全一致
   if (normTarget === normCandidate) {
     score = 80;
-  } else if (normCandidate.includes(normTarget) || normTarget.includes(normCandidate)) {
-    // 包含关系（允许轻微字尾差异）
-    const lengthDiff = Math.abs(normTarget.length - normCandidate.length);
+  } else if (normCandidate.includes(normTarget)) {
+    // 正向包含（候选标题包含目标词，如搜「庆余年」命中「庆余年 国语4K」）
+    const lengthDiff = normCandidate.length - normTarget.length;
     if (lengthDiff <= 2) {
-      score = 75;
+      score = 76;
     } else if (lengthDiff <= 5) {
-      score = 65;
+      score = 68;
     } else {
-      score = 50;
+      score = 52;
     }
+  } else if (normCandidate.length >= 2 && normTarget.includes(normCandidate)) {
+    // 反向包含（目标词包含较短候选词，如搜续集「唐朝诡事录之西行」遇到前作「唐朝诡事录」）：
+    // 严格降权至 52 分以下（低于 60 分正片门槛），杜绝搜续集/番外却误播第一部
+    const lengthDiff = normTarget.length - normCandidate.length;
+    score = lengthDiff <= 2 ? 52 : 42;
   } else {
-    // 完全不匹配
+    // 完全不匹配或单字反向包含
     return 0;
   }
 
@@ -553,12 +560,18 @@ export class StreamSourceMatcher {
 
       if (!bestItem || episodes.length === 0) return;
 
+      const minEpisodes = Math.max(1, this.target.minEpisodes || 1);
+      const hasEnoughEpisodes = episodes.length >= minEpisodes;
+      // 集数可行性硬判定：若用户正在看第 N 集，而该源总集数不足 N 集（如预告源或断更源），
+      // 予以显著降权且不抢占首源秒播（isFirst）
+      const finalScore = hasEnoughEpisodes ? highestScore : Math.max(40, highestScore - 25);
+
       const elapsedMs = Date.now() - startMs;
       const matchedRemarks = String(bestItem.vod_remarks || bestItem.remarks || '').trim();
 
       const matched: MatchedSource = {
         source,
-        score: highestScore,
+        score: finalScore,
         vodId,
         vodName: String(bestItem.vod_name || targetParsed.title),
         vodYear: String(bestItem.vod_year || ''),
@@ -571,8 +584,8 @@ export class StreamSourceMatcher {
 
       this.matchedResults.push(matched);
 
-      // 流式回调：首个合格源立即触发 isFirst = true，通知播放页起播
-      const isFirst = !this.hasReportedFirst;
+      // 流式回调：首个集数达标的合格源立即触发 isFirst = true，通知播放页起播
+      const isFirst = hasEnoughEpisodes && !this.hasReportedFirst;
       if (isFirst) {
         this.hasReportedFirst = true;
       }

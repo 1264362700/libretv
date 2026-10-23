@@ -1,495 +1,423 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '@/lib/client-api';
-import { useAppStore } from '@/lib/store';
 import { cn } from '@/lib/utils';
-import type { DoubanItem } from '@/lib/types';
-import { isShortDramaTitle } from '@/lib/short-drama';
+import type { TmdbMediaItem } from '@/lib/tmdb';
 import { DoubanCard } from './video-card';
 
-const WEEKDAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+type TmdbChannel = 'trending' | 'movie' | 'tv' | 'anime' | 'variety' | 'documentary';
 
-type PrimaryCategory = 'movie' | 'tv' | 'short_drama' | 'anime' | 'variety' | 'documentary';
-
-const PRIMARY_TABS: { id: PrimaryCategory; label: string; icon: string }[] = [
+const TMDB_CHANNELS: { id: TmdbChannel; label: string; icon: string }[] = [
+  { id: 'trending', label: '今日热映', icon: '🔥' },
   { id: 'movie', label: '电影', icon: '🎬' },
-  { id: 'tv', label: '电视剧', icon: '📺' },
-  { id: 'short_drama', label: '短剧', icon: '📱' },
+  { id: 'tv', label: '剧集', icon: '📺' },
   { id: 'anime', label: '动漫', icon: '✨' },
   { id: 'variety', label: '综艺', icon: '🎤' },
   { id: 'documentary', label: '纪录片', icon: '🌍' },
 ];
 
-// 短剧筛选维度
-const SHORT_DRAMA_THEMES = ['全部', '战神', '甜宠', '逆袭', '总裁', '重生', '神医', '古装', '修仙', 'AI精选'];
-const SHORT_DRAMA_SORTS = [
-  { id: 'recommend', label: '热门爽剧' },
-  { id: 'latest', label: '最新上线' },
-  { id: 'hot', label: '全网热播' },
+const GENRE_OPTIONS = [
+  '全部',
+  '动作',
+  '科幻',
+  '悬疑',
+  '喜剧',
+  '爱情',
+  '动画',
+  '犯罪',
+  '奇幻',
+  '古装',
+  '战争',
+  '恐怖',
+  '家庭',
+  '历史',
 ];
 
-// 电影筛选维度（地区与排序，严格对齐豆瓣标准标签体系）
-const MOVIE_REGIONS = ['全部', '华语', '欧美', '韩国', '日本', '香港', '台湾', '英国', '法国'];
-const MOVIE_SORTS = [
-  { id: 'recommend', label: '热门推荐' },
+const REGION_OPTIONS = ['全部', '大陆', '美国', '韩国', '日本', '香港', '台湾', '英国', '法国', '泰国'];
+
+const YEAR_OPTIONS = ['全部', '2026', '2025', '2024', '2023', '2022', '2021', '2020', '2019', '更早'];
+
+const SORT_OPTIONS: { id: 'recommend' | 'rank' | 'time'; label: string }[] = [
+  { id: 'recommend', label: '综合热度' },
+  { id: 'rank', label: 'TMDB高分' },
   { id: 'time', label: '最新上映' },
-  { id: 'rank', label: '豆瓣高分' },
-  { id: 'classic', label: '经典回顾' },
-  { id: 'underrated', label: '冷门佳片' },
 ];
 
-// 剧集筛选维度（版本与排序）
-const TV_REGIONS = ['全部', '国产剧', '美剧', '韩剧', '日剧', '英剧', '港剧', '台剧'];
-const TV_SORTS = [
-  { id: 'recommend', label: '热门热播' },
-  { id: 'time', label: '最新开播' },
-  { id: 'rank', label: '高分好评' },
-];
+interface TmdbApiResponse {
+  items: TmdbMediaItem[];
+  total: number;
+  totalPages: number;
+  page: number;
+}
 
-// 动漫筛选维度（版本与排序）
-const ANIME_TYPES = ['全部', '日本动画', '国产动画', '欧美动画', '剧场版'];
-const ANIME_SORTS = [
-  { id: 'recommend', label: '热门推荐' },
-  { id: 'time', label: '最新上线' },
-  { id: 'rank', label: '高分神作' },
-];
+async function fetchTmdbClient(
+  params: {
+    type: string;
+    area?: string;
+    genre?: string;
+    year?: string;
+    sort?: string;
+    page?: number;
+  },
+  signal?: AbortSignal
+): Promise<TmdbApiResponse> {
+  const sp = new URLSearchParams({
+    type: params.type,
+    page: String(params.page || 1),
+    sort: params.sort || 'recommend',
+  });
+  if (params.area && params.area !== '全部') sp.set('area', params.area);
+  if (params.genre && params.genre !== '全部') sp.set('genre', params.genre);
+  if (params.year && params.year !== '全部') sp.set('year', params.year);
 
-// 综艺筛选维度
-const VARIETY_TAGS = ['全部', '国产综艺', '韩国综艺', '欧美综艺', '脱口秀', '音乐', '真人秀'];
-const VARIETY_SORTS = [
-  { id: 'recommend', label: '热门推荐' },
-  { id: 'time', label: '最新上线' },
-  { id: 'rank', label: '高分口碑' },
-];
+  const res = await fetch(`/api/tmdb?${sp.toString()}`, { signal });
+  if (!res.ok) {
+    throw new Error(`TMDB 请求失败 (${res.status})`);
+  }
+  return res.json();
+}
 
-// 纪录片筛选维度
-const DOC_TAGS = ['全部', '自然', '历史', '科学', '人文', '美食', '军事', '探险'];
-const DOC_SORTS = [
-  { id: 'recommend', label: '热门推荐' },
-  { id: 'rank', label: '高分必看' },
-  { id: 'time', label: '最新发布' },
-];
-
-/** 可用首页推荐数据源配置（图文定义，去除臃肿内部 tag） */
-const RECOMMEND_SOURCES: {
-  id: 'douban' | 'short-drama' | 'iqiyi-hot' | '360-hot' | 'baidu-top' | 'douban-top250' | 'hot-list' | 'maoyan' | 'bangumi';
-  label: string;
-  icon: string;
-  desc: string;
-}[] = [
-  { id: 'douban', label: '豆瓣精选', icon: '🔥', desc: '全品类多维筛选' },
-  { id: 'short-drama', label: '热门短剧', icon: '📱', desc: '微短剧爽文合集' },
-  { id: 'iqiyi-hot', label: '爱奇艺榜', icon: '💚', desc: '官方全端热播榜' },
-  { id: '360-hot', label: '360热播', icon: '⚡', desc: '全网影视热播榜' },
-  { id: 'baidu-top', label: '百度风云', icon: '📈', desc: '全网实时搜索榜' },
-  { id: 'douban-top250', label: '豆瓣250', icon: '🏆', desc: '影史高分神作' },
-  { id: 'hot-list', label: '豆瓣周榜', icon: '📊', desc: '每周口碑风向标' },
-  { id: 'maoyan', label: '猫眼大盘', icon: '🎟️', desc: '院线实时票房榜' },
-  { id: 'bangumi', label: '新番周历', icon: '✨', desc: '日漫每日放送日程' },
-];
-
-/** 首页推荐区：支持全功能多维筛选 + 微短剧专区 + 爱奇艺官方榜 + 动漫新番周历 + 360热播榜 + 猫眼票房 + 影视热榜 + 百度实时榜 + 豆瓣Top250 */
+/**
+ * 首页核心片库区（纯 TMDB 官方引擎 + iOS 27 Spatial Liquid Glass 空间毛玻璃 + 左主网格 & 右 TOP10 热播榜）
+ */
 export function RecommendSection({ onPick }: { onPick: (title: string) => void }) {
-  const doubanEnabled = useAppStore((s) => s.doubanEnabled);
-  const recommendSource = useAppStore((s) => s.recommendSource);
-  const updateSettings = useAppStore((s) => s.updateSettings);
+  const [channel, setChannel] = useState<TmdbChannel>('trending');
+  const [genre, setGenre] = useState('全部');
+  const [region, setRegion] = useState('全部');
+  const [year, setYear] = useState('全部');
+  const [sort, setSort] = useState<'recommend' | 'rank' | 'time'>('recommend');
+  const [page, setPage] = useState(1);
+  const [filterExpanded, setFilterExpanded] = useState(false);
 
-  const handleSwitchSource = (sourceId: typeof recommendSource) => {
-    if (sourceId === recommendSource) return;
-    // 采用与主题切换一致的 W3C View Transitions 极速流体过渡
-    if (typeof document !== 'undefined' && 'startViewTransition' in document) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (document as any).startViewTransition(() => {
-        updateSettings({ recommendSource: sourceId, doubanEnabled: true });
-      });
-    } else {
-      updateSettings({ recommendSource: sourceId, doubanEnabled: true });
-    }
+  const activeFilterCount =
+    (genre !== '全部' ? 1 : 0) + (region !== '全部' ? 1 : 0) + (year !== '全部' ? 1 : 0);
+
+  // 当用户在「今日热映」下主动选择了类型/地区/年份筛选时，自动切换到 movie/tv Discover 引擎以生效筛选
+  const effectiveType =
+    channel === 'trending' && (activeFilterCount > 0 || sort !== 'recommend') ? 'movie' : channel;
+
+  const mainQuery = useQuery({
+    queryKey: ['tmdb-home-grid', effectiveType, genre, region, year, sort, page],
+    queryFn: ({ signal }) =>
+      fetchTmdbClient(
+        {
+          type: effectiveType,
+          area: region,
+          genre,
+          year,
+          sort,
+          page,
+        },
+        signal
+      ),
+    staleTime: 5 * 60_000,
+  });
+
+  // 右侧固定 TMDB 全球实时热力 TOP 10
+  const trendingTop10Query = useQuery({
+    queryKey: ['tmdb-trending-top10'],
+    queryFn: ({ signal }) => fetchTmdbClient({ type: 'trending', page: 1 }, signal),
+    staleTime: 10 * 60_000,
+  });
+
+  const items = mainQuery.data?.items ?? [];
+  const totalPages = Math.min(500, Math.max(1, mainQuery.data?.totalPages ?? 1));
+  const top10Items = (trendingTop10Query.data?.items ?? []).slice(0, 10);
+
+  const handleResetFilters = () => {
+    setGenre('全部');
+    setRegion('全部');
+    setYear('全部');
+    setSort('recommend');
+    setPage(1);
   };
 
-  if (!doubanEnabled) {
-    return (
-      <div className="flex flex-col items-center justify-center py-10 px-4 text-center border border-dashed border-line/60 rounded-2xl bg-chip/20 my-6">
-        <p className="text-sm text-muted mb-3">首页推荐内容已处于停用状态</p>
-        <button
-          type="button"
-          className="px-4 py-1.5 rounded-full bg-accent text-on-accent text-xs font-medium hover:bg-accent/90 transition-all active:scale-95 shadow-sm"
-          onClick={() => updateSettings({ doubanEnabled: true })}
-        >
-          立即开启首页推荐
-        </button>
-      </div>
-    );
-  }
-
-  const currentSourceMeta = RECOMMEND_SOURCES.find((s) => s.id === recommendSource) || RECOMMEND_SOURCES[0];
-
   return (
-    <section className="space-y-3 pt-2">
-      {/* 头部标题与推荐源切换胶囊（100% 对齐图二流媒体规范，无厚重外框） */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-line">
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="text-xl sm:text-2xl shrink-0">{currentSourceMeta.icon}</span>
-          <div className="min-w-0">
-            <h2 className="text-base sm:text-lg font-extrabold tracking-tight text-content flex items-center gap-2 whitespace-nowrap">
-              <span>{currentSourceMeta.label}</span>
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-accent/20 text-accent border border-accent/30 shrink-0">
-                精选源
-              </span>
-            </h2>
-            <p className="text-[11px] text-muted whitespace-nowrap">{currentSourceMeta.desc} · 点击右侧即时切换</p>
-          </div>
-        </div>
-
-        {/* 交互胶囊选项组：紧凑轻量无边框，触感顺滑；flex-1 + min-w-0 让其在窄屏下收缩并内部横滚，避免挤压左侧标题 */}
-        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-1 sm:flex-1 sm:min-w-0 sm:justify-end">
-          {RECOMMEND_SOURCES.map((s) => {
-            const isSelected = s.id === recommendSource;
+    <section aria-label="TMDB 全球影视探索大厅" className="space-y-5">
+      {/* 顶栏：iOS 27 悬浮胶囊频道切换 + 排序与可折叠筛选抽屉开关 */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+        {/* 左侧：频道分段毛玻璃胶囊 */}
+        <div className="flex items-center gap-1 p-1.5 rounded-full ios-glass overflow-x-auto no-scrollbar self-start max-w-full">
+          {TMDB_CHANNELS.map((tab) => {
+            const isActive = channel === tab.id;
             return (
               <button
-                key={s.id}
+                key={tab.id}
                 type="button"
-                onClick={() => handleSwitchSource(s.id)}
+                onClick={() => {
+                  setChannel(tab.id);
+                  setPage(1);
+                }}
                 className={cn(
-                  'px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer touch-manipulation',
-                  isSelected
-                    ? 'bg-accent text-on-accent shadow-md shadow-accent/40'
-                    : 'bg-chip text-muted hover:text-content hover:bg-hover'
+                  'px-3.5 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all duration-200 flex items-center gap-1.5 shrink-0 cursor-pointer touch-manipulation',
+                  isActive
+                    ? 'ios-pill-active font-semibold'
+                    : 'text-muted hover:text-content hover:bg-black/[0.04] dark:hover:bg-white/[0.06]'
                 )}
-                title={`切换到 ${s.label}（${s.desc}）`}
               >
-                <span>{s.label}</span>
+                <span>{tab.icon}</span>
+                <span>{tab.label}</span>
               </button>
             );
           })}
         </div>
+
+        {/* 右侧：排序分段胶囊 + 四维筛选开关 + 片库大厅 */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-0.5 p-1 rounded-full ios-pill">
+            {SORT_OPTIONS.map((s) => {
+              const isSelected = sort === s.id;
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => {
+                    setSort(s.id);
+                    setPage(1);
+                  }}
+                  className={cn(
+                    'px-3 py-1 rounded-full text-xs font-medium transition-all cursor-pointer whitespace-nowrap',
+                    isSelected
+                      ? 'ios-pill-active font-semibold'
+                      : 'text-muted hover:text-content'
+                  )}
+                >
+                  {s.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setFilterExpanded((prev) => !prev)}
+            className={cn(
+              'flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer',
+              filterExpanded || activeFilterCount > 0
+                ? 'ios-pill-active font-semibold'
+                : 'ios-pill text-muted hover:text-content'
+            )}
+          >
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="4" y1="6" x2="20" y2="6" />
+              <line x1="7" y1="12" x2="17" y2="12" />
+              <line x1="10" y1="18" x2="14" y2="18" />
+            </svg>
+            <span>四维筛选</span>
+            {activeFilterCount > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full bg-sky-500 text-white text-[10px] font-bold">
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
+
+          <Link
+            href={`/catalog?type=${channel === 'trending' ? 'movie' : channel}`}
+            className="flex items-center gap-1 px-3.5 py-1.5 rounded-full ios-pill text-xs text-muted hover:text-content font-medium transition-all shrink-0"
+          >
+            <span>全库探索</span>
+            <span>›</span>
+          </Link>
+        </div>
       </div>
 
-      {/* 动态内容视图 */}
-      <div key={recommendSource} className="transition-opacity duration-300">
-        {recommendSource === 'short-drama' && <ShortDramaView onPick={onPick} />}
-        {recommendSource === 'iqiyi-hot' && <IqiyiHotView onPick={onPick} />}
-        {recommendSource === '360-hot' && <Kan360HotView onPick={onPick} />}
-        {recommendSource === 'baidu-top' && <BaiduTopView onPick={onPick} />}
-        {recommendSource === 'douban-top250' && <DoubanTop250View onPick={onPick} />}
-        {recommendSource === 'hot-list' && <HotListView onPick={onPick} />}
-        {recommendSource === 'maoyan' && <MaoyanView onPick={onPick} />}
-        {recommendSource === 'bangumi' && <BangumiView onPick={onPick} />}
-        {recommendSource === 'douban' && <DoubanMultiCategoryView onPick={onPick} />}
-        {recommendSource !== 'short-drama' &&
-          recommendSource !== 'iqiyi-hot' &&
-          recommendSource !== '360-hot' &&
-          recommendSource !== 'baidu-top' &&
-          recommendSource !== 'douban-top250' &&
-          recommendSource !== 'hot-list' &&
-          recommendSource !== 'maoyan' &&
-          recommendSource !== 'bangumi' &&
-          recommendSource !== 'douban' && <DoubanMultiCategoryView onPick={onPick} />}
-      </div>
-    </section>
-  );
-}
+      {/* 可折叠 iOS 27 空间毛玻璃四维筛选舱（默认收起保持首屏极简通透，点击「四维筛选」平滑展开） */}
+      {(filterExpanded || activeFilterCount > 0) && (
+        <div className="ios-glass rounded-3xl p-4 sm:p-5 space-y-3 animate-fade-in">
+          <SpatialFilterRow
+            label="类型"
+            options={GENRE_OPTIONS}
+            active={genre}
+            onSelect={(val) => {
+              setGenre(val);
+              setPage(1);
+            }}
+          />
+          <SpatialFilterRow
+            label="地区"
+            options={REGION_OPTIONS}
+            active={region}
+            onSelect={(val) => {
+              setRegion(val);
+              setPage(1);
+            }}
+          />
+          <div className="flex items-center justify-between gap-2 pt-1 border-t border-black/[0.05] dark:border-white/[0.06]">
+            <div className="flex-1 min-w-0">
+              <SpatialFilterRow
+                label="年份"
+                options={YEAR_OPTIONS}
+                active={year}
+                onSelect={(val) => {
+                  setYear(val);
+                  setPage(1);
+                }}
+              />
+            </div>
+            {activeFilterCount > 0 && (
+              <button
+                type="button"
+                onClick={handleResetFilters}
+                className="px-3 py-1 rounded-full text-xs text-muted hover:text-content ios-pill shrink-0 cursor-pointer"
+              >
+                重置 ✕
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
-/**
- * 门户级多维分类宫格大厅：
- * 一级大类（电影/电视剧/动漫/综艺/纪录片） + 多行网页版联动筛选
- */
-function DoubanMultiCategoryView({ onPick }: { onPick: (title: string) => void }) {
-  const [category, setCategory] = useState<PrimaryCategory>('movie');
+      {/* 主舞台：左侧 9 列海报网格 + 右侧 3 列 TMDB 全球实时热力 TOP 10 */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* 左侧 9 列：TMDB 海报网格 + 分页 */}
+        <div className="lg:col-span-9 space-y-6">
+          {mainQuery.isLoading ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3.5 sm:gap-4">
+              {Array.from({ length: 15 }).map((_, idx) => (
+                <div
+                  key={idx}
+                  className="aspect-[2/3] rounded-2xl bg-chip/50 animate-pulse border border-black/[0.04] dark:border-white/[0.05]"
+                />
+              ))}
+            </div>
+          ) : items.length === 0 ? (
+            <div className="ios-glass rounded-3xl py-20 px-4 text-center space-y-3">
+              <p className="text-3xl">🎬</p>
+              <p className="text-sm font-semibold text-content">当前筛选条件下暂无匹配影片</p>
+              <button
+                type="button"
+                onClick={handleResetFilters}
+                className="px-4 py-1.5 rounded-full ios-pill-active text-xs font-semibold cursor-pointer"
+              >
+                重置筛选条件
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3.5 sm:gap-4">
+                {items.slice(0, 20).map((item) => (
+                  <DoubanCard
+                    key={item.id}
+                    item={item}
+                    onClick={() => onPick(item.title)}
+                  />
+                ))}
+              </div>
 
-  // 电影筛选状态（地区与排序）
-  const [movieRegion, setMovieRegion] = useState('全部');
-  const [movieSort, setMovieSort] = useState('recommend');
-
-  // 剧集筛选状态（版本与排序）
-  const [tvRegion, setTvRegion] = useState('全部');
-  const [tvSort, setTvSort] = useState('recommend');
-
-  // 动漫筛选状态（版本与排序）
-  const [animeViewMode, setAnimeViewMode] = useState<'douban' | 'bangumi'>('douban');
-  const [animeType, setAnimeType] = useState('全部');
-  const [animeSort, setAnimeSort] = useState('recommend');
-
-  // 综艺筛选状态
-  const [varietyTag, setVarietyTag] = useState('全部');
-  const [varietySort, setVarietySort] = useState('recommend');
-
-  // 纪录片筛选状态
-  const [docTag, setDocTag] = useState('全部');
-  const [docSort, setDocSort] = useState('recommend');
-
-  // 短剧筛选状态
-  const [shortDramaTheme, setShortDramaTheme] = useState('全部');
-  const [shortDramaSort, setShortDramaSort] = useState('recommend');
-
-  // 换一批真实分页页码
-  const [page, setPage] = useState(1);
-
-  // 计算目标豆瓣请求参数
-  const { type, tag, sort } = (() => {
-    switch (category) {
-      case 'movie': {
-        let t = '热门';
-        if (movieRegion !== '全部') {
-          t = movieRegion;
-        } else if (movieSort === 'classic') t = '经典';
-        else if (movieSort === 'underrated') t = '冷门佳片';
-        else if (movieSort === 'rank') t = '高分';
-        else if (movieSort === 'time') t = '最新';
-        const s: 'recommend' | 'time' | 'rank' = movieSort === 'time' ? 'time' : movieSort === 'rank' ? 'rank' : 'recommend';
-        return { type: 'movie' as const, tag: t, sort: s };
-      }
-      case 'tv': {
-        let t = '热门';
-        if (tvRegion !== '全部') {
-          t = tvRegion;
-        } else if (tvSort === 'time') t = '最新';
-        else if (tvSort === 'rank') t = '高分';
-        const s: 'recommend' | 'time' | 'rank' = tvSort === 'time' ? 'time' : tvSort === 'rank' ? 'rank' : 'recommend';
-        return { type: 'tv' as const, tag: t, sort: s };
-      }
-      case 'anime': {
-        const isMovie = animeType === '剧场版';
-        let t = '日本动画';
-        if (animeType !== '全部') t = animeType;
-        const s: 'recommend' | 'time' | 'rank' = animeSort === 'time' ? 'time' : animeSort === 'rank' ? 'rank' : 'recommend';
-        return { type: isMovie ? ('movie' as const) : ('tv' as const), tag: t, sort: s };
-      }
-      case 'variety': {
-        const t = varietyTag === '全部' ? '综艺' : varietyTag;
-        const s: 'recommend' | 'time' | 'rank' = varietySort === 'time' ? 'time' : varietySort === 'rank' ? 'rank' : 'recommend';
-        return { type: 'tv' as const, tag: t, sort: s };
-      }
-      case 'documentary': {
-        const t = docTag === '全部' ? '纪录片' : docTag;
-        const s: 'recommend' | 'time' | 'rank' = docSort === 'time' ? 'time' : docSort === 'rank' ? 'rank' : 'recommend';
-        return { type: 'tv' as const, tag: t, sort: s };
-      }
-      default: {
-        return { type: 'tv' as const, tag: '热门', sort: 'recommend' as const };
-      }
-    }
-  })();
-
-  const query = useQuery({
-    queryKey: ['douban-multi', category, type, tag, sort, page],
-    queryFn: ({ signal }) => api.douban(type, tag, (page - 1) * 20, 20, signal, sort),
-    enabled: category !== 'short_drama' && !(category === 'anime' && animeViewMode === 'bangumi'),
-  });
-
-  const shortDramaQuery = useQuery({
-    queryKey: ['douban-multi-short-drama', page],
-    queryFn: ({ signal }) => api.hotList('short_drama', signal, (page - 1) * 20),
-    enabled: category === 'short_drama',
-  });
-
-  const activeQuery = category === 'short_drama' ? shortDramaQuery : query;
-
-  const items = (() => {
-    if (category === 'short_drama') {
-      const list = shortDramaQuery.data?.items ?? [];
-      if (shortDramaTheme === '全部') return list;
-      if (shortDramaTheme === 'AI精选') {
-        const aiMatched = list.filter((item) => /AI|智能|科技|脑洞|觉醒|系统|重生/.test(item.title));
-        return aiMatched.length > 0 ? aiMatched : list.slice(0, 14);
-      }
-      const matched = list.filter((item) => item.title.includes(shortDramaTheme));
-      return matched.length > 0 ? matched : list;
-    }
-    const rawItems = query.data?.items ?? [];
-    return rawItems.filter((item) => !isShortDramaTitle(item.title));
-  })();
-
-  return (
-    <section aria-label="影视多维分类大厅" className="space-y-2.5">
-      {/* 核心分类与片库入口：无厚重外框，轻量通透 */}
-      <div className="flex items-center justify-between gap-2 py-0.5">
-        <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-          {PRIMARY_TABS.map((tab) => (
-            <button
-              key={tab.id}
-              className={cn(
-                'px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all duration-150 active:scale-95 shrink-0 flex items-center gap-1 touch-manipulation cursor-pointer',
-                category === tab.id
-                  ? 'bg-accent text-on-accent shadow-xs'
-                  : 'bg-chip text-muted hover:text-content hover:bg-hover'
+              {/* 底部 iOS 27 悬浮胶囊分页器 */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-center gap-2 pt-2">
+                  <button
+                    type="button"
+                    disabled={page <= 1 || mainQuery.isFetching}
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    className="px-4 py-1.5 rounded-full ios-pill text-xs font-medium text-content disabled:opacity-35 cursor-pointer"
+                  >
+                    ‹ 上一页
+                  </button>
+                  <span className="px-4 py-1.5 rounded-full ios-glass text-xs font-mono text-muted">
+                    {page} / {totalPages}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={page >= totalPages || mainQuery.isFetching}
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    className="px-4 py-1.5 rounded-full ios-pill text-xs font-medium text-content disabled:opacity-35 cursor-pointer"
+                  >
+                    下一页 ›
+                  </button>
+                </div>
               )}
-              onClick={() => {
-                setCategory(tab.id);
-                setPage(1);
-              }}
-            >
-              <span>{tab.icon}</span>
-              <span>{tab.label}</span>
-            </button>
-          ))}
+            </>
+          )}
         </div>
 
-        <Link
-          href={`/catalog?type=${category}`}
-          className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs text-accent hover:text-accent-hover hover:bg-accent/10 transition-all font-semibold shrink-0"
-        >
-          <span>片库大厅</span>
-          <span>›</span>
-        </Link>
-      </div>
-
-      {/* 多维筛选面板：单行自适应横滑，无厚重外框 */}
-      <div className="space-y-1 py-0.5">
-        {category === 'short_drama' && (
-          <>
-            <FilterRow
-              label="题材"
-              options={SHORT_DRAMA_THEMES}
-              active={shortDramaTheme}
-              onSelect={(t) => {
-                setShortDramaTheme(t);
-                setPage(1);
-              }}
-            />
-            <FilterRow
-              label="排序"
-              options={SHORT_DRAMA_SORTS.map((s) => s.label)}
-              active={SHORT_DRAMA_SORTS.find((s) => s.id === shortDramaSort)?.label ?? '热门爽剧'}
-              onSelect={(label) => {
-                setShortDramaSort(SHORT_DRAMA_SORTS.find((s) => s.label === label)?.id ?? 'recommend');
-                setPage(1);
-              }}
-            />
-          </>
-        )}
-
-        {category === 'movie' && (
-          <>
-            <FilterRow
-              label="地区"
-              options={MOVIE_REGIONS}
-              active={movieRegion}
-              onSelect={(r) => {
-                setMovieRegion(r);
-                setPage(1);
-              }}
-            />
-            <FilterRow
-              label="排序"
-              options={MOVIE_SORTS.map((s) => s.label)}
-              active={MOVIE_SORTS.find((s) => s.id === movieSort)?.label ?? '热门推荐'}
-              onSelect={(label) => {
-                setMovieSort(MOVIE_SORTS.find((s) => s.label === label)?.id ?? 'recommend');
-                setPage(1);
-              }}
-            />
-          </>
-        )}
-
-        {category === 'tv' && (
-          <>
-            <FilterRow
-              label="版本"
-              options={TV_REGIONS}
-              active={tvRegion}
-              onSelect={(r) => {
-                setTvRegion(r);
-                setPage(1);
-              }}
-            />
-            <FilterRow
-              label="排序"
-              options={TV_SORTS.map((s) => s.label)}
-              active={TV_SORTS.find((s) => s.id === tvSort)?.label ?? '热门热播'}
-              onSelect={(label) => {
-                setTvSort(TV_SORTS.find((s) => s.label === label)?.id ?? 'recommend');
-                setPage(1);
-              }}
-            />
-          </>
-        )}
-
-        {category === 'anime' && (
-          <>
-            <div className="flex items-center gap-2 pb-1 border-b border-line/40">
-              <span className="shrink-0 text-faint font-medium w-8 sm:w-10 text-left sm:text-right text-xs">模式:</span>
-              <div className="flex gap-2">
-                <button
-                  className={cn(
-                    'px-2.5 py-0.5 rounded-md text-xs font-medium transition-all shrink-0 active:scale-95 touch-manipulation',
-                    animeViewMode === 'douban' ? 'bg-accent text-on-accent font-semibold' : 'bg-chip text-muted hover:text-content'
-                  )}
-                  onClick={() => setAnimeViewMode('douban')}
-                >
-                  精选番剧库
-                </button>
-                <button
-                  className={cn(
-                    'px-2.5 py-0.5 rounded-md text-xs font-medium transition-all shrink-0 active:scale-95 touch-manipulation',
-                    animeViewMode === 'bangumi' ? 'bg-accent text-on-accent font-semibold' : 'bg-chip text-muted hover:text-content'
-                  )}
-                  onClick={() => setAnimeViewMode('bangumi')}
-                >
-                  📅 新番周历
-                </button>
-              </div>
+        {/* 右侧 3 列：TMDB 全球热力榜 TOP 10 空间玻璃舱 */}
+        <aside className="lg:col-span-3 ios-glass rounded-3xl p-4 sm:p-5 space-y-4 lg:sticky lg:top-20">
+          <div className="flex items-center justify-between pb-3 border-b border-black/[0.06] dark:border-white/[0.08]">
+            <div className="flex items-center gap-2">
+              <span className="text-base">🔥</span>
+              <h3 className="text-sm font-bold tracking-tight text-content">TMDB 全球热播榜</h3>
             </div>
-            {animeViewMode === 'douban' && (
-              <>
-                <FilterRow label="版本" options={ANIME_TYPES} active={animeType} onSelect={setAnimeType} />
-                <FilterRow
-                  label="排序"
-                  options={ANIME_SORTS.map((s) => s.label)}
-                  active={ANIME_SORTS.find((s) => s.id === animeSort)?.label ?? '热门推荐'}
-                  onSelect={(label) => setAnimeSort(ANIME_SORTS.find((s) => s.label === label)?.id ?? 'recommend')}
-                />
-              </>
-            )}
-          </>
-        )}
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold ios-pill text-muted">
+              TOP 10
+            </span>
+          </div>
 
-        {category === 'variety' && (
-          <>
-            <FilterRow label="分类" options={VARIETY_TAGS} active={varietyTag} onSelect={setVarietyTag} />
-            <FilterRow
-              label="排序"
-              options={VARIETY_SORTS.map((s) => s.label)}
-              active={VARIETY_SORTS.find((s) => s.id === varietySort)?.label ?? '热门推荐'}
-              onSelect={(label) => setVarietySort(VARIETY_SORTS.find((s) => s.label === label)?.id ?? 'recommend')}
-            />
-          </>
-        )}
+          {trendingTop10Query.isLoading ? (
+            <div className="space-y-2.5">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="h-14 rounded-2xl bg-chip/40 animate-pulse" />
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {top10Items.map((item, idx) => {
+                const rank = idx + 1;
+                const isTop3 = rank <= 3;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => onPick(item.title)}
+                    className="w-full group flex items-center gap-3 p-2 rounded-2xl hover:bg-black/[0.04] dark:hover:bg-white/[0.06] transition-all text-left cursor-pointer"
+                  >
+                    {/* 排名徽章 */}
+                    <span
+                      className={cn(
+                        'w-6 h-6 rounded-full flex items-center justify-center text-xs font-mono font-bold shrink-0',
+                        rank === 1
+                          ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-950 shadow-sm'
+                          : isTop3
+                            ? 'bg-sky-500/15 text-sky-600 dark:text-sky-300 border border-sky-400/30'
+                            : 'text-faint bg-black/[0.03] dark:bg-white/[0.04]'
+                      )}
+                    >
+                      {rank}
+                    </span>
 
-        {category === 'documentary' && (
-          <>
-            <FilterRow label="题材" options={DOC_TAGS} active={docTag} onSelect={setDocTag} />
-            <FilterRow
-              label="排序"
-              options={DOC_SORTS.map((s) => s.label)}
-              active={DOC_SORTS.find((s) => s.id === docSort)?.label ?? '热门推荐'}
-              onSelect={(label) => setDocSort(DOC_SORTS.find((s) => s.label === label)?.id ?? 'recommend')}
-            />
-          </>
-        )}
+                    {/* 迷你海报 */}
+                    {item.cover && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={item.cover}
+                        alt={item.title}
+                        referrerPolicy="no-referrer"
+                        className="w-10 h-14 rounded-xl object-cover shrink-0 bg-chip border border-black/[0.06] dark:border-white/[0.08]"
+                      />
+                    )}
+
+                    {/* 标题与元数据 */}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold text-content truncate group-hover:text-accent transition-colors">
+                        {item.title}
+                      </p>
+                      <div className="flex items-center gap-2 mt-1 text-[11px] text-muted">
+                        {item.rating && (
+                          <span className="text-amber-500 dark:text-amber-300 font-semibold">
+                            ★ {item.rating}
+                          </span>
+                        )}
+                        {item.year && <span>{item.year}</span>}
+                        {item.episodes_info && (
+                          <span className="truncate text-faint">{item.episodes_info}</span>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </aside>
       </div>
-
-      {/* 动漫新番周更表模式直接内嵌渲染 */}
-      {category === 'anime' && animeViewMode === 'bangumi' ? (
-        <BangumiInlineView onPick={onPick} />
-      ) : activeQuery.isError ? (
-        <p className="text-center text-sm text-faint py-12">推荐内容加载失败，请稍后刷新或更换分类</p>
-      ) : activeQuery.isLoading ? (
-        <GridSkeleton />
-      ) : items.length === 0 ? (
-        <p className="text-center text-sm text-faint py-12">该分类组合暂无内容，请尝试其他标签</p>
-      ) : (
-        <HorizontalCardRow items={items} onPick={onPick} />
-      )}
     </section>
   );
 }
 
-/** 单行多维筛选器条目组件：横向单行自然平滑滚动 */
-function FilterRow({
+function SpatialFilterRow({
   label,
   options,
   active,
@@ -501,585 +429,27 @@ function FilterRow({
   onSelect: (val: string) => void;
 }) {
   return (
-    <div className="flex items-center gap-2 text-xs py-0.5">
-      <span className="shrink-0 text-faint font-medium w-8 sm:w-10 text-left sm:text-right">
-        {label}:
-      </span>
-      <div className="flex items-center gap-1 sm:gap-1.5 flex-1 overflow-x-auto no-scrollbar py-0.5 scroll-smooth">
+    <div className="flex items-center gap-2.5 text-xs">
+      <span className="shrink-0 text-faint font-medium w-9 text-right">{label}</span>
+      <div className="flex items-center gap-1.5 flex-1 overflow-x-auto no-scrollbar py-0.5">
         {options.map((opt) => {
           const isSelected = opt === active;
           return (
             <button
               key={opt}
-              className={cn(
-                'px-2.5 py-1 rounded-md text-xs transition-all duration-150 shrink-0 touch-manipulation active:scale-95',
-                isSelected
-                  ? 'bg-accent text-on-accent font-semibold shadow-xs'
-                  : 'text-muted hover:text-content hover:bg-hover bg-chip/40 sm:bg-transparent'
-              )}
+              type="button"
               onClick={() => onSelect(opt)}
+              className={cn(
+                'px-3 py-1 rounded-full text-xs transition-all duration-150 shrink-0 cursor-pointer touch-manipulation',
+                isSelected
+                  ? 'ios-pill-active font-semibold'
+                  : 'text-muted hover:text-content hover:bg-black/[0.04] dark:hover:bg-white/[0.06]'
+              )}
             >
               {opt}
             </button>
           );
         })}
-      </div>
-    </div>
-  );
-}
-
-/** 内联 Bangumi 每日放送视图 */
-function BangumiInlineView({ onPick }: { onPick: (title: string) => void }) {
-  const [weekday, setWeekday] = useState<number | 'all'>('all');
-
-  const query = useQuery({
-    queryKey: ['bangumi-calendar-inline'],
-    queryFn: ({ signal }) => api.bangumiCalendar(signal),
-  });
-
-  let items: DoubanItem[] = [];
-  if (query.data) {
-    items =
-      weekday === 'all'
-        ? query.data.days.flatMap((d) => d.items)
-        : (query.data.days.find((d) => d.weekday === weekday)?.items ?? []);
-  }
-
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between gap-1 overflow-x-auto no-scrollbar py-0.5">
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            className={cn(
-              'px-2.5 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition-all active:scale-95 shrink-0 cursor-pointer touch-manipulation',
-              weekday === 'all'
-                ? 'bg-accent text-on-accent shadow-xs'
-                : 'bg-chip text-muted hover:text-content hover:bg-hover'
-            )}
-            onClick={() => setWeekday('all')}
-          >
-            全部星期
-          </button>
-          {WEEKDAYS.map((name, i) => (
-            <button
-              key={name}
-              type="button"
-              className={cn(
-                'px-2.5 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition-all active:scale-95 shrink-0 cursor-pointer touch-manipulation',
-                weekday === i + 1
-                  ? 'bg-accent text-on-accent shadow-xs'
-                  : 'bg-chip text-muted hover:text-content hover:bg-hover'
-              )}
-              onClick={() => setWeekday(i + 1)}
-            >
-              {name}
-            </button>
-          ))}
-        </div>
-        <span className="text-[11px] text-faint shrink-0 hidden md:inline-block px-2">
-          ✨ 每日新番放送日程
-        </span>
-      </div>
-
-      {query.isError ? (
-        <p className="text-center text-sm text-faint py-12">新番日历加载失败，请稍后重试</p>
-      ) : query.isLoading ? (
-        <GridSkeleton />
-      ) : items.length === 0 ? (
-        <p className="text-center text-sm text-faint py-12">暂无新番连载数据</p>
-      ) : (
-        <HorizontalCardRow items={items} onPick={onPick} maxItems={24} />
-      )}
-    </div>
-  );
-}
-
-/** 独立 Bangumi 每日放送全屏视图（设置指定时使用） */
-function BangumiView({ onPick }: { onPick: (title: string) => void }) {
-  return (
-    <section aria-label="新番放送推荐" className="space-y-3.5">
-      <BangumiInlineView onPick={onPick} />
-    </section>
-  );
-}
-
-const KAN360_HOT_LISTS = [
-  { id: '360_teleplay', label: '🔥 电视剧' },
-  { id: '360_movie', label: '🎬 电影' },
-  { id: '360_variety', label: '🎤 综艺' },
-  { id: '360_anime', label: '✨ 动漫' },
-];
-
-/** 360 影视实时热播大盘视图：官方开放 CDN、极速秒开、零风控 */
-function Kan360HotView({ onPick }: { onPick: (title: string) => void }) {
-  const [listId, setListId] = useState(KAN360_HOT_LISTS[0].id);
-
-  const query = useQuery({
-    queryKey: ['360-hot', listId],
-    queryFn: ({ signal }) => api.hotList(listId, signal),
-    staleTime: 30_000,
-    refetchOnMount: true,
-  });
-
-  const items = query.data?.items ?? [];
-
-  return (
-    <section aria-label="360 影视热播榜" className="space-y-3">
-      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-        {KAN360_HOT_LISTS.map((l) => (
-          <button
-            key={l.id}
-            type="button"
-            onClick={() => setListId(l.id)}
-            className={cn(
-              'px-3 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition-all active:scale-95 shrink-0 cursor-pointer touch-manipulation',
-              listId === l.id
-                ? 'bg-accent text-on-accent shadow-xs'
-                : 'bg-chip text-muted hover:text-content hover:bg-hover'
-            )}
-          >
-            {l.label}
-          </button>
-        ))}
-      </div>
-
-      {query.isError ? (
-        <div className="text-center py-12 space-y-2">
-          <p className="text-sm text-faint">热榜数据加载失败</p>
-          <button
-            type="button"
-            className="px-3 py-1 text-xs rounded-full bg-accent text-on-accent"
-            onClick={() => query.refetch()}
-          >
-            点击重试
-          </button>
-        </div>
-      ) : query.isLoading ? (
-        <GridSkeleton />
-      ) : items.length === 0 ? (
-        <p className="text-center text-sm text-faint py-12">暂无热播内容，请尝试其他分类</p>
-      ) : (
-        <HorizontalCardRow items={items} onPick={onPick} />
-      )}
-    </section>
-  );
-}
-
-const BAIDU_TOP_LISTS = [
-  { id: 'baidu_teleplay', label: '🔥 热门电视剧' },
-  { id: 'baidu_movie', label: '🎬 热门电影' },
-];
-
-/** 百度实时风云榜视图：直连秒开、多重容灾、高可用 */
-function BaiduTopView({ onPick }: { onPick: (title: string) => void }) {
-  const [listId, setListId] = useState(BAIDU_TOP_LISTS[0].id);
-
-  const query = useQuery({
-    queryKey: ['baidu-top', listId],
-    queryFn: ({ signal }) => api.hotList(listId, signal),
-    staleTime: 30_000,
-    refetchOnMount: true,
-  });
-
-  const items = query.data?.items ?? [];
-
-  return (
-    <section aria-label="百度实时热榜" className="space-y-3">
-      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-        {BAIDU_TOP_LISTS.map((l) => (
-          <button
-            key={l.id}
-            type="button"
-            onClick={() => setListId(l.id)}
-            className={cn(
-              'px-3 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition-all active:scale-95 shrink-0 cursor-pointer touch-manipulation',
-              listId === l.id
-                ? 'bg-accent text-on-accent shadow-xs'
-                : 'bg-chip text-muted hover:text-content hover:bg-hover'
-            )}
-          >
-            {l.label}
-          </button>
-        ))}
-      </div>
-
-      {query.isError ? (
-        <div className="text-center py-12 space-y-2">
-          <p className="text-sm text-faint">热榜数据加载失败</p>
-          <button
-            type="button"
-            className="px-3 py-1 text-xs rounded-full bg-accent text-on-accent"
-            onClick={() => query.refetch()}
-          >
-            点击重试
-          </button>
-        </div>
-      ) : query.isLoading ? (
-        <GridSkeleton />
-      ) : items.length === 0 ? (
-        <p className="text-center text-sm text-faint py-12">暂无热播内容，请尝试其他分类</p>
-      ) : (
-        <HorizontalCardRow items={items} onPick={onPick} />
-      )}
-    </section>
-  );
-}
-
-/** 豆瓣 Top250 经典殿堂视图：支持真实分页换一批 */
-function DoubanTop250View({ onPick }: { onPick: (title: string) => void }) {
-  const [page] = useState(1);
-
-  const query = useQuery({
-    queryKey: ['douban-top250', page],
-    queryFn: ({ signal }) => api.hotList('douban_top250', signal, (page - 1) * 20),
-    staleTime: 60_000,
-    refetchOnMount: true,
-  });
-
-  const items = query.data?.items ?? [];
-
-  return (
-    <section aria-label="豆瓣 Top250" className="space-y-3">
-
-      {query.isError ? (
-        <div className="text-center py-12 space-y-2">
-          <p className="text-sm text-faint">豆瓣 Top250 加载失败</p>
-          <button
-            type="button"
-            className="px-3 py-1 text-xs rounded-full bg-accent text-on-accent"
-            onClick={() => query.refetch()}
-          >
-            点击重试
-          </button>
-        </div>
-      ) : query.isLoading ? (
-        <GridSkeleton />
-      ) : items.length === 0 ? (
-        <p className="text-center text-sm text-faint py-12">暂无内容</p>
-      ) : (
-        <HorizontalCardRow items={items} onPick={onPick} />
-      )}
-    </section>
-  );
-}
-
-const DOUBAN_WEEKLY_LISTS = [
-  { id: 'douban_movie_weekly', label: '🎬 电影口碑' },
-  { id: 'douban_tv_chinese', label: '📺 华语剧集' },
-  { id: 'douban_tv_global', label: '🌍 海外剧集' },
-  { id: 'douban_show_chinese', label: '🎤 国内综艺' },
-  { id: 'douban_show_global', label: '🌟 海外综艺' },
-];
-
-/** 豆瓣影视周榜视图 */
-function HotListView({ onPick }: { onPick: (title: string) => void }) {
-  const [listId, setListId] = useState(DOUBAN_WEEKLY_LISTS[0].id);
-
-  const query = useQuery({
-    queryKey: ['hot-list', listId],
-    queryFn: ({ signal }) => api.hotList(listId, signal),
-    staleTime: 30_000,
-    refetchOnMount: true,
-  });
-
-  const items = query.data?.items ?? [];
-
-  return (
-    <section aria-label="豆瓣口碑周榜" className="space-y-3">
-      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-        {DOUBAN_WEEKLY_LISTS.map((l) => (
-          <button
-            key={l.id}
-            type="button"
-            onClick={() => setListId(l.id)}
-            className={cn(
-              'px-3 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition-all active:scale-95 shrink-0 cursor-pointer touch-manipulation',
-              listId === l.id
-                ? 'bg-accent text-on-accent shadow-xs'
-                : 'bg-chip text-muted hover:text-content hover:bg-hover'
-            )}
-          >
-            {l.label}
-          </button>
-        ))}
-      </div>
-
-      {query.isError ? (
-        <div className="text-center py-12 space-y-2">
-          <p className="text-sm text-faint">周榜数据加载失败</p>
-          <button
-            type="button"
-            className="px-3 py-1 text-xs rounded-full bg-accent text-on-accent"
-            onClick={() => query.refetch()}
-          >
-            点击重试
-          </button>
-        </div>
-      ) : query.isLoading ? (
-        <GridSkeleton />
-      ) : items.length === 0 ? (
-        <p className="text-center text-sm text-faint py-12">暂无口碑榜单内容</p>
-      ) : (
-        <HorizontalCardRow items={items} onPick={onPick} />
-      )}
-    </section>
-  );
-}
-
-/** 猫眼院线大盘榜视图 */
-function MaoyanView({ onPick }: { onPick: (title: string) => void }) {
-  const query = useQuery({
-    queryKey: ['maoyan-movie'],
-    queryFn: ({ signal }) => api.hotList('maoyan_movie', signal),
-    staleTime: 30_000,
-    refetchOnMount: true,
-  });
-
-  const items = query.data?.items ?? [];
-
-  return (
-    <section aria-label="猫眼院线票房榜" className="space-y-3">
-      {query.isError ? (
-        <div className="text-center py-12 space-y-2">
-          <p className="text-sm text-faint">票房大盘数据加载失败</p>
-          <button
-            type="button"
-            className="px-3 py-1 text-xs rounded-full bg-accent text-on-accent"
-            onClick={() => query.refetch()}
-          >
-            点击重试
-          </button>
-        </div>
-      ) : query.isLoading ? (
-        <GridSkeleton />
-      ) : items.length === 0 ? (
-        <p className="text-center text-sm text-faint py-12">暂无票房内容</p>
-      ) : (
-        <HorizontalCardRow items={items} onPick={onPick} />
-      )}
-    </section>
-  );
-}
-
-const IQIYI_HOT_LISTS = [
-  { id: 'iqiyi_tv', label: '🔥 热门电视剧' },
-  { id: 'iqiyi_movie', label: '🎬 热门电影' },
-  { id: 'iqiyi_variety', label: '🎤 热门综艺' },
-  { id: 'iqiyi_anime', label: '✨ 热门动漫' },
-];
-
-/** 爱奇艺官方实时热播榜视图：高清真图、官方热度、秒播体验 */
-function IqiyiHotView({ onPick }: { onPick: (title: string) => void }) {
-  const [listId, setListId] = useState(IQIYI_HOT_LISTS[0].id);
-
-  const query = useQuery({
-    queryKey: ['iqiyi-hot', listId],
-    queryFn: ({ signal }) => api.hotList(listId, signal),
-    staleTime: 30_000,
-    refetchOnMount: true,
-  });
-
-  const items = query.data?.items ?? [];
-
-  return (
-    <section aria-label="爱奇艺实时热播榜" className="space-y-3">
-      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-        {IQIYI_HOT_LISTS.map((l) => (
-          <button
-            key={l.id}
-            type="button"
-            onClick={() => setListId(l.id)}
-            className={cn(
-              'px-3 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition-all active:scale-95 shrink-0 cursor-pointer touch-manipulation',
-              listId === l.id
-                ? 'bg-accent text-on-accent shadow-xs'
-                : 'bg-chip text-muted hover:text-content hover:bg-hover'
-            )}
-          >
-            {l.label}
-          </button>
-        ))}
-      </div>
-
-      {query.isError ? (
-        <div className="text-center py-12 space-y-2">
-          <p className="text-sm text-faint">热榜数据加载失败</p>
-          <button
-            type="button"
-            className="px-3 py-1 text-xs rounded-full bg-accent text-on-accent"
-            onClick={() => query.refetch()}
-          >
-            点击重试
-          </button>
-        </div>
-      ) : query.isLoading ? (
-        <GridSkeleton />
-      ) : items.length === 0 ? (
-        <p className="text-center text-sm text-faint py-12">暂无热播内容，请尝试其他分类</p>
-      ) : (
-        <HorizontalCardRow items={items} onPick={onPick} />
-      )}
-    </section>
-  );
-}
-
-/**
- * 竖屏短内容子分类定义。
- * slug 与 /api/hot-list 的 id 对齐；count 为实测条目量级，仅用于展示。
- */
-const VERTICAL_SHORT_TABS = [
-  { slug: 'short_drama', label: '微短剧', icon: '📱', desc: '爽文短剧全集直连', count: '2.4万+' },
-  { slug: 'ai_comic', label: 'AI 漫剧', icon: '🎨', desc: 'AI 生成竖屏短剧', count: '2.9万+' },
-  { slug: 'movie_commentary', label: '电影解说', icon: '🎬', desc: '竖屏解说速看', count: '3.7万+' },
-] as const;
-
-type VerticalShortTab = (typeof VERTICAL_SHORT_TABS)[number]['slug'];
-
-/**
- * 竖屏短内容专区视图：微短剧 / AI 漫剧 / 电影解说三个子分类共用一套版式。
- *
- * 响应式策略（手机 / 平板 / Web 通用）：
- * - 子分类 tab 用横向滚动（overflow-x-auto + 隐藏滚动条），窄屏不换行、不挤压「换一批」按钮
- * - 卡片网格沿用项目既有断点：2 列（手机）→ 3（sm）→ 4（md）→ 5（lg）→ 6（xl）→ 7（2xl）
- * - 标题副文案在窄屏隐藏（hidden sm:inline），避免与 tab 同行导致溢出
- */
-function ShortDramaView({ onPick }: { onPick: (title: string) => void }) {
-  const [tab, setTab] = useState<VerticalShortTab>('short_drama');
-  const [page, setPage] = useState(1);
-
-  const query = useQuery({
-    queryKey: ['vertical-short', tab, page],
-    queryFn: ({ signal }) => api.hotList(tab, signal, (page - 1) * 20),
-    staleTime: 30_000,
-    refetchOnMount: true,
-  });
-
-  const items = query.data?.items ?? [];
-  const activeTab = VERTICAL_SHORT_TABS.find((t) => t.slug === tab) ?? VERTICAL_SHORT_TABS[0];
-
-  // 切换子分类时回到第一页，避免停留在新分类的越界页码
-  const handleTabChange = (next: VerticalShortTab) => {
-    if (next === tab) return;
-    setTab(next);
-    setPage(1);
-  };
-
-  return (
-    <section aria-label="竖屏短内容专区" className="space-y-3">
-      {/* 极简子分类 Tab 条：微短剧 · AI漫剧 · 电影解说，无厚重外框 */}
-      <div
-        className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5"
-        role="tablist"
-        aria-label="短内容子分类"
-      >
-        {VERTICAL_SHORT_TABS.map((t) => {
-          const active = t.slug === tab;
-          return (
-            <button
-              key={t.slug}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              onClick={() => handleTabChange(t.slug)}
-              className={cn(
-                'flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs whitespace-nowrap shrink-0 transition-all active:scale-95 cursor-pointer touch-manipulation',
-                active
-                  ? 'bg-accent text-on-accent font-semibold shadow-xs'
-                  : 'bg-chip text-muted hover:text-content hover:bg-hover'
-              )}
-            >
-              <span>{t.icon}</span>
-              <span>{t.label}</span>
-              <span className="text-[10px] opacity-75 font-mono">({t.count})</span>
-            </button>
-          );
-        })}
-      </div>
-
-      {query.isError ? (
-        <div className="text-center py-12 space-y-2">
-          <p className="text-sm text-faint">{activeTab.label}数据加载失败</p>
-          <button
-            type="button"
-            className="px-3 py-1 text-xs rounded-full bg-accent text-on-accent"
-            onClick={() => query.refetch()}
-          >
-            点击重试
-          </button>
-        </div>
-      ) : query.isLoading ? (
-        <GridSkeleton />
-      ) : items.length === 0 ? (
-        <p className="text-center text-sm text-faint py-12">暂无{activeTab.label}数据</p>
-      ) : (
-        // 断点沿用项目通用卡片网格：2/3/4/5/6/7 列覆盖手机到超宽屏
-        <HorizontalCardRow items={items} onPick={onPick} />
-      )}
-    </section>
-  );
-}
-
-function GridSkeleton() {
-  return (
-    <div className="flex gap-2.5 sm:gap-3.5 overflow-hidden py-1 px-0.5">
-      {Array.from({ length: 8 }).map((_, i) => (
-        <div key={i} className="w-[125px] sm:w-[145px] md:w-[160px] shrink-0">
-          <div className="aspect-[2/3] rounded-xl bg-chip animate-pulse border border-line/40" />
-          <div className="h-3 mt-2 rounded bg-chip animate-pulse w-3/4" />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/** 推荐源单行横向平滑滚动卡片轨道（收敛垂直空间，桌面端 hover 箭头，触屏原生滑动） */
-function HorizontalCardRow({
-  items,
-  onPick,
-  maxItems = 16,
-}: {
-  items: DoubanItem[];
-  onPick: (title: string) => void;
-  maxItems?: number;
-}) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  const scroll = (direction: 'left' | 'right') => {
-    if (!scrollRef.current) return;
-    const clientWidth = scrollRef.current.clientWidth;
-    const scrollAmount = direction === 'left' ? -clientWidth * 0.75 : clientWidth * 0.75;
-    scrollRef.current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
-  };
-
-  return (
-    <div className="relative group/row">
-      <button
-        type="button"
-        onClick={() => scroll('left')}
-        className="absolute -left-2.5 top-1/2 -translate-y-1/2 z-10 w-7 h-7 rounded-full bg-surface-raised/95 border border-line shadow-md text-content hidden md:flex items-center justify-center opacity-0 group-hover/row:opacity-100 hover:scale-110 active:scale-95 transition-all cursor-pointer"
-        title="向左滚动"
-      >
-        ‹
-      </button>
-      <button
-        type="button"
-        onClick={() => scroll('right')}
-        className="absolute -right-2.5 top-1/2 -translate-y-1/2 z-10 w-7 h-7 rounded-full bg-surface-raised/95 border border-line shadow-md text-content hidden md:flex items-center justify-center opacity-0 group-hover/row:opacity-100 hover:scale-110 active:scale-95 transition-all cursor-pointer"
-        title="向右滚动"
-      >
-        ›
-      </button>
-
-      <div
-        ref={scrollRef}
-        className="flex gap-2.5 sm:gap-3.5 overflow-x-auto no-scrollbar scroll-smooth py-1 px-0.5"
-      >
-        {items.slice(0, maxItems).map((item) => (
-          <div key={item.id} className="w-[125px] sm:w-[145px] md:w-[160px] shrink-0">
-            <DoubanCard item={item} onClick={() => onPick(item.title)} />
-          </div>
-        ))}
       </div>
     </div>
   );

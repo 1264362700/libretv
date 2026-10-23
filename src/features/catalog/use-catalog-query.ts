@@ -9,8 +9,6 @@ import { validateSourceUrl } from '@/lib/utils';
 import { isShortDramaTitle } from '@/lib/short-drama';
 import { useAppStore, resolveSource, isInDisabledSubscription, isSourceDisabled } from '@/lib/store';
 import type { SourceSearchOutcome, DoubanItem } from '@/lib/types';
-import { fetchDoubanFilter } from '@/lib/douban-api';
-import { fetchDoubanCollectionItems } from '@/lib/media-library-service';
 import { CHANNELS, type ChannelType } from '@/lib/channels';
 import {
   CATALOG_SOURCES,
@@ -26,9 +24,6 @@ export interface CatalogFilterChanges {
   source?: string;
   cmsSource?: string;
   cmsTypeId?: string;
-  iqiyiMode?: 'hot' | 'latest';
-  weekday?: string;
-  subTab?: string;
   region?: string;
   genre?: string;
   year?: string;
@@ -40,7 +35,7 @@ export interface CatalogFilterChanges {
 
 /**
  * 片库页筛选器与 URL 同步 Hook：
- * 统一解析路由查询参数、点播源可用性过滤以及筛选条件更新。
+ * 统一解析路由查询参数、点播源可用性过滤以及 TMDB 四维筛选条件更新。
  */
 export function useCatalogFilters() {
   const router = useRouter();
@@ -52,15 +47,12 @@ export function useCatalogFilters() {
     : 'movie';
 
   const rawSource = searchParams.get('source') as CatalogSourceId | null;
-  const availableSources = CHANNEL_SOURCES[currentChannel] || ['cms', 'iqiyi', '360', 'douban'];
+  const availableSources = CHANNEL_SOURCES[currentChannel] || ['tmdb'];
   const currentSource: CatalogSourceId =
     rawSource && availableSources.includes(rawSource) ? rawSource : availableSources[0];
 
   const rawCmsSourceKey = searchParams.get('cmsSource');
   const rawCmsTypeId = searchParams.get('cmsTypeId') || '';
-  const currentIqiyiMode = (searchParams.get('iqiyiMode') === 'latest' ? 'latest' : 'hot') as 'hot' | 'latest';
-  const currentWeekday = searchParams.get('weekday') || '全部';
-  const currentDoubanSubTab = searchParams.get('subTab') || (currentChannel === 'movie' ? 'weekly' : 'chinese');
 
   const currentRegion = searchParams.get('region') || '全部';
   const currentGenre = searchParams.get('genre') || '全部';
@@ -127,13 +119,11 @@ export function useCatalogFilters() {
       sp.set('type', changes.type);
       sp.delete('region');
       sp.delete('genre');
-      sp.delete('weekday');
-      sp.delete('subTab');
       sp.delete('cmsTypeId');
       sp.delete('q');
       sp.delete('wd');
       sp.set('page', '1');
-      const validSources = CHANNEL_SOURCES[changes.type as ChannelType] || ['cms', 'iqiyi', '360', 'douban'];
+      const validSources = CHANNEL_SOURCES[changes.type as ChannelType] || ['tmdb'];
       if (!validSources.includes(currentSource)) {
         sp.set('source', validSources[0]);
       }
@@ -152,19 +142,6 @@ export function useCatalogFilters() {
     if (changes.cmsTypeId !== undefined) {
       if (!changes.cmsTypeId) sp.delete('cmsTypeId');
       else sp.set('cmsTypeId', changes.cmsTypeId);
-      sp.set('page', '1');
-    }
-    if (changes.iqiyiMode !== undefined) {
-      sp.set('iqiyiMode', changes.iqiyiMode);
-      sp.set('page', '1');
-    }
-    if (changes.weekday !== undefined) {
-      if (changes.weekday === '全部') sp.delete('weekday');
-      else sp.set('weekday', changes.weekday);
-      sp.set('page', '1');
-    }
-    if (changes.subTab !== undefined) {
-      sp.set('subTab', changes.subTab);
       sp.set('page', '1');
     }
     if (changes.region !== undefined) {
@@ -214,7 +191,7 @@ export function useCatalogFilters() {
   };
 
   const resetAllFilters = () => {
-    router.push(`/catalog?type=${currentChannel}&source=360`, { scroll: false });
+    router.push(`/catalog?type=${currentChannel}`, { scroll: false });
   };
 
   const hasActiveFilters =
@@ -233,9 +210,6 @@ export function useCatalogFilters() {
     currentChannel,
     currentSource,
     rawCmsTypeId,
-    currentIqiyiMode,
-    currentWeekday,
-    currentDoubanSubTab,
     currentRegion,
     currentGenre,
     currentYear,
@@ -262,7 +236,7 @@ export function useCatalogFilters() {
 
 /**
  * 片库数据查询 Hook：
- * 统一封装跨站流式直搜（vodSearchQuery）与分类多维片库查询（catalogQuery）。
+ * 统一封装跨站流式直搜（vodSearchQuery）与 TMDB 官方四维分类片库查询（catalogQuery）。
  */
 export function useCatalogData(filters: ReturnType<typeof useCatalogFilters>) {
   const {
@@ -270,9 +244,6 @@ export function useCatalogData(filters: ReturnType<typeof useCatalogFilters>) {
     currentSource,
     activeCmsSource,
     rawCmsTypeId,
-    currentIqiyiMode,
-    currentWeekday,
-    currentDoubanSubTab,
     currentRegion,
     currentGenre,
     currentYear,
@@ -286,12 +257,6 @@ export function useCatalogData(filters: ReturnType<typeof useCatalogFilters>) {
   } = filters;
 
   const [streamedOutcomes, setStreamedOutcomes] = useState<SourceSearchOutcome[]>([]);
-
-  const queryTag = useMemo(() => {
-    if (currentRegion !== '全部') return currentRegion;
-    if (currentGenre !== '全部') return currentGenre;
-    return '热门';
-  }, [currentRegion, currentGenre]);
 
   const vodSearchQuery = useQuery({
     queryKey: ['catalog-vod-search', urlQuery, selectedKeys, yellowFilter],
@@ -318,15 +283,11 @@ export function useCatalogData(filters: ReturnType<typeof useCatalogFilters>) {
 
   const catalogQuery = useQuery({
     queryKey: [
-      'catalog',
+      'tmdb-catalog',
       currentChannel,
       currentSource,
       activeCmsSource?.key,
       rawCmsTypeId,
-      currentIqiyiMode,
-      currentWeekday,
-      currentDoubanSubTab,
-      queryTag,
       currentRegion,
       currentGenre,
       currentYear,
@@ -361,112 +322,28 @@ export function useCatalogData(filters: ReturnType<typeof useCatalogFilters>) {
         return { items: [], total: 0, pagecount: 1, subCategories: [] };
       }
 
-      let tags = '电影';
-      if (currentChannel === 'tv' || currentChannel === 'short_drama') tags = '电视剧';
-      else if (currentChannel === 'anime') tags = '动漫';
-      else if (currentChannel === 'variety') tags = '综艺';
-      else if (currentChannel === 'documentary') tags = '纪录片';
-      else if (currentChannel === 'ai_comic') tags = '动漫';
-      else if (currentChannel === 'movie_commentary') tags = '电影';
+      // 默认统一走 TMDB 官方资料库接口 (/api/tmdb)
+      const q = new URLSearchParams({
+        type: currentChannel,
+        page: String(currentPage),
+        sort: currentSort,
+      });
+      if (currentRegion && currentRegion !== '全部') q.set('area', currentRegion);
+      if (currentGenre && currentGenre !== '全部') q.set('genre', currentGenre);
+      if (currentYear && currentYear !== '全部') q.set('year', currentYear);
+      if (catalogKeyword) q.set('q', catalogKeyword);
 
-      let sort = 'U';
-      if (currentSort === 'time') sort = 'R';
-      else if (currentSort === 'rank') sort = 'S';
-
-      let genres = '';
-      if (currentChannel === 'short_drama') {
-        genres = currentGenre !== '全部' ? currentGenre : '短片';
-      } else if (currentGenre !== '全部') {
-        genres = currentGenre;
-      }
-
-      let countries = '';
-      if (currentRegion !== '全部') {
-        if (currentRegion === '大陆') countries = '中国大陆';
-        else if (currentRegion === '香港') countries = '中国香港';
-        else if (currentRegion === '台湾') countries = '中国台湾';
-        else countries = currentRegion;
-      }
-
-      let yearRange = '';
-      if (currentYear !== '全部') {
-        if (/^\d{4}$/.test(currentYear)) {
-          yearRange = `${currentYear},${currentYear}`;
-        } else if (currentYear.includes('年代')) {
-          const baseYear = parseInt(currentYear, 10);
-          if (baseYear) yearRange = `${baseYear},${baseYear + 9}`;
-        }
-      }
-
-      const start = (currentPage - 1) * PAGE_SIZE;
-
-      try {
-        const res = await fetchDoubanFilter(
-          {
-            tags,
-            sort,
-            start,
-            genres: genres || undefined,
-            countries: countries || undefined,
-            yearRange: yearRange || undefined,
-          },
-          signal
-        );
-
-        let mappedItems: DoubanItem[] = res.items.map((item) => ({
-          id: item.id,
-          title: item.title,
-          cover: item.cover,
-          rating: item.rate,
-          year: item.year,
-        }));
-
-        if (mappedItems.length === 0) {
-          const fallbackCollectionId =
-            currentChannel === 'movie'
-              ? 'movie_hot'
-              : currentChannel === 'anime'
-                ? 'tv_animation'
-                : currentChannel === 'variety'
-                  ? 'tv_variety_show'
-                  : 'tv_hot';
-          const fallbackRes = await fetchDoubanCollectionItems(fallbackCollectionId, start, PAGE_SIZE, signal);
-          mappedItems = fallbackRes.items.map((it) => ({
-            id: it.id,
-            title: it.title,
-            cover: it.cover,
-            rating: it.rating,
-            year: it.year,
-          }));
-        }
-
-        if (currentSort === 'rank') {
-          mappedItems.sort((a, b) => {
-            const rA = parseFloat(a.rating || '0') || 0;
-            const rB = parseFloat(b.rating || '0') || 0;
-            if (rA !== rB) return rB - rA;
-            const yA = parseInt(String(a.year || '').match(/\b(19\d{2}|20\d{2})\b/)?.[1] || '0', 10);
-            const yB = parseInt(String(b.year || '').match(/\b(19\d{2}|20\d{2})\b/)?.[1] || '0', 10);
-            return yB - yA;
-          });
-        } else if (currentSort === 'time') {
-          mappedItems.sort((a, b) => {
-            const yA = parseInt(String(a.year || '').match(/\b(19\d{2}|20\d{2})\b/)?.[1] || '0', 10);
-            const yB = parseInt(String(b.year || '').match(/\b(19\d{2}|20\d{2})\b/)?.[1] || '0', 10);
-            return yB - yA;
-          });
-        }
-
-        return {
-          items: mappedItems,
-          total: 500,
-          pagecount: 25,
-          subCategories: [],
-        };
-      } catch (err) {
-        console.warn('[Catalog] 豆瓣多维筛选接口异常，已启用保底:', err);
+      const res = await fetch(`/api/tmdb?${q.toString()}`, { signal });
+      if (!res.ok) {
         return { items: [], total: 0, pagecount: 1, subCategories: [] };
       }
+      const data = await res.json();
+      return {
+        items: Array.isArray(data.items) ? data.items : [],
+        total: data.total || 0,
+        pagecount: data.totalPages || 1,
+        subCategories: [],
+      };
     },
     staleTime: 5 * 60_000,
     enabled: !urlQuery,
@@ -478,7 +355,7 @@ export function useCatalogData(filters: ReturnType<typeof useCatalogFilters>) {
       ? rawItems
       : rawItems.filter((item: DoubanItem) => !isShortDramaTitle(item.title));
 
-  const total = catalogQuery.data?.total ?? (items.length > 0 ? items.length * 10 : 0);
+  const total = catalogQuery.data?.total ?? items.length;
   const totalPages = Math.max(
     1,
     Math.min(500, catalogQuery.data?.pagecount ?? Math.ceil(total / PAGE_SIZE))

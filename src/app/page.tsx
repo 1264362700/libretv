@@ -6,7 +6,6 @@ import { useQuery } from '@tanstack/react-query';
 import { Header } from '@/components/header';
 import { HeroBillboardBanner } from '@/components/hero-billboard-banner';
 import { MediaCarouselRow } from '@/components/media-carousel-row';
-import { WeeklySchedule } from '@/components/weekly-schedule';
 import { RecommendSection } from '@/components/douban-section';
 import { ContinueWatchingRow } from '@/components/continue-watching-row';
 import { AggregatedCard, aggregateResults } from '@/components/video-card';
@@ -29,7 +28,6 @@ import { EmptyState } from '@/components/states';
 import { SiteFooter } from '@/components/site-footer';
 import {
   fetchDoubanCollectionItems,
-  fetchBangumiSchedule,
   syncRecentUpdates,
   type MediaItem,
 } from '@/lib/media-library-service';
@@ -61,7 +59,7 @@ function HomeContent() {
   const [streamedOutcomes, setStreamedOutcomes] = useState<SourceSearchOutcome[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // 收集当前可用源，首个为主力源
+  // 收集当前可用播放采集源
   const selectedSources = useMemo(() => {
     const seen = new Set<string>();
     return selectedKeys
@@ -77,7 +75,7 @@ function HomeContent() {
 
   const masterSource = selectedSources[0] || envSources[0];
 
-  // 1. 主力采集源最近更新静默对齐服务 (RecentUpdatesSyncer)
+  // 1. 主力采集源最近更新静默对齐服务 (用于匹配更新集数角标)
   const recentUpdatesQuery = useQuery({
     queryKey: ['recent-updates-syncer', masterSource?.key],
     queryFn: ({ signal }) => syncRecentUpdates(masterSource, signal),
@@ -89,70 +87,30 @@ function HomeContent() {
     return recentUpdatesQuery.data?.remarksMap ?? new Map<string, string>();
   }, [recentUpdatesQuery.data]);
 
-  const recentList = useMemo(() => {
-    return recentUpdatesQuery.data?.recentList ?? [];
-  }, [recentUpdatesQuery.data]);
-
-  // 2. Bangumi 每周放送日历 (追番新番表)
-  const bangumiQuery = useQuery({
-    queryKey: ['home-bangumi-schedule'],
-    queryFn: ({ signal }) => fetchBangumiSchedule(signal),
-    staleTime: 60 * 60_000,
-    enabled: !urlQuery,
-  });
-
-  // 3. 固定横向分类海报轨道数据
-  const hotMoviesQuery = useQuery({
-    queryKey: ['home-hot-movies'],
-    queryFn: ({ signal }) => fetchDoubanCollectionItems('movie_hot', 0, 14, signal),
+  // 2. TMDB 全球 4K 趋势大片（供首屏 Hero 巨幕使用）
+  const trendingHeroQuery = useQuery({
+    queryKey: ['home-tmdb-trending-hero'],
+    queryFn: ({ signal }) => fetchDoubanCollectionItems('trending', 0, 8, signal),
     staleTime: 30 * 60_000,
     enabled: !urlQuery,
   });
 
-  const hotTvsQuery = useQuery({
-    queryKey: ['home-hot-tvs'],
-    queryFn: ({ signal }) => fetchDoubanCollectionItems('tv_hot', 0, 14, signal),
-    staleTime: 30 * 60_000,
-    enabled: !urlQuery,
-  });
-
-  // 4. 首屏巨幕轮播大片：直接从已获取的热门电影/电视剧中截取，消除 2 次重复跨洋请求
   const heroBillboardItems = useMemo(() => {
-    const movies = hotMoviesQuery.data?.items ?? [];
-    const tvs = hotTvsQuery.data?.items ?? [];
-    const combined = [...movies.slice(0, 3), ...tvs.slice(0, 3)];
-    return combined.slice(0, 6);
-  }, [hotMoviesQuery.data, hotTvsQuery.data]);
+    return (trendingHeroQuery.data?.items ?? []).slice(0, 6);
+  }, [trendingHeroQuery.data]);
 
-  const top250Query = useQuery({
-    queryKey: ['home-top250-movies'],
+  // 3. TMDB 影史高分殿堂
+  const topRatedQuery = useQuery({
+    queryKey: ['home-tmdb-top-rated'],
     queryFn: ({ signal }) => fetchDoubanCollectionItems('movie_top250', 0, 14, signal),
     staleTime: 60 * 60_000,
     enabled: !urlQuery,
   });
 
-  const animeVarietyQuery = useQuery({
-    queryKey: ['home-anime-variety'],
-    queryFn: async ({ signal }) => {
-      const [anime, variety] = await Promise.all([
-        fetchDoubanCollectionItems('tv_animation', 0, 8, signal),
-        fetchDoubanCollectionItems('tv_variety_show', 0, 8, signal),
-      ]);
-      return [...anime.items, ...variety.items];
-    },
-    staleTime: 30 * 60_000,
-    enabled: !urlQuery,
-  });
-
-
-
-  // 播放前强制校验登录并直通播放页
+  // 播放前强制校验登录并直通 LibreTV 多源测速播放页
   const handlePlayMedia = (item: MediaItem) => {
-    const isDoubanId = /^\d+$/.test(item.id);
-    const doubanId = isDoubanId ? item.id : undefined;
     const watchUrl = buildWatchUrl({
       title: item.title,
-      doubanId,
       year: item.year,
     });
     if (!verified) {
@@ -162,8 +120,6 @@ function HomeContent() {
     router.push(watchUrl);
   };
 
-  /** RecommendSection 的 onPick 契约为「纯片名」，这里把片名包装成 MediaItem
-   *  复用 handlePlayMedia 的登录校验与跳转逻辑，避免重复实现 */
   const handlePickByTitle = (title: string) => {
     handlePlayMedia({
       id: '',
@@ -172,7 +128,6 @@ function HomeContent() {
     });
   };
 
-  // URL 驱动搜索逻辑
   useEffect(() => {
     if (urlQuery) setInput(urlQuery);
   }, [urlQuery]);
@@ -195,7 +150,7 @@ function HomeContent() {
     runSearch(kw);
   };
 
-  // 搜索 Query
+  // 全网多采集源流式并发搜索
   const searchQuery = useQuery({
     queryKey: ['search', urlQuery, selectedSources.map((s) => s.key).sort().join(','), yellowFilter],
     queryFn: ({ signal }) => {
@@ -223,22 +178,20 @@ function HomeContent() {
 
   return (
     <div className="min-h-screen flex flex-col bg-page text-content transition-colors duration-200">
-      {/* 1. 顶部沉浸式毛玻璃导航栏 */}
       <Header />
 
-      <main className="relative flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6 pb-24 md:pb-6 overflow-x-hidden">
-        {/* 搜索模式：直接展示搜索结果 */}
+      <main className="relative flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6 pb-24 md:pb-8 overflow-x-hidden">
         {urlQuery ? (
           <section className="space-y-4">
-            <div className="flex items-center justify-between py-2 border-b border-line">
-              <h2 className="text-lg font-bold text-content flex items-center gap-2">
-                <span>🔍 搜索结果:</span>
+            <div className="flex items-center justify-between py-2.5 px-4 rounded-2xl ios-glass">
+              <h2 className="text-base sm:text-lg font-bold text-content flex items-center gap-2">
+                <span>🔍 全网播放源聚合搜索:</span>
                 <span className="text-accent">“{urlQuery}”</span>
               </h2>
               <button
                 type="button"
                 onClick={() => router.push('/')}
-                className="text-xs text-muted hover:text-content px-3 py-1.5 rounded-lg bg-chip hover:bg-hover transition-colors cursor-pointer border border-line/50"
+                className="text-xs text-muted hover:text-content px-3.5 py-1.5 rounded-full ios-pill transition-all cursor-pointer"
               >
                 返回首页大厅
               </button>
@@ -246,7 +199,7 @@ function HomeContent() {
 
             {visibleGroups.length > 0 ? (
               <>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3.5 sm:gap-4">
                   {visibleGroups.map((group) => (
                     <AggregatedCard
                       key={group.key}
@@ -262,7 +215,10 @@ function HomeContent() {
                               sourceUrl: it.sourceUrl,
                               remarks: it.remarks,
                             }));
-                            sessionStorage.setItem(`libretv:matched:${primary.sourceKey}:${primary.vodId}`, JSON.stringify(cached));
+                            sessionStorage.setItem(
+                              `libretv:matched:${primary.sourceKey}:${primary.vodId}`,
+                              JSON.stringify(cached)
+                            );
                           } catch {}
                         }
                         const watchUrl = buildWatchUrl({
@@ -284,7 +240,7 @@ function HomeContent() {
                 {visibleCount < groups.length && (
                   <div className="flex justify-center mt-6">
                     <button
-                      className="px-6 py-2.5 rounded-xl bg-chip hover:bg-hover text-xs font-semibold text-content border border-line/60 transition-all cursor-pointer"
+                      className="px-6 py-2.5 rounded-full ios-pill text-xs font-semibold text-content hover:opacity-90 transition-all cursor-pointer"
                       onClick={() => setVisibleCount((v) => v + RESULT_PAGE_SIZE)}
                     >
                       加载更多（还剩 {groups.length - visibleCount} 部）
@@ -293,7 +249,9 @@ function HomeContent() {
                 )}
               </>
             ) : isSearching ? (
-              <div className="py-20 text-center text-muted">正在流式并发检索几十个苹果CMS播放源…</div>
+              <div className="py-20 text-center text-muted ios-glass rounded-3xl">
+                正在流式并发检索全网点播采集源…
+              </div>
             ) : (
               <EmptyState
                 icon="search"
@@ -304,9 +262,8 @@ function HomeContent() {
             )}
           </section>
         ) : (
-          /* 流媒体暗黑大厅 6 层标准布局 */
-          <div className="space-y-10 animate-fade-in">
-            {/* 2. 首屏巨幕轮播区 (Hero Billboard Banner) */}
+          <div className="space-y-8 animate-fade-in">
+            {/* 1. 首屏 4K 宽画幅巨幕轮播 (TMDB Official) */}
             <HeroBillboardBanner
               items={heroBillboardItems}
               cmsRemarksMap={cmsRemarksMap}
@@ -314,7 +271,7 @@ function HomeContent() {
               onDetail={handlePlayMedia}
             />
 
-            {/* 搜索胶囊栏（带防抖联想与热词） */}
+            {/* 2. iOS 27 悬浮空间液态毛玻璃搜索舱 */}
             <section className="flex flex-col items-center">
               <div ref={searchHistory.containerRef} className="relative w-full max-w-2xl">
                 <form
@@ -326,17 +283,15 @@ function HomeContent() {
                 >
                   <div
                     className={cn(
-                      'flex items-stretch min-h-12 pl-4 border transition-all duration-200',
-                      searchHistory.visible
-                        ? 'rounded-t-xl rounded-b-none border-accent bg-surface-raised shadow-lg'
-                        : 'rounded-xl border-line bg-surface/90 hover:border-accent/40 focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/30 shadow-sm'
+                      'flex items-stretch min-h-12 pl-5 pr-1.5 py-1.5 transition-all duration-200 ios-glass',
+                      searchHistory.visible ? 'rounded-t-2xl rounded-b-none' : 'rounded-full'
                     )}
                   >
                     <input
                       ref={inputRef}
                       role="combobox"
-                      className="flex-1 min-w-0 pr-2 bg-transparent text-sm text-content placeholder:text-faint focus:outline-none"
-                      placeholder="搜索全网海量电影、电视剧、动漫、短剧..."
+                      className="flex-1 min-w-0 pr-3 bg-transparent text-sm text-content placeholder:text-faint focus:outline-none"
+                      placeholder="搜索全网电影、剧集、动漫，多源并发测速秒播..."
                       value={input}
                       maxLength={100}
                       aria-autocomplete="list"
@@ -351,9 +306,9 @@ function HomeContent() {
                     />
                     <button
                       type="submit"
-                      className="px-5 bg-accent hover:bg-accent-hover text-on-accent text-xs font-bold rounded-r-xl transition-all active:scale-95 cursor-pointer"
+                      className="px-6 rounded-full ios-pill-active text-xs font-semibold transition-all active:scale-95 cursor-pointer"
                     >
-                      搜索
+                      全网搜索
                     </button>
                   </div>
                 </form>
@@ -370,15 +325,14 @@ function HomeContent() {
                 )}
               </div>
 
-              {/* 热门搜索推荐词 */}
               <div className="flex flex-wrap items-center justify-center gap-1.5 mt-3 max-w-2xl">
-                <span className="text-[11px] text-faint">大家都在搜:</span>
+                <span className="text-[11px] text-faint">热门搜索:</span>
                 {TRENDING_SEARCH_KEYWORDS.slice(0, 6).map((kw) => (
                   <button
                     key={kw}
                     type="button"
                     onClick={() => pickHistory(kw)}
-                    className="text-[11px] text-muted hover:text-accent hover:bg-chip px-2 py-0.5 rounded-md transition-colors cursor-pointer"
+                    className="text-[11px] text-muted hover:text-content px-2.5 py-0.5 rounded-full ios-pill transition-colors cursor-pointer"
                   >
                     {kw}
                   </button>
@@ -386,7 +340,7 @@ function HomeContent() {
               </div>
             </section>
 
-            {/* 2.5 首屏继续观看 & 我的追剧更新提醒专区（单行横向滚动，无记录时自动隐藏） */}
+            {/* 3. 继续观看与追剧进度轨道 */}
             <ContinueWatchingRow
               cmsRemarksMap={cmsRemarksMap}
               onNavigate={(watchUrl) => {
@@ -398,84 +352,22 @@ function HomeContent() {
               }}
             />
 
-            {/* 3. 推荐数据源专区（置于搜索栏下方，轻量流媒体轨道风格） */}
+            {/* 4. 核心片库舞台：TMDB 多维探索网格 (左 9 列) + TMDB 全球热力榜 TOP 10 (右 3 列) */}
             <Suspense fallback={null}>
               <RecommendSection onPick={handlePickByTitle} />
             </Suspense>
 
-            {/* 3. 板块一：「📡 实时连载 · 今日最新更新剧集/动漫」（横向滑动轨道） */}
-            {recentList.length > 0 && (
-              <MediaCarouselRow
-                title="实时连载 · 今日最新更新"
-                subTitle="采集源最新出炉剧集 · 呼吸灯高亮秒播"
-                icon="📡"
-                badge="刚刚更新"
-                items={recentList.slice(0, 16)}
-                cmsRemarksMap={cmsRemarksMap}
-                onPick={handlePlayMedia}
-                isLoading={recentUpdatesQuery.isLoading}
-              />
-            )}
-
-            {/* 4. 板块二：「📅 每日追番 / 追剧放送表」（周历切换组件） */}
-            <WeeklySchedule
-              schedule={bangumiQuery.data ?? []}
-              cmsRemarksMap={cmsRemarksMap}
-              onPick={handlePlayMedia}
-              isLoading={bangumiQuery.isLoading}
-            />
-
-            {/* 5. 板块三 ~ 五：分类海报楼层（热门电影与热播剧集启用 9zhoukj 左图右榜双栏 TOP 10 飙升榜） */}
+            {/* 5. TMDB 影史高分殿堂横向精选轨道 */}
             <MediaCarouselRow
-              title="正在热映 · 热门电影榜"
-              subTitle="院线热映 · 高分大片"
-              icon="🎬"
-              badge="豆瓣热榜"
-              moreHref="/catalog?type=movie"
-              items={hotMoviesQuery.data?.items ?? []}
-              cmsRemarksMap={cmsRemarksMap}
-              onPick={handlePlayMedia}
-              isLoading={hotMoviesQuery.isLoading}
-              showHotRank
-              rankTitle="电影热播飙升榜 TOP 10"
-            />
-
-            <MediaCarouselRow
-              title="近期霸屏 · 热播电视剧榜"
-              subTitle="华语热剧 · 精彩连载"
-              icon="📺"
-              badge="热播剧集"
-              moreHref="/catalog?type=tv"
-              items={hotTvsQuery.data?.items ?? []}
-              cmsRemarksMap={cmsRemarksMap}
-              onPick={handlePlayMedia}
-              isLoading={hotTvsQuery.isLoading}
-              showHotRank
-              rankTitle="剧集热播霸屏榜 TOP 10"
-            />
-
-            <MediaCarouselRow
-              title="口碑神作 · 豆瓣高分经典榜"
-              subTitle="殿堂级影史神作 · 值得反复重温"
+              title="TMDB 影史高分殿堂"
+              subTitle="全球影迷高分认证 · 4K 典藏佳作"
               icon="🏆"
-              badge="Top 250"
+              badge="TMDB Top Rated"
               moreHref="/catalog?type=movie&sort=rank"
-              items={top250Query.data?.items ?? []}
+              items={topRatedQuery.data?.items ?? []}
               cmsRemarksMap={cmsRemarksMap}
               onPick={handlePlayMedia}
-              isLoading={top250Query.isLoading}
-            />
-
-            <MediaCarouselRow
-              title="二次元 & 热门综艺"
-              subTitle="高人气新番动画 · 爆笑下饭综艺"
-              icon="⚡"
-              badge="动漫综艺"
-              moreHref="/catalog?type=anime"
-              items={animeVarietyQuery.data ?? []}
-              cmsRemarksMap={cmsRemarksMap}
-              onPick={handlePlayMedia}
-              isLoading={animeVarietyQuery.isLoading}
+              isLoading={topRatedQuery.isLoading}
             />
           </div>
         )}

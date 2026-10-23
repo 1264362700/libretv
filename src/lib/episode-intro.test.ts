@@ -1,5 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getEpisodeIntro } from './episode-intro';
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe('episode-intro 分集剧情介绍模块', () => {
   it('缺少标题或非法集数时安全返回 ok: false', async () => {
@@ -23,6 +27,14 @@ describe('episode-intro 分集剧情介绍模块', () => {
   });
 
   it('无上游分集剧情且无外部源时返回优雅结构化兜底', async () => {
+    vi.stubGlobal('fetch', () =>
+      Promise.resolve(
+        new Response(JSON.stringify({ list: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      )
+    );
     const res = await getEpisodeIntro('极其冷门的自制剧集999XYZ', 5, 'tv');
     expect(res.ok).toBe(true);
     expect(res.episode).toBe(5);

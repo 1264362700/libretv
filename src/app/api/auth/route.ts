@@ -5,6 +5,7 @@ import {
   sessionFromCookieHeader,
   signSession,
   clearRateLimit,
+  type RateLimitScope,
 } from '@/lib/auth';
 import {
   verifyUserCredentials,
@@ -38,13 +39,6 @@ export async function POST(req: Request) {
     req.headers.get('x-real-ip') ||
     'unknown';
 
-  if (!checkRateLimit(ip)) {
-    return NextResponse.json(
-      { success: false, error: '尝试过于频繁，请 10 分钟后再试' },
-      { status: 429 }
-    );
-  }
-
   let body: { action?: string; username?: string; password?: string; inviteCode?: string };
   try {
     body = (await req.json()) as typeof body;
@@ -53,6 +47,15 @@ export async function POST(req: Request) {
   }
 
   const action = body.action || 'login';
+  // 注册与登录分开计数：试邀请码失败不该把用户的登录也锁住
+  const scope: RateLimitScope = action === 'register' ? 'register' : 'login';
+
+  if (!checkRateLimit(ip, scope)) {
+    return NextResponse.json(
+      { success: false, error: '尝试过于频繁，请 10 分钟后再试', retryAfterSec: 600 },
+      { status: 429 }
+    );
+  }
 
   // 1. 邀请码注册流程
   if (action === 'register') {
@@ -63,12 +66,12 @@ export async function POST(req: Request) {
     const regResult = registerWithInvite(username, password, inviteCode);
     if (!regResult.success || !regResult.user) {
       return NextResponse.json(
-        { success: false, error: regResult.error || '注册失败' },
+        { success: false, error: regResult.error || '注册失败', field: regResult.field },
         { status: 400 }
       );
     }
 
-    clearRateLimit(ip);
+    clearRateLimit(ip, 'register');
     const { token, expiresAt } = signSession(regResult.user);
     const res = NextResponse.json({
       success: true,
@@ -94,7 +97,7 @@ export async function POST(req: Request) {
     );
   }
 
-  clearRateLimit(ip);
+  clearRateLimit(ip, 'login');
   const { token, expiresAt } = signSession(verifyResult.user);
   const res = NextResponse.json({
     success: true,

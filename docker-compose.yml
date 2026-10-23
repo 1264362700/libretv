@@ -22,6 +22,8 @@ services:
       - INITIAL_INVITE_CODES=${INITIAL_INVITE_CODES:-}
       # 必填：访问密码（在 .env 中设置，缺失时 compose 启动即报错提醒）
       - PASSWORD=${PASSWORD:?请在 .env 中设置 PASSWORD}
+      # TMDB 官方影视资料库 API Key（在 .env 或系统环境变量中设置）
+      - TMDB_API_KEY=${TMDB_API_KEY:-}
       # 可选：会话/代理签名密钥（多实例部署建议显式设置：openssl rand -hex 32）
       # - PROXY_SECRET=your-secret
       # 可选：Cookie Secure 策略覆盖（true=强制开启 / false=强制关闭；不设置时按请求协议自动推导，HTTP 部署无需配置）

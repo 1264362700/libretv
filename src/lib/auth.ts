@@ -154,23 +154,42 @@ export function sessionFromCookieHeader(cookieHeader: string | null): VerifySess
 // —— 登录速率限制（防暴力破解） ——
 
 const attemptMap = new Map<string, { count: number; resetAt: number }>();
-const MAX_ATTEMPTS = 10;
+
+/**
+ * 按动作分桶：登录要严格防暴破，注册则要容忍用户反复试错的邀请码。
+ * 两者共用过一个桶，出现过「试邀请码失败几次把自己的登录锁 10 分钟」的情况。
+ */
+export type RateLimitScope = 'login' | 'register';
+
+const MAX_ATTEMPTS: Record<RateLimitScope, number> = { login: 10, register: 20 };
 const WINDOW_MS = 10 * 60 * 1000;
 
-export function checkRateLimit(ip: string): boolean {
+function rateKey(ip: string, scope: RateLimitScope): string {
+  return `${scope}:${ip}`;
+}
+
+export function checkRateLimit(ip: string, scope: RateLimitScope = 'login'): boolean {
+  const key = rateKey(ip, scope);
   const now = Date.now();
-  const entry = attemptMap.get(ip);
+  const entry = attemptMap.get(key);
   if (!entry || now > entry.resetAt) {
-    attemptMap.set(ip, { count: 1, resetAt: now + WINDOW_MS });
+    attemptMap.set(key, { count: 1, resetAt: now + WINDOW_MS });
     return true;
   }
-  if (entry.count >= MAX_ATTEMPTS) return false;
+  if (entry.count >= MAX_ATTEMPTS[scope]) return false;
   entry.count += 1;
   return true;
 }
 
-export function clearRateLimit(ip: string): void {
-  attemptMap.delete(ip);
+/** 剩余可用次数，用于给前端「还能试几次」的提示 */
+export function remainingAttempts(ip: string, scope: RateLimitScope = 'login'): number {
+  const entry = attemptMap.get(rateKey(ip, scope));
+  if (!entry || Date.now() > entry.resetAt) return MAX_ATTEMPTS[scope];
+  return Math.max(0, MAX_ATTEMPTS[scope] - entry.count);
+}
+
+export function clearRateLimit(ip: string, scope: RateLimitScope = 'login'): void {
+  attemptMap.delete(rateKey(ip, scope));
 }
 
 if (typeof setInterval === 'function') {

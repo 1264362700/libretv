@@ -85,6 +85,7 @@ PASSWORD=your-password npm start   # 监听 8080
 | 变量 | 必填 | 说明 |
 | --- | --- | --- |
 | `PASSWORD` | 是 | 访问密码；未设置时站点会提示管理员配置 |
+| `TMDB_API_KEY` | 否 | TMDB 官方影视资料库 v3 API Key；配置后全站首页与片库接入 TMDB 4K 全球影视资料库 |
 | `PROXY_SECRET` | 否 | 会话/代理签名密钥；不设置时从 PASSWORD 派生（多实例部署建议显式设置） |
 | `DEFAULT_SOURCES` | 否 | 预置采集站（JSON 数组），用户端自动出现且默认勾选 |
 | `REQUEST_TIMEOUT` | 否 | 代理上游请求超时（毫秒），默认 8000 |

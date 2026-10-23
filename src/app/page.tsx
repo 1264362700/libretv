@@ -8,6 +8,7 @@ import { HeroBillboardBanner } from '@/components/hero-billboard-banner';
 import { MediaCarouselRow } from '@/components/media-carousel-row';
 import { WeeklySchedule } from '@/components/weekly-schedule';
 import { RecommendSection } from '@/components/douban-section';
+import { ContinueWatchingRow } from '@/components/continue-watching-row';
 import { AggregatedCard, aggregateResults } from '@/components/video-card';
 import {
   useAppStore,
@@ -384,6 +385,18 @@ function HomeContent() {
                 ))}
               </div>
             </section>
+
+            {/* 2.5 首屏继续观看 & 我的追剧更新提醒专区（单行横向滚动，无记录时自动隐藏） */}
+            <ContinueWatchingRow
+              cmsRemarksMap={cmsRemarksMap}
+              onNavigate={(watchUrl) => {
+                if (!verified) {
+                  router.push(`/login?redirect=${encodeURIComponent(watchUrl)}`);
+                  return;
+                }
+                router.push(watchUrl);
+              }}
+            />
 
             {/* 3. 推荐数据源专区（置于搜索栏下方，轻量流媒体轨道风格） */}
             <Suspense fallback={null}>

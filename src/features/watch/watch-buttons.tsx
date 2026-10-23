@@ -18,8 +18,9 @@ export function EpisodeButton({ index, active, onClick }: { index: number; activ
   return (
     <button
       ref={ref}
+      type="button"
       className={cn(
-        'btn btn-sm !px-1 h-9 font-medium text-xs rounded-lg transition-all',
+        'btn btn-sm !px-1 h-9 font-medium text-xs rounded-lg transition-all focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none',
         active ? 'episode-active font-bold shadow-sm' : 'btn-ghost bg-surface hover:bg-hover'
       )}
       onClick={onClick}
@@ -33,7 +34,8 @@ export function BackButton() {
   const router = useRouter();
   return (
     <button
-      className="p-1.5 rounded-lg text-muted hover:text-content hover:bg-hover transition-colors shrink-0"
+      type="button"
+      className="p-1.5 rounded-lg text-muted hover:text-content hover:bg-hover transition-colors shrink-0 focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
       onClick={() => {
         if (window.history.length > 1) router.back();
         else router.push('/');
@@ -54,7 +56,7 @@ export function HomeButton() {
   return (
     <Link
       href="/"
-      className="p-1.5 rounded-lg text-muted hover:text-content hover:bg-hover transition-colors shrink-0"
+      className="p-1.5 rounded-lg text-muted hover:text-content hover:bg-hover transition-colors shrink-0 focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
       aria-label="回首页"
       title="回首页"
     >

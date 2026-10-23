@@ -70,6 +70,23 @@ export interface DownloadTaskEntry {
   updatedAt: number;
 }
 
+/** 追剧收藏夹条目（支持连载新集更新对比提醒） */
+export interface FavoriteEntry {
+  /** 主键：按归一化片名唯一标识，跨源通用 */
+  id: string;
+  title: string;
+  sourceKey?: string;
+  sourceUrl?: string;
+  vodId?: string;
+  pic?: string;
+  year?: string;
+  typeName?: string;
+  remarks?: string;
+  /** 用户上次观看或收藏时已知的更新集数（用于对比采集源最新 remarks 触发更新红点） */
+  lastKnownEpisodes?: number;
+  timestamp: number;
+}
+
 export const db = new Dexie('libretv') as Dexie & {
   history: EntityTable<HistoryEntry, 'id'>;
   progress: EntityTable<ProgressEntry, 'key'>;
@@ -77,6 +94,7 @@ export const db = new Dexie('libretv') as Dexie & {
   liveProbe: EntityTable<LiveProbeEntry & { url: string }, 'url'>;
   segmentMeta: EntityTable<SegmentMetaEntry, 'key'>;
   downloads: EntityTable<DownloadTaskEntry, 'id'>;
+  favorites: EntityTable<FavoriteEntry, 'id'>;
 };
 
 db.version(1).stores({
@@ -94,6 +112,11 @@ db.version(2).stores({
 db.version(3).stores({
   segmentMeta: 'key, episodeKey, lastAccess',
   downloads: 'id, createdAt',
+});
+
+// v4：追剧与想看收藏夹表
+db.version(4).stores({
+  favorites: 'id, title, timestamp',
 });
 
 export const MAX_HISTORY = 100;
@@ -204,6 +227,93 @@ export async function saveLiveProbeResults(entries: Record<string, LiveProbeEntr
 
 export async function clearLiveProbeResultsDb(): Promise<void> {
   await db.liveProbe.clear();
+}
+
+// —— 追剧收藏夹与新集更新检测 ——
+
+/** 从备注文本（如 "更新至24集"、"第18集"、"全40集"、"EP12"）中提取集数整数 */
+export function extractEpisodeNumber(remarks?: string): number {
+  if (!remarks) return 0;
+  const text = remarks.trim();
+  const match =
+    text.match(/(?:更新至|更至|至|第|全)\s*(\d{1,4})\s*[集话期]/i) ||
+    text.match(/(\d{1,4})\s*[集话期]全/i) ||
+    text.match(/\bEP\.?\s*(\d{1,4})\b/i);
+  if (match && match[1]) {
+    const n = parseInt(match[1], 10);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  }
+  return 0;
+}
+
+/** 对比收藏记录与最新采集源备注，判定是否有新集更新 */
+export function checkHasNewEpisodes(
+  fav: Pick<FavoriteEntry, 'lastKnownEpisodes' | 'remarks'>,
+  latestRemarks?: string
+): { hasUpdate: boolean; newCount: number; latestTotal: number; badgeText: string } {
+  const effectiveRemarks = latestRemarks || fav.remarks || '';
+  const latestTotal = extractEpisodeNumber(effectiveRemarks);
+  const baseline = fav.lastKnownEpisodes || extractEpisodeNumber(fav.remarks) || 0;
+
+  if (latestTotal > 0 && baseline > 0 && latestTotal > baseline) {
+    const diff = latestTotal - baseline;
+    return {
+      hasUpdate: true,
+      newCount: diff,
+      latestTotal,
+      badgeText: `更新 ${diff} 集 · 至${latestTotal}集`,
+    };
+  }
+  return {
+    hasUpdate: false,
+    newCount: 0,
+    latestTotal,
+    badgeText: effectiveRemarks || '追剧中',
+  };
+}
+
+export function favoriteIdOf(title: string): string {
+  return `fav_${(title || '').trim().toLowerCase()}`;
+}
+
+export async function toggleFavorite(
+  entry: Omit<FavoriteEntry, 'id' | 'timestamp'>
+): Promise<boolean> {
+  const id = favoriteIdOf(entry.title);
+  const existing = await db.favorites.get(id);
+  if (existing) {
+    await db.favorites.delete(id);
+    return false;
+  }
+  const epNum = entry.lastKnownEpisodes || extractEpisodeNumber(entry.remarks) || 0;
+  await db.favorites.put({
+    ...entry,
+    id,
+    lastKnownEpisodes: epNum > 0 ? epNum : undefined,
+    timestamp: Date.now(),
+  });
+  return true;
+}
+
+export async function removeFavorite(idOrTitle: string): Promise<void> {
+  const id = idOrTitle.startsWith('fav_') ? idOrTitle : favoriteIdOf(idOrTitle);
+  await db.favorites.delete(id);
+}
+
+export async function markFavoriteSeenEpisodes(
+  title: string,
+  latestEpisodes: number,
+  remarks?: string
+): Promise<void> {
+  const id = favoriteIdOf(title);
+  const existing = await db.favorites.get(id);
+  if (!existing) return;
+  const nextEp = Math.max(existing.lastKnownEpisodes || 0, latestEpisodes, extractEpisodeNumber(remarks));
+  await db.favorites.update(id, {
+    lastKnownEpisodes: nextEp > 0 ? nextEp : existing.lastKnownEpisodes,
+    remarks: remarks || existing.remarks,
+    timestamp: Date.now(),
+  });
 }
 
 // —— 配置导入导出（兼容旧版 LibreTV-Settings JSON 结构的导出格式） ——

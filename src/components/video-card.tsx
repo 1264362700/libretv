@@ -87,7 +87,7 @@ export function AggregatedCard({
 
   return (
     <div
-      className="group relative flex flex-col rounded-xl overflow-hidden cursor-pointer bg-card border border-line hover:border-accent/60 hover:shadow-xl hover:-translate-y-1 active:scale-95 transition-all duration-300 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 select-none touch-manipulation"
+      className="group relative flex flex-col rounded-xl overflow-hidden cursor-pointer bg-surface border border-line/60 hover:border-accent/60 hover:shadow-xl hover:-translate-y-1 active:scale-95 transition-all duration-300 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:border-accent focus-visible:-translate-y-1 select-none touch-manipulation"
       role="button"
       tabIndex={0}
       onClick={activate}
@@ -197,7 +197,7 @@ export function VideoCard({ item, onClick }: { item: SearchResultItem; onClick: 
 
   return (
     <div
-      className="group relative flex flex-col rounded-xl overflow-hidden cursor-pointer bg-card border border-line hover:border-accent/60 hover:shadow-xl hover:-translate-y-1 active:scale-95 transition-all duration-300 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 select-none touch-manipulation"
+      className="group relative flex flex-col rounded-xl overflow-hidden cursor-pointer bg-surface border border-line/60 hover:border-accent/60 hover:shadow-xl hover:-translate-y-1 active:scale-95 transition-all duration-300 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:border-accent focus-visible:-translate-y-1 select-none touch-manipulation"
       role="button"
       tabIndex={0}
       onClick={onClick}
@@ -298,7 +298,7 @@ export function DoubanCard({
 
   return (
     <div
-      className="group relative flex flex-col rounded-xl overflow-hidden cursor-pointer bg-surface border border-line/40 hover:border-accent/40 hover:shadow-xl hover:shadow-black/20 hover:-translate-y-1 active:scale-95 transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 touch-manipulation"
+      className="group relative flex flex-col rounded-xl overflow-hidden cursor-pointer bg-surface border border-line/60 hover:border-accent/60 hover:shadow-xl hover:shadow-black/20 hover:-translate-y-1 active:scale-95 transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:border-accent focus-visible:-translate-y-1 touch-manipulation"
       role="button"
       tabIndex={0}
       onClick={onClick}

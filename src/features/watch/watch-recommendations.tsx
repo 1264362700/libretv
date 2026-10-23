@@ -15,7 +15,7 @@ export interface WatchRecommendationsProps {
 }
 
 /**
- * 播放页底部「猜你喜欢」全宽智能推荐专区（纯 TMDB 官方引擎）
+ * 播放页底部「猜你喜欢」全宽智能推荐专区（4K 影视库官方引擎）
  */
 export function WatchRecommendations({
   videoTitle,
@@ -68,12 +68,12 @@ export function WatchRecommendations({
           <h2 className="text-base sm:text-lg font-bold text-content">猜你喜欢</h2>
           <span className="text-xs text-faint hidden sm:inline">
             {recommendCategory === 'tv'
-              ? 'TMDB 精选热门电视剧'
+              ? '精选热门电视剧'
               : recommendCategory === 'anime'
-                ? 'TMDB 精选热门动漫番剧'
+                ? '精选热门动漫番剧'
                 : recommendCategory === 'variety'
-                  ? 'TMDB 精选热门综艺节目'
-                  : 'TMDB 精选高分热门电影'}
+                  ? '精选热门综艺节目'
+                  : '精选高分热门电影'}
           </span>
         </div>
         <button

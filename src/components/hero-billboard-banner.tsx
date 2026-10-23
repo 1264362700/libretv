@@ -80,9 +80,9 @@ export function HeroBillboardBanner({
           >
             <BannerImage backdrop={slide.backdrop} cover={slide.cover} title={slide.title} />
             {/* High-Contrast Cinematic Gradient Vignettes */}
-            <div className="absolute inset-0 bg-gradient-to-t from-[#0B0F19] via-[#0B0F19]/65 to-transparent" />
-            <div className="absolute inset-0 bg-gradient-to-r from-[#0B0F19] via-[#0B0F19]/75 to-transparent w-full md:w-3/4" />
-            <div className="absolute inset-x-0 top-0 h-36 bg-gradient-to-b from-[#0B0F19]/85 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t from-page via-page/65 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-r from-page via-page/75 to-transparent w-full md:w-3/4" />
+            <div className="absolute inset-x-0 top-0 h-36 bg-gradient-to-b from-page/85 to-transparent" />
           </div>
         );
       })}
@@ -99,13 +99,13 @@ export function HeroBillboardBanner({
             </div>
 
             {/* Category Tag */}
-            <span className="px-2.5 py-1 rounded-full bg-white/10 border border-white/10 text-slate-200 text-xs font-medium">
-              {current.typeName || 'TMDB 4K 原画'}
+            <span className="px-2.5 py-1 rounded-full bg-chip/80 border border-line text-content text-xs font-medium">
+              {current.typeName || '4K 蓝光原画'}
             </span>
 
             {/* Year */}
             {current.year && (
-              <span className="px-2 py-0.5 rounded text-slate-400 text-xs font-mono">
+              <span className="px-2 py-0.5 rounded text-muted text-xs font-mono">
                 {current.year}
               </span>
             )}
@@ -122,23 +122,23 @@ export function HeroBillboardBanner({
           {/* Title */}
           <h1
             onClick={() => onPlay(current)}
-            className="text-3xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight drop-shadow-md leading-tight cursor-pointer hover:text-amber-400 transition-colors"
+            className="text-3xl sm:text-5xl lg:text-6xl font-black text-content tracking-tight drop-shadow-md leading-tight cursor-pointer hover:text-amber-500 dark:hover:text-amber-400 transition-colors"
           >
             {current.title}
           </h1>
 
           {/* Subtitle / Actors */}
           {current.card_subtitle && (
-            <p className="text-xs sm:text-sm text-amber-300/90 font-medium line-clamp-1">
+            <p className="text-xs sm:text-sm text-amber-500 dark:text-amber-300/90 font-medium line-clamp-1">
               {current.card_subtitle}
             </p>
           )}
 
           {/* Summary */}
-          <p className="text-xs sm:text-sm text-slate-300 line-clamp-2 leading-relaxed drop-shadow max-w-xl">
+          <p className="text-xs sm:text-sm text-muted line-clamp-2 leading-relaxed drop-shadow max-w-xl">
             {current.overview ||
               current.card_subtitle ||
-              'TMDB 全球 4K 原画臻选大片，支持全网多点播采集源流式并发测速秒播。'}
+              '全球 4K 原画臻选大片，支持全网多点播采集源流式并发测速秒播。'}
           </p>
 
           {/* 立即播放 / 详情 双按钮 */}
@@ -157,7 +157,7 @@ export function HeroBillboardBanner({
             <button
               type="button"
               onClick={() => (onDetail ? onDetail(current) : onPlay(current))}
-              className="flex items-center gap-2 px-5 py-3 rounded-xl glass-panel text-slate-200 hover:text-white font-medium text-sm sm:text-base hover:bg-white/10 transition-all duration-200 cursor-pointer"
+              className="flex items-center gap-2 px-5 py-3 rounded-xl glass-panel text-content hover:text-amber-500 dark:hover:text-amber-400 font-medium text-sm sm:text-base hover:bg-hover transition-all duration-200 cursor-pointer"
             >
               <svg className="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                 <circle cx="12" cy="12" r="10" />

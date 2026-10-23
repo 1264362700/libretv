@@ -77,23 +77,42 @@ body {
 
 /* NovaTV Glassmorphism & Cinema Glow Classes */
 .glass-panel {
-  background: rgba(19, 27, 42, 0.75);
+  background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
+}
+
+.dark .glass-panel {
+  background: rgba(19, 27, 42, 0.75);
   border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.5);
 }
 
 .glass-nav {
-  background: rgba(11, 15, 25, 0.82);
+  background: rgba(255, 255, 255, 0.88);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+}
+
+.dark .glass-nav {
+  background: rgba(11, 15, 25, 0.82);
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: none;
 }
 
 .glass-badge {
-  background: rgba(0, 0, 0, 0.55);
+  background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(15, 23, 42, 0.12);
+}
+
+.dark .glass-badge {
+  background: rgba(0, 0, 0, 0.55);
   border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
@@ -182,7 +201,7 @@ body {
     @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:border-accent;
   }
   .tag {
-    @apply inline-flex items-center text-xs px-2 py-0.5 rounded-full;
+    @apply inline-flex items-center text-xs px-2 py-0.5 rounded-full whitespace-nowrap shrink-0;
   }
   .btn-sm {
     @apply btn px-2.5 py-1 text-xs;

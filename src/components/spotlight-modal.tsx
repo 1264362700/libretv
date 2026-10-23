@@ -85,7 +85,7 @@ export function SpotlightModal({ open, onClose }: SpotlightModalProps) {
     enabled: open,
   });
 
-  // TMDB 实时海报联想：输入关键词时即时返回匹配的影视条目与海报
+  // 实时海报联想：输入关键词时即时返回匹配的影视条目与海报
   const suggestQuery = useQuery({
     queryKey: ['spotlight-tmdb-suggest', debouncedQuery],
     queryFn: ({ signal }) => fetchTmdbSuggest(debouncedQuery, signal),
@@ -606,7 +606,7 @@ export function SpotlightModal({ open, onClose }: SpotlightModalProps) {
               关闭
             </span>
           </div>
-          <span className="hidden sm:inline font-mono tracking-tight text-amber-400/90">NovaTV Cinema Ultra · TMDB 4K</span>
+          <span className="hidden sm:inline font-mono tracking-tight text-amber-400/90">NovaTV Cinema Ultra · 4K 臻选</span>
         </div>
       </div>
     </div>

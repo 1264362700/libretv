@@ -2,7 +2,7 @@ import type { ChannelType } from '@/lib/channels';
 import type { SourceConfig } from '@/lib/types';
 
 /**
- * 片库页静态配置：全频道统一仅使用 TMDB 官方影视资料库。
+ * 片库页静态配置：全频道统一使用全球官方影视资料库。
  */
 
 export type CatalogSourceId = 'tmdb' | 'cms';
@@ -18,10 +18,10 @@ export interface CatalogSourceMeta {
 export const CATALOG_SOURCES: CatalogSourceMeta[] = [
   {
     id: 'tmdb',
-    label: 'TMDB 全球影视资料库',
+    label: '全球影视资料库',
     icon: '🎬',
-    badge: 'TMDB 4K · 多维探索',
-    subTitle: 'The Movie Database 官方 4K 影视资料库 · 支持类型 / 地区 / 年份 / 评分四维筛选',
+    badge: '超清 4K · 多维探索',
+    subTitle: '官方 4K 影视资料库 · 支持类型 / 地区 / 年份 / 评分四维筛选',
   },
 ];
 
@@ -55,7 +55,7 @@ export const YEARS = ['全部', '2026', '2025', '2024', '2023', '2022', '2021', 
 
 export const SORTS = [
   { id: 'recommend', label: '综合热度' },
-  { id: 'rank', label: 'TMDB高分' },
+  { id: 'rank', label: '最高评分' },
   { id: 'time', label: '最新上映' },
 ];
 

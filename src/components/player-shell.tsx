@@ -13,6 +13,7 @@ import {
 } from '@/lib/video-prefetcher';
 import { loadCacheSettings } from '@/lib/video-cache';
 import { formatTime } from '@/lib/utils';
+import { buildObfuscatedProxyUrl } from '@/lib/url-obfuscator';
 import {
   getShowPreciseSkip,
   saveShowPreciseSkip,
@@ -363,7 +364,7 @@ export function PlayerShellInner({
             (decision.attempt >= 2 || data.details === 'manifestLoadError')
           ) {
             showHint('直连失败，改用代理重试...');
-            setupHls(video, `/api/proxy?url=${encodeURIComponent(mediaUrl)}`, false);
+            setupHls(video, buildObfuscatedProxyUrl(mediaUrl), false);
             return;
           }
           showHint(`${decision.reason}（第 ${decision.attempt} 次）...`);

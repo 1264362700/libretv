@@ -331,14 +331,14 @@ export function DoubanCard({
     if (item.card_subtitle) {
       return item.card_subtitle;
     }
-    return `${item.year || '2026'} · TMDB 4K 原画`;
+    return `${item.year || '2026'} · 4K 蓝光原画`;
   }, [item.actors, item.card_subtitle, item.year]);
 
   const plotSummary = useMemo(() => {
     if (item.overview && item.overview.trim()) {
       return item.overview.trim();
     }
-    return 'TMDB 全球高分臻选佳作，支持多源流式并发测速与蓝光秒播。';
+    return '全球高分臻选佳作，支持多源流式并发测速与蓝光秒播。';
   }, [item.overview]);
 
   const handleToggleFav = async (e: React.MouseEvent) => {
@@ -461,12 +461,12 @@ export function DoubanCard({
       {/* 底部常规片名与副标题 */}
       <div className="mt-2.5 space-y-0.5 px-0.5">
         <div
-          className="text-xs sm:text-sm font-semibold text-slate-200 group-hover:text-amber-400 transition-colors line-clamp-1"
+          className="text-xs sm:text-sm font-semibold text-content group-hover:text-amber-500 dark:group-hover:text-amber-400 transition-colors line-clamp-1"
           title={item.title}
         >
           {item.title}
         </div>
-        <p className="text-[11px] text-slate-400 truncate">
+        <p className="text-[11px] text-muted truncate">
           {castOrSubtitle}
         </p>
       </div>

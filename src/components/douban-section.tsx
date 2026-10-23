@@ -35,7 +35,7 @@ async function fetchTmdbClient(
 
   const res = await fetch(`/api/tmdb?${sp.toString()}`, { signal });
   if (!res.ok) {
-    throw new Error(`TMDB 请求失败 (${res.status})`);
+    throw new Error(`资料库请求失败 (${res.status})`);
   }
   return res.json();
 }
@@ -100,7 +100,7 @@ export function RecommendSection({ onPick }: { onPick: (title: string) => void }
     staleTime: 5 * 60_000,
   });
 
-  // Floor 1 右侧：热播飙升榜 TOP 10 (TMDB Trending)
+  // Floor 1 右侧：热播飙升榜 TOP 10 (Trending)
   const top10MovieQuery = useQuery({
     queryKey: ['novatv-top10-trending'],
     queryFn: ({ signal }) => fetchTmdbClient({ type: 'trending', page: 1 }, signal),
@@ -137,23 +137,23 @@ export function RecommendSection({ onPick }: { onPick: (title: string) => void }
     staleTime: 10 * 60_000,
   });
 
-  const movieItems = (movieQuery.data?.items ?? []).slice(0, 10);
+  const movieItems = (movieQuery.data?.items ?? []).slice(0, 15);
   const movieRankingItems = (top10MovieQuery.data?.items ?? []).slice(0, 10);
-  const tvItems = (tvQuery.data?.items ?? []).slice(0, 10);
+  const tvItems = (tvQuery.data?.items ?? []).slice(0, 15);
   const tvRankingItems = (top10TvQuery.data?.items ?? []).slice(0, 10);
 
   return (
     <div className="space-y-4">
-      {/* Floor 1: 今日重磅热播 (左侧 2行 10 张海报网格 + 右侧 🔥 热播飙升榜 TOP 10) */}
+      {/* Floor 1: 今日重磅热播 (左侧 3行 15 张海报网格 + 右侧 🔥 热播飙升榜 TOP 10) */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-2 border-b border-white/5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-2 border-b border-line">
           <div className="flex items-center gap-3">
             <div className="w-1.5 h-6 rounded-full bg-amber-400 shadow-glow-gold" />
             <div>
-              <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight flex items-center gap-2">
+              <h2 className="text-xl sm:text-2xl font-bold text-content tracking-tight flex items-center gap-2">
                 今日重磅热播
               </h2>
-              <p className="text-xs text-slate-400 mt-0.5">TMDB 4K 全球院线大片 · 悬停预览剧情与一键追剧</p>
+              <p className="text-xs text-muted mt-0.5">4K 全球院线大片 · 悬停预览剧情与一键追剧</p>
             </div>
           </div>
 
@@ -169,7 +169,7 @@ export function RecommendSection({ onPick }: { onPick: (title: string) => void }
                     className={`px-3 py-1 rounded-lg text-xs font-medium transition-all duration-200 whitespace-nowrap cursor-pointer ${
                       isActive
                         ? 'bg-amber-400 text-slate-950 font-bold shadow-glow-gold'
-                        : 'text-slate-400 hover:text-white hover:bg-white/5'
+                        : 'text-muted hover:text-content hover:bg-hover'
                     }`}
                   >
                     {cat.label}
@@ -180,7 +180,7 @@ export function RecommendSection({ onPick }: { onPick: (title: string) => void }
 
             <Link
               href="/catalog?type=movie"
-              className="flex items-center gap-1 text-xs text-slate-400 hover:text-amber-400 font-medium transition-colors shrink-0 group"
+              className="flex items-center gap-1 text-xs text-muted hover:text-amber-500 dark:hover:text-amber-400 font-medium transition-colors shrink-0 group"
             >
               <span>更多</span>
               <span className="group-hover:translate-x-0.5 transition-transform">›</span>
@@ -190,19 +190,19 @@ export function RecommendSection({ onPick }: { onPick: (title: string) => void }
 
         {/* 左图右榜双栏排版 */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          {/* 左侧：2 行 10 张高清海报网格 */}
+          {/* 左侧：3 行 15 张高清海报网格 */}
           <div className="lg:col-span-8 xl:col-span-9">
             {movieQuery.isLoading ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
-                {Array.from({ length: 10 }).map((_, idx) => (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5 gap-4">
+                {Array.from({ length: 15 }).map((_, idx) => (
                   <div
                     key={idx}
-                    className="aspect-[2/3] rounded-xl bg-slate-800/60 animate-pulse border border-white/5"
+                    className="aspect-[2/3] rounded-xl bg-chip animate-pulse border border-line"
                   />
                 ))}
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5 gap-4">
                 {movieItems.map((item) => (
                   <DoubanCard
                     key={item.id}
@@ -227,16 +227,16 @@ export function RecommendSection({ onPick }: { onPick: (title: string) => void }
         </div>
       </section>
 
-      {/* Floor 2: 热播剧集专区 (左侧 2行 10 张海报网格 + 右侧 🔥 剧集口碑榜 TOP 10) */}
+      {/* Floor 2: 热播剧集专区 (左侧 3行 15 张海报网格 + 右侧 🔥 剧集口碑榜 TOP 10) */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-2 border-b border-white/5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-2 border-b border-line">
           <div className="flex items-center gap-3">
             <div className="w-1.5 h-6 rounded-full bg-amber-400 shadow-glow-gold" />
             <div>
-              <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight flex items-center gap-2">
+              <h2 className="text-xl sm:text-2xl font-bold text-content tracking-tight flex items-center gap-2">
                 热播剧集专区
               </h2>
-              <p className="text-xs text-slate-400 mt-0.5">连载同步更新 · 蓝光臻彩</p>
+              <p className="text-xs text-muted mt-0.5">连载同步更新 · 蓝光臻彩</p>
             </div>
           </div>
 
@@ -252,7 +252,7 @@ export function RecommendSection({ onPick }: { onPick: (title: string) => void }
                     className={`px-3 py-1 rounded-lg text-xs font-medium transition-all duration-200 whitespace-nowrap cursor-pointer ${
                       isActive
                         ? 'bg-amber-400 text-slate-950 font-bold shadow-glow-gold'
-                        : 'text-slate-400 hover:text-white hover:bg-white/5'
+                        : 'text-muted hover:text-content hover:bg-hover'
                     }`}
                   >
                     {cat.label}
@@ -263,7 +263,7 @@ export function RecommendSection({ onPick }: { onPick: (title: string) => void }
 
             <Link
               href="/catalog?type=tv"
-              className="flex items-center gap-1 text-xs text-slate-400 hover:text-amber-400 font-medium transition-colors shrink-0 group"
+              className="flex items-center gap-1 text-xs text-muted hover:text-amber-500 dark:hover:text-amber-400 font-medium transition-colors shrink-0 group"
             >
               <span>更多</span>
               <span className="group-hover:translate-x-0.5 transition-transform">›</span>
@@ -274,16 +274,16 @@ export function RecommendSection({ onPick }: { onPick: (title: string) => void }
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           <div className="lg:col-span-8 xl:col-span-9">
             {tvQuery.isLoading ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
-                {Array.from({ length: 10 }).map((_, idx) => (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5 gap-4">
+                {Array.from({ length: 15 }).map((_, idx) => (
                   <div
                     key={idx}
-                    className="aspect-[2/3] rounded-xl bg-slate-800/60 animate-pulse border border-white/5"
+                    className="aspect-[2/3] rounded-xl bg-chip animate-pulse border border-line"
                   />
                 ))}
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5 gap-4">
                 {tvItems.map((item) => (
                   <DoubanCard
                     key={item.id}
@@ -330,28 +330,28 @@ function NovaTop10Ranking({
   const rest = items.slice(1, 10);
 
   return (
-    <div className="w-full glass-panel rounded-2xl p-5 border border-white/10 shadow-cinema flex flex-col">
+    <div className="w-full glass-panel rounded-2xl p-5 border border-line shadow-cinema flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between pb-4 border-b border-white/5 mb-4">
+      <div className="flex items-center justify-between pb-4 border-b border-line mb-4">
         <div className="flex items-center gap-2.5">
           <div>
-            <h3 className="text-base font-bold text-white tracking-tight flex items-center gap-1.5">
+            <h3 className="text-base font-bold text-content tracking-tight flex items-center gap-1.5">
               <span>{title}</span>
-              <span className="text-amber-400 font-extrabold text-xs">TOP 10</span>
+              <span className="text-amber-500 dark:text-amber-400 font-extrabold text-xs">TOP 10</span>
             </h3>
-            <p className="text-[11px] text-slate-400 mt-0.5">{subtitle}</p>
+            <p className="text-[11px] text-muted mt-0.5">{subtitle}</p>
           </div>
         </div>
-        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-white/5 text-amber-300/80 border border-white/5">
+        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-chip text-amber-500 dark:text-amber-300 border border-line">
           24H 动态
         </span>
       </div>
 
       {isLoading || !top1 ? (
         <div className="space-y-3">
-          <div className="aspect-[16/9] rounded-xl bg-slate-800/60 animate-pulse" />
+          <div className="aspect-[16/9] rounded-xl bg-chip animate-pulse" />
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="h-12 rounded-lg bg-slate-800/40 animate-pulse" />
+            <div key={i} className="h-12 rounded-lg bg-chip/60 animate-pulse" />
           ))}
         </div>
       ) : (
@@ -360,7 +360,7 @@ function NovaTop10Ranking({
           <button
             type="button"
             onClick={() => onPick(top1.title)}
-            className="group relative block w-full text-left rounded-xl overflow-hidden mb-4 border border-amber-500/35 hover:border-amber-400/85 transition-all duration-300 shadow-lg cursor-pointer"
+            className="group relative block w-full text-left rounded-xl overflow-hidden mb-4 border border-amber-500/35 hover:border-amber-400/85 transition-all duration-300 shadow-lg cursor-pointer bg-slate-900"
           >
             <div className="relative aspect-[16/9] w-full overflow-hidden bg-slate-900">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -371,7 +371,7 @@ function NovaTop10Ranking({
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
               />
               {/* Gradients */}
-              <div className="absolute inset-0 bg-gradient-to-t from-[#0B0F19] via-[#0B0F19]/60 to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent" />
               <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors" />
 
               {/* NO.1 鎏金皇冠角标 */}
@@ -401,7 +401,7 @@ function NovaTop10Ranking({
                     </span>
                   )}
                 </div>
-                <div className="flex items-center justify-between text-[11px] text-slate-300 mt-0.5">
+                <div className="flex items-center justify-between text-[11px] text-slate-200 mt-0.5">
                   <span className="truncate max-w-[160px]">
                     {top1.overview || top1.card_subtitle || top1.year || '院线热映'}
                   </span>
@@ -415,7 +415,7 @@ function NovaTop10Ranking({
           <div className="space-y-1.5 flex-1 overflow-y-auto pr-1">
             {rest.map((item, idx) => {
               const rank = idx + 2;
-              let rankBadgeClass = 'text-slate-400 bg-white/5 border border-white/5';
+              let rankBadgeClass = 'text-muted bg-chip border border-line';
               if (rank === 2) {
                 // 银牌 NO.2
                 rankBadgeClass =
@@ -431,7 +431,7 @@ function NovaTop10Ranking({
                   key={item.id}
                   type="button"
                   onClick={() => onPick(item.title)}
-                  className="w-full group flex items-center gap-3 p-1.5 rounded-lg hover:bg-white/5 transition-all duration-200 border border-transparent hover:border-white/5 text-left cursor-pointer"
+                  className="w-full group flex items-center gap-3 p-1.5 rounded-lg hover:bg-hover transition-all duration-200 border border-transparent hover:border-line text-left cursor-pointer"
                 >
                   {/* 金银铜序号徽章 */}
                   <span
@@ -441,7 +441,7 @@ function NovaTop10Ranking({
                   </span>
 
                   {/* Poster Thumbnail */}
-                  <div className="w-9 h-12 rounded overflow-hidden shrink-0 bg-slate-800 relative">
+                  <div className="w-9 h-12 rounded overflow-hidden shrink-0 bg-chip relative">
                     {item.cover && (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
@@ -455,15 +455,15 @@ function NovaTop10Ranking({
 
                   {/* Title & Category */}
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs font-medium text-slate-200 truncate group-hover:text-amber-400 transition-colors">
+                    <p className="text-xs font-medium text-content truncate group-hover:text-amber-500 dark:group-hover:text-amber-400 transition-colors">
                       {item.title}
                     </p>
                     <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-[10px] text-slate-400 truncate">
+                      <span className="text-[10px] text-muted truncate">
                         {item.year || '热门'}
                       </span>
                       {item.episodes_info && (
-                        <span className="text-[10px] text-emerald-400 truncate">{item.episodes_info}</span>
+                        <span className="text-[10px] text-emerald-500 dark:text-emerald-400 truncate">{item.episodes_info}</span>
                       )}
                     </div>
                   </div>
@@ -471,11 +471,11 @@ function NovaTop10Ranking({
                   {/* Rating */}
                   <div className="text-right shrink-0">
                     {item.rating ? (
-                      <span className="text-xs font-bold text-amber-400/90 font-mono">
+                      <span className="text-xs font-bold text-amber-500 dark:text-amber-400/90 font-mono">
                         ★ {item.rating}
                       </span>
                     ) : (
-                      <span className="text-[10px] text-slate-400 font-mono">热播</span>
+                      <span className="text-[10px] text-muted font-mono">热播</span>
                     )}
                   </div>
                 </button>

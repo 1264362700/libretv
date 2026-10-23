@@ -6,13 +6,13 @@ import { useAuth } from '@/components/auth';
 export function SiteFooter() {
   const { version } = useAuth();
   return (
-    <footer className="border-t border-white/5 bg-[#0B0F19] py-6">
-      <p className="text-center text-xs text-slate-500">
-        <span className="font-semibold text-amber-400/90">
+    <footer className="border-t border-line bg-page py-6 transition-colors">
+      <p className="text-center text-xs text-muted">
+        <span className="font-semibold text-amber-500 dark:text-amber-400">
           NovaTV Cinema Ultra{version ? ` v${version}` : ''}
         </span>
         {' · '}
-        TMDB 4K 官方影视库与多源极速点播平台
+        4K 全球影视资料库与多源极速点播平台
       </p>
     </footer>
   );

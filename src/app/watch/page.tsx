@@ -21,10 +21,11 @@ import { enqueueDownload } from '@/components/download-manager';
 import { Icon } from '@/components/icon';
 import { useAuth } from '@/components/auth';
 import { useToast } from '@/components/toast';
+import { ThemeToggle } from '@/components/theme';
 import type { PlayerShellHandle } from '@/components/player-shell';
 import { resolveSource, useAppStore } from '@/lib/store';
 import { db, favoriteIdOf, markFavoriteSeenEpisodes, toggleFavorite } from '@/lib/db';
-import { buildWatchUrl, cn, formatTime } from '@/lib/utils';
+import { buildWatchUrl, cn } from '@/lib/utils';
 import { getSourceQoSBadge } from '@/lib/source-circuit-breaker';
 import { parseNames, sanitizeDesc } from '@/features/watch/watch-utils';
 import { QrHandoffModal, SpeedSuggestionDialog, WatchFallbackState } from '@/features/watch/watch-dialogs';
@@ -66,18 +67,7 @@ function WatchContent() {
   const [epDescExpanded, setEpDescExpanded] = useState(false);
   const [selectedPoster, setSelectedPoster] = useState<string | undefined>(undefined);
   const [theaterMode, setTheaterMode] = useState(false);
-  const [lightsOff, setLightsOff] = useState(false);
   const playerRef = useRef<PlayerShellHandle | null>(null);
-  const subInputRef = useRef<HTMLInputElement | null>(null);
-
-  useEffect(() => {
-    if (!lightsOff) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setLightsOff(false);
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [lightsOff]);
 
   const source = resolveSource(store, sourceKey, {
     url: searchParams.get('sourceUrl') || undefined,
@@ -343,11 +333,12 @@ function WatchContent() {
           <div className="min-w-0 flex-1 px-1 sm:px-2">
             <h1 className="text-sm font-semibold text-content truncate leading-tight">{videoTitle}</h1>
             <p className="text-[11px] text-faint truncate mt-0.5">
-              <span className="text-accent font-medium">{source.name}</span>
+              <span className="text-accent font-medium whitespace-nowrap">{source.name}</span>
               {episodes.length > 0 && ` · 第 ${currentIndex + 1}/${episodes.length} 集`}
             </p>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
+            <ThemeToggle />
             <button
               type="button"
               onClick={handleToggleFavorite}
@@ -397,23 +388,6 @@ function WatchContent() {
         </div>
       </header>
 
-      {/* 9zhoukj 关灯观影全局沉浸黑幕（点击空白处或按 Esc 自动开灯） */}
-      {lightsOff && (
-        <div
-          className="fixed inset-0 z-40 bg-black/92 backdrop-blur-[2px] transition-opacity duration-300 cursor-pointer animate-fade-in"
-          onClick={() => setLightsOff(false)}
-          title="点击空白处或按 Esc 键开灯"
-        >
-          <button
-            type="button"
-            onClick={() => setLightsOff(false)}
-            className="fixed top-4 right-4 z-50 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white/90 border border-white/20 text-xs font-medium backdrop-blur shadow-lg cursor-pointer"
-          >
-            <span>💡 开灯 (Esc)</span>
-          </button>
-        </div>
-      )}
-
       <main className="flex-1 max-w-7xl w-full mx-auto px-2 sm:px-4 py-3 sm:py-5 overflow-x-hidden">
         <div
           className={cn(
@@ -423,7 +397,7 @@ function WatchContent() {
         >
           {/* 左侧主视区：动态环境光影 + 播放器 + 视频信息 + 就地选源面板 */}
           <div className="min-w-0 w-full space-y-3.5">
-            <div className={cn('relative', lightsOff && 'z-50')}>
+            <div className="relative">
               {/* 影院级动态环境弥散光晕（Ambient Glow） */}
               {activePoster && (
                 <div
@@ -435,8 +409,7 @@ function WatchContent() {
               <div
                 className={cn(
                   'relative aspect-video w-full bg-black rounded-xl overflow-hidden shadow-2xl border border-line/40 transition-all duration-300',
-                  theaterMode ? 'max-h-[84vh]' : 'max-h-[72vh]',
-                  lightsOff && 'ring-1 ring-white/15 shadow-[0_0_80px_rgba(0,0,0,0.95)]'
+                  theaterMode ? 'max-h-[84vh]' : 'max-h-[72vh]'
                 )}
               >
                 {currentUrl ? (
@@ -487,12 +460,12 @@ function WatchContent() {
 
             {/* 视频信息与快捷控制栏 */}
             <div className="mt-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-1">
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <h2 className="text-base sm:text-lg font-bold text-content truncate leading-snug">{videoTitle}</h2>
-                <div className="flex items-center gap-2 mt-1 text-xs text-muted">
-                  <span className="tag bg-accent/15 text-accent font-medium">{source.name}</span>
+                <div className="flex items-center gap-2 mt-1 text-xs text-muted min-w-0">
+                  <span className="tag bg-accent/15 text-accent font-medium whitespace-nowrap shrink-0">{source.name}</span>
                   {episodes.length > 0 && (
-                    <span>
+                    <span className="truncate">
                       正在播放 第 {currentIndex + 1} 集（共 {episodes.length} 集
                       {videoInfo?.remarks ? ` · ${videoInfo.remarks}` : ''}）
                     </span>
@@ -520,80 +493,15 @@ function WatchContent() {
                 </button>
                 <button
                   type="button"
-                  className="btn btn-sm btn-ghost px-2 text-xs"
-                  onClick={() => {
-                    const sec = playerRef.current?.markCurrentAsIntroEnd() || 0;
-                    if (sec > 0) {
-                      toast(`已将 ${formatTime(sec)} 设为本剧片头结束点，下集起自动跳过`, 'success');
-                    } else {
-                      toast('请先播放至片头结束位置再点击标记', 'info');
-                    }
-                  }}
-                  title="将当前播放秒数记住为本剧片头结束点"
-                >
-                  📌 记片头
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-sm btn-ghost px-2 text-xs"
-                  onClick={() => subInputRef.current?.click()}
-                  title="挂载本地 .srt / .vtt 字幕文件（也可直接拖入播放器画面）"
-                >
-                  📝 挂载字幕
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-sm btn-ghost px-2 text-xs"
-                  onClick={() => {
-                    void playerRef.current?.togglePip();
-                  }}
-                  title="开启/退出画中画悬浮小窗模式，边浏览其他页面边看剧"
-                >
-                  🖼️ 画中画
-                </button>
-                <button
-                  type="button"
                   className={cn(
                     'btn btn-sm px-2 text-xs hidden lg:inline-flex',
                     theaterMode ? 'bg-accent/15 text-accent border border-accent/40' : 'btn-ghost'
                   )}
                   onClick={() => setTheaterMode((prev) => !prev)}
-                  title="切换影院宽屏模式（收起/展开右侧选集栏，配合播放器右边缘悬浮选集抽屉使用）"
+                  title="切换影院宽屏模式（收起/展开右侧选集栏）"
                 >
                   {theaterMode ? '↔ 退出宽屏' : '↔ 影院宽屏'}
                 </button>
-                <button
-                  type="button"
-                  className={cn(
-                    'btn btn-sm px-2 text-xs',
-                    lightsOff ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40' : 'btn-ghost'
-                  )}
-                  onClick={() => setLightsOff((prev) => !prev)}
-                  title="关灯观影：压暗网页四周环境，聚焦播放器画面（按 Esc 可恢复）"
-                >
-                  {lightsOff ? '💡 开灯' : '💡 关灯'}
-                </button>
-                <input
-                  ref={subInputRef}
-                  type="file"
-                  accept=".srt,.vtt,.ass"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    const reader = new FileReader();
-                    reader.onload = () => {
-                      const count = playerRef.current?.loadSubtitle(String(reader.result || ''), file.name) || 0;
-                      if (count > 0) {
-                        toast(`成功加载外挂字幕「${file.name}」（共 ${count} 句对白）`, 'success');
-                      } else {
-                        toast('字幕文件解析为空，请确认是有效的 SRT 或 VTT 文件', 'warning');
-                      }
-                    };
-                    reader.readAsText(file, 'utf-8');
-                    e.currentTarget.value = '';
-                  }}
-                />
                 <label className="flex items-center gap-1.5 text-xs text-muted cursor-pointer select-none px-2 py-1 rounded-md bg-chip/40 hover:bg-chip transition-colors">
                   <input
                     type="checkbox"
@@ -667,7 +575,7 @@ function WatchContent() {
                           isCurrent ? 'bg-white animate-pulse' : isFailed ? 'bg-danger' : 'bg-emerald-500'
                         )}
                       />
-                      <span>{c.source.name}</span>
+                      <span className="whitespace-nowrap">{c.source.name}</span>
                       {c.result.remarks && (
                         <span className="text-[10px] opacity-80 font-mono">({c.result.remarks})</span>
                       )}

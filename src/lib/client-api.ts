@@ -1,6 +1,7 @@
 'use client';
 
 import type { SearchResponse, SearchStreamEvent, SourceSearchOutcome, VideoDetail, DoubanResponse, BangumiCalendarResponse, AuthStatusResponse, SourceConfig, SearchResultItem, LivePlaylistResponse, LiveEpgResponse, SourceListPayload, DoubanItem } from './types';
+import { encodeUrlToken } from './url-obfuscator';
 
 /**
  * 客户端 API 封装。401 时触发全局事件打开登录框，
@@ -422,7 +423,7 @@ export const api = {
   },
 
   detail: (id: string, source: SourceConfig, signal?: AbortSignal) => {
-    const sp = new URLSearchParams({ id, source: JSON.stringify(source) });
+    const sp = new URLSearchParams({ id, source: encodeUrlToken(JSON.stringify(source)) });
     return request<VideoDetail>(`/api/detail?${sp.toString()}`, { signal });
   },
 

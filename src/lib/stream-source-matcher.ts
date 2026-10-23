@@ -4,6 +4,7 @@
  */
 
 import type { SourceConfig } from './types';
+import { buildObfuscatedProxyUrl } from './url-obfuscator';
 import {
   canProbeSource,
   getSourceQoSScore,
@@ -488,8 +489,8 @@ export class StreamSourceMatcher {
         cleanWd
       )}`;
 
-      // 通过项目自包含代理路由请求，规避客户端 CORS 与 SSRF 风险
-      const proxyUrl = `/api/proxy?url=${encodeURIComponent(targetQueryUrl)}`;
+      // 通过项目自包含代理路由请求，规避客户端 CORS 与 SSRF 风险，并混淆上游采集源 URL
+      const proxyUrl = buildObfuscatedProxyUrl(targetQueryUrl);
 
       const res = await fetch(proxyUrl, {
         signal: singleController.signal,
@@ -541,7 +542,7 @@ export class StreamSourceMatcher {
         const detailQueryUrl = `${source.url.replace(/\/+$/, '')}?ac=detail&ids=${encodeURIComponent(
           vodId
         )}`;
-        const detailProxyUrl = `/api/proxy?url=${encodeURIComponent(detailQueryUrl)}`;
+        const detailProxyUrl = buildObfuscatedProxyUrl(detailQueryUrl);
 
         const detailRes = await fetch(detailProxyUrl, {
           signal: singleController.signal,

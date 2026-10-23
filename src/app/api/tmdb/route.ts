@@ -52,7 +52,7 @@ export async function GET(req: Request) {
         total: 0,
         totalPages: 1,
         page: 1,
-        warning: err instanceof Error ? err.message : 'TMDB 资料库请求失败',
+        warning: err instanceof Error ? err.message : '资料库请求失败',
       },
       { status: 200 }
     );

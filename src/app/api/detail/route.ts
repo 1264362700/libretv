@@ -3,6 +3,7 @@ import { guardRequest } from '@/lib/api-guard';
 import { cmsRequestHeaders, parseDetail, parseDetailPageHtml } from '@/lib/cms-parser';
 import { fetchUpstream, getCache, setCache } from '@/lib/fetch-utils';
 import { checkUpstreamAllowed } from '@/lib/ssrf';
+import { decodeUrlToken } from '@/lib/url-obfuscator';
 import type { SourceConfig, VideoDetail } from '@/lib/types';
 
 export const runtime = 'nodejs';
@@ -22,8 +23,9 @@ const DETAIL_CACHE_HEADERS = {
 
 function parseSource(raw: string | null): SourceConfig | null {
   if (!raw) return null;
+  const decoded = decodeUrlToken(raw);
   try {
-    const obj = JSON.parse(raw) as SourceConfig;
+    const obj = JSON.parse(decoded) as SourceConfig;
     if (!obj || !/^https?:\/\//.test(obj.url || '')) return null;
     return obj;
   } catch {

@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { parseM3u8Playlist } from './m3u8-parse';
 import { isProxiedUri, rewriteM3u8, stripAdGroups, stripLeadAdGroup } from './m3u8';
+import { encodeUrlToken } from './url-obfuscator';
 
 const BASE = 'https://cdn.example.com/live/index.m3u8';
 
 describe('rewriteM3u8', () => {
-  it('把分片、嵌套播放列表、key、map 全部改写为代理地址（查询串形式）', () => {
+  it('把分片、嵌套播放列表、key、map 全部改写为混淆代理地址', () => {
     const input = [
       '#EXTM3U',
       '#EXT-X-STREAM-INF:BANDWIDTH=1280000',
@@ -19,14 +20,19 @@ describe('rewriteM3u8', () => {
 
     const out = rewriteM3u8(input, BASE);
 
-    expect(out).toContain('/api/proxy?url=' + encodeURIComponent('https://cdn.example.com/live/720p.m3u8'));
-    expect(out).toContain('/api/proxy?url=' + encodeURIComponent('https://cdn.example.com/key.bin'));
-    expect(out).toContain('/api/proxy?url=' + encodeURIComponent('https://cdn.example.com/live/init.mp4'));
-    expect(out).toContain('/api/proxy?url=' + encodeURIComponent('https://cdn.example.com/relative/seg1.ts'));
-    expect(out).toContain('/api/proxy?url=' + encodeURIComponent('https://cdn.example.com/live/seg2.ts'));
+    expect(out).toContain('/api/proxy?q=' + encodeUrlToken('https://cdn.example.com/live/720p.m3u8'));
+    expect(out).toContain('/api/proxy?q=' + encodeUrlToken('https://cdn.example.com/key.bin'));
+    expect(out).toContain('/api/proxy?q=' + encodeUrlToken('https://cdn.example.com/live/init.mp4'));
+    expect(out).toContain('/api/proxy?q=' + encodeUrlToken('https://cdn.example.com/relative/seg1.ts'));
+    expect(out).toContain('/api/proxy?q=' + encodeUrlToken('https://cdn.example.com/live/seg2.ts'));
     // 非地址行保持不变
     expect(out).toContain('#EXTM3U');
     expect(out).toContain('#EXT-X-ENDLIST');
+  });
+
+  it('显式指定 /api/proxy?url= 前缀时保持明文编码兼容', () => {
+    const out = rewriteM3u8('https://cdn.example.com/live/seg1.ts', BASE, 0, '/api/proxy?url=');
+    expect(out).toBe('/api/proxy?url=' + encodeURIComponent('https://cdn.example.com/live/seg1.ts'));
   });
 
   it('直播前缀改写为 /api/live/stream?url= 形式', () => {

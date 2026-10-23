@@ -267,7 +267,7 @@ export function mapTmdbItem(
     categoryName,
     card_subtitle: cardSubtitle,
     overview: item.overview || undefined,
-    remarks: rating ? `TMDB ${rating}` : year ? `${year} · 4K` : '4K 臻彩',
+    remarks: rating ? `★ ${rating}` : year ? `${year} · 4K` : '4K 臻彩',
     episodes_info: categoryName,
     hotRank: rankIndex !== undefined ? rankIndex + 1 : undefined,
     hotScore: rankIndex !== undefined ? `${(158 - rankIndex * 6.2).toFixed(1)}万` : undefined,

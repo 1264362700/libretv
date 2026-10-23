@@ -1,11 +1,12 @@
 /**
- * 影视资料库门面服务 (MediaLibraryService — 纯 TMDB 官方引擎)
- * 1. TMDB 全球 4K 榜单与分类推荐 (/api/tmdb)
+ * 影视资料库门面服务 (MediaLibraryService)
+ * 1. 全球 4K 榜单与分类推荐 (/api/tmdb)
  * 2. 主力采集源「最近更新」静默对齐服务 (RecentUpdatesSyncer)
  * 3. 集数角标智能推导算法 (resolveEpisodeBadge)
  */
 
 import type { SourceConfig } from './types';
+import { buildObfuscatedProxyUrl } from './url-obfuscator';
 
 export interface MediaItem {
   id: string;
@@ -100,7 +101,7 @@ export async function syncRecentUpdates(
   const fetchPage = async (page: number) => {
     try {
       const targetUrl = `${baseUrl}?ac=videolist&pg=${page}`;
-      const proxyUrl = `/api/proxy?url=${encodeURIComponent(targetUrl)}`;
+      const proxyUrl = buildObfuscatedProxyUrl(targetUrl);
       const res = await fetch(proxyUrl, { signal, headers: { Accept: 'application/json' } });
       if (!res.ok) return [];
       const json = await res.json().catch(() => null);

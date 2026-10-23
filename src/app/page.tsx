@@ -63,9 +63,9 @@ function HomeContent() {
       .filter((s) => !isInDisabledSubscription({ subscriptions }, s.key));
   }, [customAPIs, envSources, selectedKeys, sourceHealth, subscriptions]);
 
-  // TMDB 全球 4K 趋势大片（供首屏 HeroBillboard 巨幕轮播使用，100% 走 /api/tmdb）
+  // 全球 4K 趋势大片（供首屏 HeroBillboard 巨幕轮播使用）
   const trendingHeroQuery = useQuery({
-    queryKey: ['home-tmdb-trending-hero'],
+    queryKey: ['home-trending-hero'],
     queryFn: ({ signal }) => fetchDoubanCollectionItems('trending', 0, 8, signal),
     staleTime: 30 * 60_000,
     enabled: !urlQuery,
@@ -123,7 +123,7 @@ function HomeContent() {
   useEffect(() => setVisibleCount(RESULT_PAGE_SIZE), [groups]);
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#0B0F19] text-white">
+    <div className="min-h-screen flex flex-col bg-page text-content transition-colors duration-200">
       {/* Top Glass Navigation */}
       <Header />
 
@@ -131,14 +131,14 @@ function HomeContent() {
         <main className="relative flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-24 md:pb-12 overflow-x-hidden">
           <section className="space-y-5">
             <div className="flex items-center justify-between py-3 px-4 rounded-2xl glass-panel">
-              <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+              <h2 className="text-base sm:text-lg font-bold text-content flex items-center gap-2">
                 <span>🔍 全网播放源聚合搜索:</span>
-                <span className="text-amber-400">“{urlQuery}”</span>
+                <span className="text-amber-500 dark:text-amber-400">“{urlQuery}”</span>
               </h2>
               <button
                 type="button"
                 onClick={() => router.push('/')}
-                className="text-xs text-slate-300 hover:text-amber-400 px-3.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-all cursor-pointer"
+                className="text-xs text-muted hover:text-amber-500 dark:hover:text-amber-400 px-3.5 py-1.5 rounded-xl bg-chip hover:bg-hover border border-line transition-all cursor-pointer"
               >
                 返回首页大厅
               </button>
@@ -188,7 +188,7 @@ function HomeContent() {
                   <div className="flex justify-center mt-6">
                     <button
                       type="button"
-                      className="px-6 py-2.5 rounded-xl glass-panel text-xs font-semibold text-white hover:text-amber-400 transition-all cursor-pointer"
+                      className="px-6 py-2.5 rounded-xl glass-panel text-xs font-semibold text-content hover:text-amber-500 dark:hover:text-amber-400 transition-all cursor-pointer"
                       onClick={() => setVisibleCount((v) => v + RESULT_PAGE_SIZE)}
                     >
                       加载更多（还剩 {groups.length - visibleCount} 部）
@@ -197,7 +197,7 @@ function HomeContent() {
                 )}
               </>
             ) : isSearching ? (
-              <div className="py-20 text-center text-slate-400 glass-panel rounded-2xl">
+              <div className="py-20 text-center text-muted glass-panel rounded-2xl">
                 正在流式并发检索全网点播采集源…
               </div>
             ) : (

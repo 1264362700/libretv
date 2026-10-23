@@ -1,3 +1,5 @@
+import { encodeUrlToken } from './url-obfuscator';
+
 /**
  * m3u8 处理：代理路径重写与广告分片过滤
  *
@@ -6,12 +8,12 @@
  * 从根本上修复旧版「重写分片丢失鉴权参数导致 401」的问题。
  */
 
-/** 点播代理地址（查询串形式，路径形式会被 EdgeOne 等网关的 URL 归一化破坏，见 proxy-handlers.ts） */
-export const PROXY_BASE = '/api/proxy?url=';
+/** 点播代理地址（采用混淆查询串形式，规避明文暴露与 EdgeOne 网关 URL 归一化破坏） */
+export const PROXY_BASE = '/api/proxy?q=';
 /** 直播流代理地址（查询串形式） */
 export const LIVE_STREAM_BASE = '/api/live/stream?url=';
 
-/** URI 已是本站代理地址（新旧两种形式：/api/proxy/…、/api/proxy?url=…、/api/live/stream/…、/api/live/stream?url=…）时不再二次改写 */
+/** URI 已是本站代理地址（新旧两种形式：/api/proxy/…、/api/proxy?url=…、/api/proxy?q=…、/api/live/stream/…、/api/live/stream?url=…）时不再二次改写 */
 export function isProxiedUri(uri: string): boolean {
   return uri.startsWith('/api/proxy') || uri.startsWith('/api/live/stream');
 }
@@ -36,7 +38,7 @@ export function makeAbsolute(url: string, base: string | undefined): string {
 }
 
 /** 将 m3u8 中的地址改写为经过本站代理的地址（分片/key/map 同样改写）。
- *  prefix 可指定代理地址基座（直播流走 /api/live/stream?url=，点播默认 /api/proxy?url=） */
+ *  prefix 可指定代理地址基座（点播默认混淆 /api/proxy?q=，直播流走 /api/live/stream?url=） */
 export function rewriteM3u8(
   content: string,
   baseUrl: string,
@@ -44,17 +46,18 @@ export function rewriteM3u8(
   prefix: string = PROXY_BASE
 ): string {
   if (depth > 5) return content;
+  const encodeParam = prefix.includes('?q=') ? encodeUrlToken : encodeURIComponent;
   const lines = content.split('\n');
   const out = lines.map((line) => {
     if (line.startsWith('#EXT-X-KEY') || line.startsWith('#EXT-X-MAP')) {
       return line.replace(/(URI=")([^"]+)(")/g, (m, p1: string, uri: string, p2: string) => {
         if (isProxiedUri(uri)) return m;
-        return p1 + prefix + encodeURIComponent(makeAbsolute(uri, baseUrl)) + p2;
+        return p1 + prefix + encodeParam(makeAbsolute(uri, baseUrl)) + p2;
       });
     }
     if (line.startsWith('#') || line.trim() === '') return line;
     if (isProxiedUri(line)) return line;
-    return prefix + encodeURIComponent(makeAbsolute(line, baseUrl));
+    return prefix + encodeParam(makeAbsolute(line, baseUrl));
   });
   return out.join('\n');
 }

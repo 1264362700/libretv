@@ -298,7 +298,7 @@ export function DoubanCard({
 
   return (
     <div
-      className="group relative flex flex-col rounded-xl overflow-hidden cursor-pointer bg-surface border border-line/60 hover:border-accent/60 hover:shadow-xl hover:shadow-black/20 hover:-translate-y-1 active:scale-95 transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:border-accent focus-visible:-translate-y-1 touch-manipulation"
+      className="group relative flex flex-col rounded-2xl overflow-hidden cursor-pointer bg-surface/60 dark:bg-white/[0.03] backdrop-blur-xl border border-black/[0.07] dark:border-white/[0.09] hover:border-black/20 dark:hover:border-white/25 hover:shadow-2xl hover:shadow-black/30 hover:-translate-y-1.5 active:scale-95 transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:border-accent focus-visible:-translate-y-1 touch-manipulation"
       role="button"
       tabIndex={0}
       onClick={onClick}
@@ -309,14 +309,14 @@ export function DoubanCard({
         }
       }}
     >
-      <div className="relative aspect-[2/3] bg-chip overflow-hidden rounded-t-xl">
+      <div className="relative aspect-[2/3] bg-chip/50 overflow-hidden">
         {item.cover && !imgFailed ? (
           <SmartImage
             url={item.cover}
             mode={imageProxyMode}
             customProxy={customImageProxy}
             alt={item.title}
-            className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-108"
+            className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
             onExhausted={() => setImgFailed(true)}
           />
         ) : (
@@ -327,41 +327,36 @@ export function DoubanCard({
           </div>
         )}
 
-        {/* 底部微渐变暗影 */}
-        <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/80 via-black/30 to-transparent pointer-events-none" />
+        {/* 底部柔和暗影 */}
+        <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/75 via-black/25 to-transparent pointer-events-none" />
 
-        {/* 右上角高质感金黄色评分角标或集数状态角标 */}
+        {/* 右上角 iOS 27 冰晶毛玻璃评分胶囊 */}
         {numericRating ? (
-          <span className="absolute top-1.5 right-1.5 px-1.5 sm:px-2 py-0.5 rounded-md bg-black/75 backdrop-blur-md text-[10px] sm:text-xs text-amber-400 font-bold border border-white/10 shadow-sm flex items-center gap-0.5 z-10">
+          <span className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-black/55 backdrop-blur-xl text-[11px] text-amber-300 font-semibold border border-white/15 shadow-xs flex items-center gap-0.5 z-10">
             <span>★</span>
             <span>{numericRating}</span>
           </span>
         ) : statusBadge ? (
-          <span className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-md bg-black/75 backdrop-blur-md text-[10px] text-accent font-semibold border border-white/10 shadow-sm z-10">
+          <span className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-black/55 backdrop-blur-xl text-[10px] text-white/90 font-medium border border-white/15 shadow-xs z-10">
             {statusBadge}
           </span>
         ) : null}
 
-        {/* 左上角轻量蓝光极速标签 */}
-        <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded-md bg-accent/80 text-[10px] text-white font-medium shadow-sm z-10">
-          蓝光
-        </span>
-
-        {/* 鼠标悬停时的「立即播放」微交互浮层 (天涯影视风格) */}
-        <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none z-10">
-          <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-accent text-white text-xs font-bold shadow-lg transform translate-y-2 group-hover:translate-y-0 transition-transform">
+        {/* 鼠标悬停时的 Apple TV+ 冰白圆形播放浮层 */}
+        <div className="absolute inset-0 bg-black/35 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center pointer-events-none z-10">
+          <span className="flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-white text-slate-950 text-xs font-semibold shadow-2xl transform translate-y-2 group-hover:translate-y-0 transition-transform duration-300">
             <span>▶</span>
             <span>立即播放</span>
           </span>
         </div>
       </div>
 
-      <div className="p-2 sm:p-2.5 flex flex-col flex-1 justify-between">
+      <div className="p-2.5 sm:p-3 flex flex-col flex-1 justify-between">
         <div className="text-xs sm:text-sm font-semibold text-content line-clamp-1 leading-snug group-hover:text-accent transition-colors" title={item.title}>
           {item.title}
         </div>
         <div className="flex items-center justify-between text-[11px] text-muted mt-1">
-          <span className="truncate">{statusBadge || '超清极速播放'}</span>
+          <span className="truncate">{item.episodes_info || statusBadge || 'TMDB 4K'}</span>
           {item.year && <span className="font-mono shrink-0 ml-1 text-faint">{item.year}</span>}
         </div>
       </div>

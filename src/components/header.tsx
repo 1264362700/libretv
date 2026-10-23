@@ -56,8 +56,8 @@ export function Header(_props?: { showSearch?: boolean }) {
 
   return (
     <>
-      <header className="sticky top-0 z-40 bg-surface/90 backdrop-blur border-b border-line shadow-xs">
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 h-14 flex items-center gap-2 sm:gap-3 lg:gap-4">
+      <header className="sticky top-0 z-40 backdrop-blur-3xl saturate-180 bg-white/75 dark:bg-[#06070b]/75 border-b border-black/[0.06] dark:border-white/[0.08] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.14)]">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 h-16 flex items-center gap-2 sm:gap-3 lg:gap-4">
           {/* 手机与平板竖屏模式专属侧边栏呼出按钮（汉堡菜单图标） */}
           <button
             type="button"
@@ -138,18 +138,18 @@ export function Header(_props?: { showSearch?: boolean }) {
             <button
               type="button"
               onClick={() => setSpotlightOpen(true)}
-              className="flex items-center gap-1.5 xl:gap-2 px-2.5 xl:px-3 py-1.5 rounded-xl bg-surface hover:bg-hover border border-line hover:border-accent/40 text-muted hover:text-content text-xs transition-all cursor-pointer group shrink-0"
+              className="flex items-center gap-1.5 xl:gap-2 px-3 xl:px-3.5 py-1.5 rounded-full ios-pill hover:bg-black/[0.08] dark:hover:bg-white/[0.1] text-muted hover:text-content text-xs transition-all cursor-pointer group shrink-0"
               title="全局搜索 (⌘K / Ctrl+K)"
               aria-label="全局搜索 (⌘K)"
             >
-              <Icon name="search" className="w-3.5 h-3.5 text-muted group-hover:text-accent transition-colors shrink-0" />
+              <Icon name="search" className="w-3.5 h-3.5 text-muted group-hover:text-content transition-colors shrink-0" />
               <span className="text-muted/80 group-hover:text-content transition-colors font-medium hidden xl:inline whitespace-nowrap">
-                搜索影片...
+                搜索电影、剧集...
               </span>
               <span className="text-muted/80 group-hover:text-content transition-colors font-medium hidden lg:inline xl:hidden whitespace-nowrap">
                 搜索
               </span>
-              <kbd className="hidden lg:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-surface-raised border border-line text-[10px] font-mono text-faint group-hover:border-accent/40">
+              <kbd className="hidden lg:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-black/[0.05] dark:bg-white/[0.08] border border-black/[0.06] dark:border-white/[0.1] text-[10px] font-mono text-faint">
                 <span>⌘</span>K
               </kbd>
             </button>
@@ -262,7 +262,7 @@ function DesktopChannelNav() {
   const { t } = useTranslation();
 
   return (
-    <nav className="hidden lg:flex items-center gap-0.5 xl:gap-1 ml-2 xl:ml-4 shrink-0">
+    <nav className="hidden lg:flex items-center gap-0.5 p-1 rounded-full ios-pill ml-2 xl:ml-4 shrink-0">
       {CHANNELS.map((ch) => {
         const isActive = currentId === ch.id;
         return (
@@ -483,8 +483,10 @@ function HeaderLink({ href, active, children }: { href: string; active: boolean;
       href={href}
       prefetch={false}
       className={cn(
-        'px-2 xl:px-2.5 py-1 xl:py-1.5 rounded-lg text-xs xl:text-sm font-medium transition-all touch-manipulation active:scale-95 whitespace-nowrap shrink-0',
-        active ? 'text-accent bg-accent/10 font-semibold' : 'text-muted hover:text-content hover:bg-hover'
+        'px-3 xl:px-3.5 py-1 xl:py-1.5 rounded-full text-xs font-medium transition-all duration-200 touch-manipulation active:scale-95 whitespace-nowrap shrink-0',
+        active
+          ? 'ios-pill-active font-semibold'
+          : 'text-muted hover:text-content hover:bg-black/[0.04] dark:hover:bg-white/[0.06]'
       )}
     >
       {children}

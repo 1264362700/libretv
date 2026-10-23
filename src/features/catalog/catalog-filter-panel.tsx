@@ -209,9 +209,9 @@ export function FilterRow({
   onSelect: (opt: string) => void;
 }) {
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-xs font-semibold text-faint shrink-0 w-8 sm:w-10 text-left sm:text-right">
-        {label}:
+    <div className="flex items-center gap-2.5">
+      <span className="text-xs font-medium text-faint shrink-0 w-8 sm:w-10 text-left sm:text-right">
+        {label}
       </span>
       <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar py-0.5">
         {options.map((opt) => {
@@ -222,10 +222,10 @@ export function FilterRow({
               type="button"
               onClick={() => onSelect(opt)}
               className={cn(
-                'px-2.5 sm:px-3 py-1 rounded-lg text-xs font-medium transition-all shrink-0 active:scale-95 touch-manipulation',
+                'px-3 py-1 rounded-full text-xs font-medium transition-all shrink-0 active:scale-95 touch-manipulation cursor-pointer',
                 isActive
-                  ? 'bg-accent text-on-accent font-semibold shadow-xs'
-                  : 'text-muted hover:text-content hover:bg-hover bg-surface/50'
+                  ? 'ios-pill-active font-semibold'
+                  : 'text-muted hover:text-content hover:bg-black/[0.04] dark:hover:bg-white/[0.06]'
               )}
             >
               {opt}
@@ -268,7 +268,7 @@ export function CatalogFilterSection({
   return (
     <>
       {/* 网页版多维聚合筛选器面板 (桌面端 >= 1024px) */}
-      <div className="hidden lg:block bg-chip/35 border border-line/50 rounded-2xl p-3 sm:p-4 space-y-2.5 sm:space-y-3">
+      <div className="hidden lg:block ios-glass rounded-3xl p-4 sm:p-5 space-y-2.5 sm:space-y-3">
         <FilterRow
           label={t('catalog.region', '地区')}
           options={regions}
@@ -288,10 +288,10 @@ export function CatalogFilterSection({
           onSelect={(y) => onUpdateFilters({ year: y })}
         />
 
-        <div className="flex items-center justify-between pt-1 border-t border-line/40 gap-2 flex-wrap">
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            <span className="text-xs font-semibold text-faint shrink-0 w-8 sm:w-10 text-left sm:text-right">
-              {t('catalog.sort', '排序')}:
+        <div className="flex items-center justify-between pt-2 border-t border-black/[0.06] dark:border-white/[0.08] gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 sm:gap-2.5">
+            <span className="text-xs font-medium text-faint shrink-0 w-8 sm:w-10 text-left sm:text-right">
+              {t('catalog.sort', '排序')}
             </span>
             <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
               {SORTS.map((s) => (
@@ -299,10 +299,10 @@ export function CatalogFilterSection({
                   key={s.id}
                   onClick={() => onUpdateFilters({ sort: s.id })}
                   className={cn(
-                    'px-3 py-1 rounded-lg text-xs font-medium transition-all shrink-0 active:scale-95 touch-manipulation',
+                    'px-3 py-1 rounded-full text-xs font-medium transition-all shrink-0 active:scale-95 touch-manipulation cursor-pointer',
                     currentSort === s.id
-                      ? 'bg-accent text-on-accent font-semibold shadow-xs'
-                      : 'text-muted hover:text-content hover:bg-hover bg-surface/50'
+                      ? 'ios-pill-active font-semibold'
+                      : 'text-muted hover:text-content hover:bg-black/[0.04] dark:hover:bg-white/[0.06]'
                   )}
                 >
                   {s.label}
@@ -314,7 +314,7 @@ export function CatalogFilterSection({
           {hasActiveFilters && (
             <button
               onClick={onReset}
-              className="text-xs text-accent hover:underline flex items-center gap-1 shrink-0 ml-auto cursor-pointer"
+              className="text-xs text-muted hover:text-content px-3 py-1 rounded-full ios-pill flex items-center gap-1 shrink-0 ml-auto cursor-pointer"
             >
               <span>重置所有筛选</span>
               <span>✕</span>

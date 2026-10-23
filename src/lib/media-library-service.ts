@@ -13,6 +13,9 @@ export interface MediaItem {
   id: string;
   title: string;
   cover: string;
+  backdrop?: string;
+  overview?: string;
+  area?: string;
   rating?: string;
   episodes_info?: string;
   card_subtitle?: string;
@@ -22,6 +25,8 @@ export interface MediaItem {
   remarks?: string;
   actors?: string[];
   isRecent?: boolean;
+  hotRank?: number;
+  hotScore?: string;
 }
 
 export interface BangumiDaySchedule {
@@ -178,6 +183,8 @@ export async function fetchDoubanCollectionItems(
     type = 'anime';
   } else if (collectionId === 'tv_variety_show') {
     type = 'variety';
+  } else if (collectionId === 'trending') {
+    type = 'trending';
   } else if (collectionId === 'movie_hot') {
     type = 'movie';
   }
@@ -219,11 +226,21 @@ export async function fetchDoubanCollectionItems(
         id: String(raw?.id || ''),
         title,
         cover: String(raw?.cover || ''),
+        backdrop: typeof raw?.backdrop === 'string' && raw.backdrop ? raw.backdrop : String(raw?.cover || ''),
+        overview: typeof raw?.overview === 'string' && raw.overview ? raw.overview : undefined,
+        area: typeof raw?.area === 'string' && raw.area ? raw.area : undefined,
         rating,
         year,
         typeName,
-        card_subtitle: year ? `${year} · ${typeName}` : typeName,
+        card_subtitle:
+          typeof raw?.overview === 'string' && raw.overview
+            ? raw.overview
+            : year
+              ? `${year} · ${typeName}`
+              : typeName,
         episodes_info: epInfo,
+        hotRank: typeof raw?.hotRank === 'number' ? raw.hotRank : undefined,
+        hotScore: typeof raw?.hotScore === 'string' ? raw.hotScore : undefined,
       };
     });
 

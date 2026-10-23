@@ -33,6 +33,7 @@ import type {
   AuthDataStore,
   FullBackupPayload,
 } from './auth-store-types';
+import { inviteCodeCandidates } from './invite-code';
 
 export type {
   UserRecord,
@@ -674,36 +675,66 @@ export function verifyUserCredentials(username: string, password: string): {
   return { success: true, user };
 }
 
+/** 注册表单里可被精确定位的字段，用于前端把错误挂到对应输入框下方 */
+export type RegisterFieldError = 'invite' | 'username' | 'password' | 'confirm';
+
+/** 现有邀请码里出现过的前缀，用于给「用户漏打前缀」的输入补前缀 */
+function knownInvitePrefixes(store: AuthDataStore): string[] {
+  const prefixes = new Set<string>();
+  for (const code of Object.keys(store.invites || {})) {
+    const dash = code.indexOf('-');
+    if (dash > 0) prefixes.add(code.slice(0, dash).toUpperCase());
+  }
+  return [...prefixes];
+}
+
+/**
+ * 按拼写等价类解析邀请码。
+ * 用户拿到码的路径是微信/QQ 复制 + 手机手打，必然混入小写、全角横线、
+ * 下划线、中间空格；这里逐个试候选，**不改变码空间**，命中不到即视为无效。
+ */
+function resolveInviteRecord(store: AuthDataStore, raw: string): InviteCodeRecord | undefined {
+  if (!raw) return undefined;
+  for (const candidate of inviteCodeCandidates(raw, knownInvitePrefixes(store))) {
+    const hit = store.invites[candidate];
+    if (hit) return hit;
+  }
+  return undefined;
+}
+
 export function registerWithInvite(username: string, password: string, inviteCode: string): {
   success: boolean;
   user?: UserRecord;
   error?: string;
+  field?: RegisterFieldError;
 } {
   const store = loadStore();
   const uname = username.toLowerCase().trim();
   const codeStr = inviteCode.trim();
 
   if (!uname || uname.length < 3 || uname.length > 20) {
-    return { success: false, error: '用户名需为 3-20 位字符' };
+    return { success: false, error: '用户名需为 3-20 位字符', field: 'username' };
   }
   if (!password || password.length < 6) {
-    return { success: false, error: '密码长度至少需 6 位' };
+    return { success: false, error: '密码长度至少需 6 位', field: 'password' };
   }
   if (!/^[a-zA-Z0-9_\u4e00-\u9fa5]+$/.test(uname)) {
-    return { success: false, error: '用户名仅支持中英文、数字与下划线' };
+    return { success: false, error: '用户名仅支持中英文、数字与下划线', field: 'username' };
   }
 
   if (store.users[uname]) {
-    return { success: false, error: '该用户名已被注册' };
+    return { success: false, error: '该用户名已被注册', field: 'username' };
   }
 
-  const invite = store.invites[codeStr];
-  if (!invite || !invite.active) {
-    return { success: false, error: '无效或已作废的邀请码' };
+  const invite = resolveInviteRecord(store, codeStr);
+  if (!invite) {
+    return { success: false, error: '邀请码无效，请核对后重试', field: 'invite' };
   }
-
+  if (!invite.active) {
+    return { success: false, error: '该邀请码已被作废', field: 'invite' };
+  }
   if (invite.useCount >= invite.maxUses) {
-    return { success: false, error: '该邀请码已被使用完毕' };
+    return { success: false, error: '该邀请码已被使用完毕', field: 'invite' };
   }
 
   invite.useCount += 1;

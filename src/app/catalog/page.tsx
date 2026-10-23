@@ -352,7 +352,7 @@ function CatalogContent() {
                   </span>
                 )}
                 共展示 <span className="text-content font-bold">{items.length}</span> 部精选影片
-                {currentSource !== 'bangumi' && `（第 ${currentPage}/${totalPages} 页${total > 0 ? `，共约 ${total.toLocaleString()} 部` : ''}）`}
+                {`（第 ${currentPage}/${totalPages} 页${total > 0 ? `，共约 ${total.toLocaleString()} 部` : ''}）`}
               </>
             ) : (
               '暂无影片'
@@ -471,7 +471,7 @@ function CatalogContent() {
         )}
 
         {/* 分页导航条 */}
-        {!urlQuery && currentSource !== 'bangumi' && (
+        {!urlQuery && (
           <CatalogPagination
             currentPage={currentPage}
             totalPages={totalPages}

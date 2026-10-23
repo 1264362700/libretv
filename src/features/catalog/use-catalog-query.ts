@@ -350,10 +350,7 @@ export function useCatalogData(filters: ReturnType<typeof useCatalogFilters>) {
   });
 
   const rawItems: DoubanItem[] = (catalogQuery.data?.items as DoubanItem[]) ?? [];
-  const items: DoubanItem[] =
-    currentChannel === 'short_drama' || currentChannel === 'ai_comic' || currentChannel === 'movie_commentary'
-      ? rawItems
-      : rawItems.filter((item: DoubanItem) => !isShortDramaTitle(item.title));
+  const items: DoubanItem[] = rawItems.filter((item: DoubanItem) => !isShortDramaTitle(item.title));
 
   const total = catalogQuery.data?.total ?? items.length;
   const totalPages = Math.max(

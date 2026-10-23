@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '@/lib/client-api';
 import { Icon } from '@/components/icon';
 import { EmptyState } from '@/components/states';
 import { DoubanCard } from '@/components/video-card';
 import { buildWatchUrl, cn } from '@/lib/utils';
+import type { TmdbMediaItem } from '@/lib/tmdb';
 
 export interface WatchRecommendationsProps {
   videoTitle: string;
@@ -15,7 +15,7 @@ export interface WatchRecommendationsProps {
 }
 
 /**
- * 播放页底部「猜你喜欢」全宽智能推荐专区
+ * 播放页底部「猜你喜欢」全宽智能推荐专区（纯 TMDB 官方引擎）
  */
 export function WatchRecommendations({
   videoTitle,
@@ -30,30 +30,24 @@ export function WatchRecommendations({
   }, [videoTitle]);
 
   const recommendQuery = useQuery({
-    queryKey: ['watch-recommendations', recommendCategory, recPage, videoTitle],
+    queryKey: ['watch-tmdb-recommendations', recommendCategory, recPage, videoTitle],
     queryFn: async ({ signal }) => {
       try {
-        const res = await api.douban(recommendCategory, '热门', recPage * 12, 12, signal);
-        if (res.items && res.items.length > 0) {
-          const filtered = res.items.filter(
-            (item) => item.title && !videoTitle.includes(item.title) && !item.title.includes(videoTitle)
-          );
-          if (filtered.length > 0) return filtered;
-        }
-      } catch {
-        // 豆瓣源失败，尝试降级
-      }
-
-      try {
-        const hotKey = recommendCategory === 'tv' ? 'baidu_teleplay' : 'douban_weekly';
-        const res = await api.hotList(hotKey, signal);
-        if (res.items && res.items.length > 0) {
-          return res.items.filter(
+        const sp = new URLSearchParams({
+          type: recommendCategory,
+          page: String(recPage + 1),
+          sort: 'recommend',
+        });
+        const res = await fetch(`/api/tmdb?${sp.toString()}`, { signal });
+        if (res.ok) {
+          const data = await res.json();
+          const items: TmdbMediaItem[] = Array.isArray(data.items) ? data.items : [];
+          return items.filter(
             (item) => item.title && !videoTitle.includes(item.title) && !item.title.includes(videoTitle)
           );
         }
       } catch {
-        // 降级失败
+        // ignore
       }
       return [];
     },
@@ -74,12 +68,12 @@ export function WatchRecommendations({
           <h2 className="text-base sm:text-lg font-bold text-content">猜你喜欢</h2>
           <span className="text-xs text-faint hidden sm:inline">
             {recommendCategory === 'tv'
-              ? '根据当前剧集精选热门电视剧'
+              ? 'TMDB 精选热门电视剧'
               : recommendCategory === 'anime'
-                ? '精选热门动漫番剧'
+                ? 'TMDB 精选热门动漫番剧'
                 : recommendCategory === 'variety'
-                  ? '精选热门综艺节目'
-                  : '精选高分热门电影'}
+                  ? 'TMDB 精选热门综艺节目'
+                  : 'TMDB 精选高分热门电影'}
           </span>
         </div>
         <button
@@ -111,7 +105,7 @@ export function WatchRecommendations({
             <DoubanCard
               key={item.id || item.title}
               item={item}
-              onClick={() => onNavigate(buildWatchUrl({ title: item.title }))}
+              onClick={() => onNavigate(buildWatchUrl({ title: item.title, year: item.year }))}
             />
           ))}
         </div>

@@ -1,10 +1,8 @@
 /**
- * 影视资料库与多维门面服务 (MediaLibraryService)
- * 壳肉分离架构展示门面核心：
- * 1. 豆瓣公开 API 与榜单获取
- * 2. Bangumi 动漫新番周历放送表
- * 3. 主力苹果CMS采集源「最近更新」静默对齐服务 (RecentUpdatesSyncer)
- * 4. 集数角标智能推导算法 (resolveEpisodeBadge)
+ * 影视资料库门面服务 (MediaLibraryService — 纯 TMDB 官方引擎)
+ * 1. TMDB 全球 4K 榜单与分类推荐 (/api/tmdb)
+ * 2. 主力采集源「最近更新」静默对齐服务 (RecentUpdatesSyncer)
+ * 3. 集数角标智能推导算法 (resolveEpisodeBadge)
  */
 
 import type { SourceConfig } from './types';
@@ -29,12 +27,6 @@ export interface MediaItem {
   hotScore?: string;
 }
 
-export interface BangumiDaySchedule {
-  weekdayId: number; // 1~7 (周一~周日)
-  weekdayCn: string;
-  items: MediaItem[];
-}
-
 /** 归一化片名，用于跨系统精确匹配对齐 */
 export function normalizeTitleForMatch(title: string): string {
   return (title || '')
@@ -45,15 +37,15 @@ export function normalizeTitleForMatch(title: string): string {
 /**
  * 提取海报卡片上的更新集数/状态角标 (核心算法)
  * 优先级 1: 命中主力采集源实时更新备注（如 "更新至18集"、"全40集"、"HD国语"）
- * 优先级 2: 豆瓣接口返回的 episodes_info（如 "更新至10集" 或 "12集全"）
- * 优先级 3: 从豆瓣 card_subtitle 或 info 中正则提取集数
+ * 优先级 2: TMDB 接口返回的 episodes_info
+ * 优先级 3: 从 card_subtitle 或 info 中正则提取集数
  * 优先级 4: 电影提取年份作为兜底标签（如 "2024 · 正片"），无年份返回 "热播"
  */
 export function resolveEpisodeBadge(
-  doubanItem: Partial<MediaItem>,
+  mediaItem: Partial<MediaItem>,
   cmsRemarksMap: Map<string, string> = new Map()
 ): string {
-  const title = doubanItem.title || '';
+  const title = mediaItem.title || '';
   const normTitle = normalizeTitleForMatch(title);
 
   // 优先级 1：主力采集源实时更新备注
@@ -64,13 +56,13 @@ export function resolveEpisodeBadge(
     }
   }
 
-  // 优先级 2：豆瓣原生 episodes_info
-  if (doubanItem.episodes_info && doubanItem.episodes_info.trim() !== '') {
-    return doubanItem.episodes_info.trim();
+  // 优先级 2：原生 episodes_info
+  if (mediaItem.episodes_info && mediaItem.episodes_info.trim() !== '') {
+    return mediaItem.episodes_info.trim();
   }
 
   // 优先级 3：从 card_subtitle 或 info 中正则提取集数
-  const subtitle = doubanItem.card_subtitle || doubanItem.info || '';
+  const subtitle = mediaItem.card_subtitle || mediaItem.info || '';
   const epMatch = subtitle.match(/(更新至\s*\d+\s*集|全\s*\d+\s*集|\d+\s*集全|连载至\s*\d+\s*集)/i);
   if (epMatch) {
     return epMatch[1].replace(/\s+/g, '');
@@ -81,22 +73,15 @@ export function resolveEpisodeBadge(
   if (yearMatch) {
     return `${yearMatch[1]} · 正片`;
   }
-  if (doubanItem.year) {
-    return `${doubanItem.year} · 正片`;
+  if (mediaItem.year) {
+    return `${mediaItem.year} · 正片`;
   }
 
   return '热播';
 }
 
-/** 规范化豆瓣封面图片（支持 no-referrer，大图提取） */
-export function formatDoubanCover(url?: string): string {
-  if (!url) return '';
-  return url.replace(/\/view\/subject\/[s|m]\/public\//, '/view/subject/l/public/');
-}
-
 /**
  * 主采集源「最近更新」静默对齐服务 (RecentUpdatesSyncer)
- * 抓取主力采集源前 2 页最新更新条目，生成归一化片名映射字典与今日实时更新流
  */
 export async function syncRecentUpdates(
   masterSource: SourceConfig,
@@ -142,7 +127,6 @@ export async function syncRecentUpdates(
         remarksMap.set(norm, vodRemarks);
       }
 
-      // 提取今日连载（过滤掉成人或格式异常条目）
       const vodPic = String(item.vod_pic || item.pic || '');
       const typeName = String(item.type_name || item.typeName || '');
       const year = String(item.vod_year || item.year || '');
@@ -163,7 +147,7 @@ export async function syncRecentUpdates(
   return { remarksMap, recentList };
 }
 
-/** 1. 获取首页榜单与分类推荐（全面接入 0 防盗链、免服务器代理的开放官方图床引擎） */
+/** 获取首页榜单与分类推荐（100% 接入 TMDB 官方 /api/tmdb 接口） */
 export async function fetchDoubanCollectionItems(
   collectionId: string,
   start = 0,
@@ -171,7 +155,6 @@ export async function fetchDoubanCollectionItems(
   signal?: AbortSignal
 ): Promise<{ items: MediaItem[]; total: number }> {
   let type = 'movie';
-  const tag = '热门';
   let sort = 'recommend';
 
   if (collectionId === 'tv_hot') {
@@ -189,18 +172,17 @@ export async function fetchDoubanCollectionItems(
     type = 'movie';
   }
 
+  const page = Math.max(1, Math.floor(start / Math.max(1, count)) + 1);
   const queryParams = new URLSearchParams({
     type,
-    tag,
     sort,
-    pageStart: String(start),
-    pageSize: String(count),
+    page: String(page),
   });
 
   try {
-    const res = await fetch(`/api/douban?${queryParams.toString()}`, { signal });
+    const res = await fetch(`/api/tmdb?${queryParams.toString()}`, { signal });
     if (!res.ok) {
-      throw new Error(`影视数据获取失败: ${res.status}`);
+      throw new Error(`TMDB 影视数据获取失败: ${res.status}`);
     }
 
     const json = await res.json();
@@ -209,7 +191,7 @@ export async function fetchDoubanCollectionItems(
     const typeName =
       type === 'movie' ? '电影' : type === 'tv' ? '剧集' : type === 'anime' ? '动漫' : '综艺';
 
-    const items: MediaItem[] = rawItems.map((raw: Record<string, unknown>) => {
+    const items: MediaItem[] = rawItems.slice(0, count).map((raw: Record<string, unknown>) => {
       const rawRate = raw?.rating;
       const rating = rawRate ? String(rawRate) : undefined;
       const year = raw?.year ? String(raw.year) : undefined;
@@ -219,8 +201,8 @@ export async function fetchDoubanCollectionItems(
         typeof raw?.episodes_info === 'string' && raw.episodes_info
           ? raw.episodes_info
           : typeof raw?.remarks === 'string' && raw.remarks
-          ? raw.remarks
-          : undefined;
+            ? raw.remarks
+            : undefined;
 
       return {
         id: String(raw?.id || ''),
@@ -233,11 +215,13 @@ export async function fetchDoubanCollectionItems(
         year,
         typeName,
         card_subtitle:
-          typeof raw?.overview === 'string' && raw.overview
-            ? raw.overview
-            : year
-              ? `${year} · ${typeName}`
-              : typeName,
+          typeof raw?.card_subtitle === 'string' && raw.card_subtitle
+            ? raw.card_subtitle
+            : typeof raw?.overview === 'string' && raw.overview
+              ? raw.overview
+              : year
+                ? `${year} · ${typeName}`
+                : typeName,
         episodes_info: epInfo,
         hotRank: typeof raw?.hotRank === 'number' ? raw.hotRank : undefined,
         hotScore: typeof raw?.hotScore === 'string' ? raw.hotScore : undefined,
@@ -249,69 +233,7 @@ export async function fetchDoubanCollectionItems(
     if (err instanceof Error && err.name === 'AbortError') {
       throw err;
     }
-    console.warn(`[MediaLibraryService] 获取影视推荐失败 (${collectionId}):`, err);
+    console.warn(`[MediaLibraryService] 获取 TMDB 推荐失败 (${collectionId}):`, err);
     return { items: [], total: 0 };
   }
-}
-
-/** 2. 获取豆瓣带 episodes_info 的多维标签推荐 */
-export async function fetchDoubanTagSubjects(
-  mediaType: 'movie' | 'tv',
-  tag: string,
-  start = 0,
-  limit = 24,
-  signal?: AbortSignal
-): Promise<MediaItem[]> {
-  const res = await fetch(
-    `/api/douban-proxy?type=tag_subjects&mediaType=${mediaType}&tag=${encodeURIComponent(
-      tag
-    )}&start=${start}&limit=${limit}`,
-    { signal }
-  );
-
-  if (!res.ok) return [];
-
-  const json = await res.json().catch(() => null);
-  const rawList = Array.isArray(json?.subjects) ? json.subjects : [];
-
-  return rawList.map((raw: Record<string, unknown>) => ({
-    id: String(raw?.id || ''),
-    title: String(raw?.title || '').trim(),
-    cover: formatDoubanCover(String(raw?.cover || '')),
-    rating: raw?.rate ? String(raw.rate) : undefined,
-    episodes_info: typeof raw?.episodes_info === 'string' ? raw.episodes_info : undefined,
-  }));
-}
-
-const WEEKDAY_NAMES = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
-
-/** 3. 获取 Bangumi 每周放送日历 (周一至周日) */
-export async function fetchBangumiSchedule(signal?: AbortSignal): Promise<BangumiDaySchedule[]> {
-  const res = await fetch('/api/bangumi/calendar', { signal });
-  if (!res.ok) return [];
-
-  const json = await res.json().catch(() => null);
-  const days = Array.isArray(json?.days) ? json.days : [];
-
-  const schedule: BangumiDaySchedule[] = [];
-
-  for (let i = 1; i <= 7; i++) {
-    const found = days.find((d: Record<string, unknown>) => Number(d.weekday) === i);
-    const rawItems = Array.isArray(found?.items) ? found.items : [];
-    const items: MediaItem[] = rawItems.map((item: Record<string, unknown>) => ({
-      id: String(item.id || ''),
-      title: String(item.title || ''),
-      cover: formatDoubanCover(String(item.cover || '')),
-      rating: item.rating ? String(item.rating) : undefined,
-      card_subtitle: '新番连载',
-    }));
-
-    schedule.push({
-      weekdayId: i,
-      weekdayCn: WEEKDAY_NAMES[i],
-      items,
-    });
-  }
-
-  return schedule;
 }

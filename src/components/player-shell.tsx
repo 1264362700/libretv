@@ -18,6 +18,11 @@ import {
   setGlobalAutoJump,
   type PreciseSkipConfig,
 } from '@/lib/precise-skip';
+import {
+  findActiveSubtitleText,
+  parseSubtitles,
+  type SubtitleCue,
+} from '@/lib/subtitle-parser';
 
 /**
  * 播放器外壳：ArtPlayer + hls.js（旧版 player.js 的 React 化）。
@@ -61,6 +66,10 @@ export interface PlayerShellHandle {
   isPlaying: () => boolean;
   /** 当前播放秒数 */
   getCurrentTime: () => number;
+  /** 挂载本地外挂字幕（SRT / WebVTT 文本），返回成功解析的字幕条数 */
+  loadSubtitle: (content: string, label?: string) => number;
+  /** 将当前播放秒数设为本剧片头结束点，返回标记的秒数 */
+  markCurrentAsIntroEnd: () => number;
 }
 
 export function PlayerShellInner({
@@ -88,8 +97,29 @@ export function PlayerShellInner({
   const [showPoster, setShowPoster] = useState(true);
   const hintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 对外暴露播放控制：弹框暂停 / 取消后恢复，均走 ArtPlayer 既有 API，
-  // 不触碰 HLS 实例，避免与换集、预加载逻辑产生竞态
+  // 外挂字幕状态（支持 SRT / WebVTT 拖拽或按钮导入 + ±0.5s 时间轴校准）
+  const subtitleCuesRef = useRef<SubtitleCue[]>([]);
+  const subtitleOffsetRef = useRef(0);
+  const [subtitleLabel, setSubtitleLabel] = useState('');
+  const [subtitleOffset, setSubtitleOffset] = useState(0);
+  const [activeSubText, setActiveSubText] = useState('');
+
+  // 精准跳过片头片尾状态（9zhoukj 机制：每剧独立记忆 + 毫秒级打点）
+  const showKey = episodeKey ? episodeKey.split(':').slice(0, 2).join(':') : (title || '').split(' ')[0] || 'default';
+  const showKeyRef = useRef(showKey);
+  showKeyRef.current = showKey;
+
+  const [skipConfig, setSkipConfig] = useState<PreciseSkipConfig>(() => getShowPreciseSkip(showKey));
+  const skipConfigRef = useRef(skipConfig);
+  skipConfigRef.current = skipConfig;
+
+  const showHint = (text: string) => {
+    setHint(text);
+    if (hintTimerRef.current) clearTimeout(hintTimerRef.current);
+    hintTimerRef.current = setTimeout(() => setHint(''), 2500);
+  };
+
+  // 对外暴露播放控制与字幕/片头快捷操作
   useImperativeHandle(
     ref,
     () => ({
@@ -106,6 +136,25 @@ export function PlayerShellInner({
       },
       isPlaying: () => Boolean(artRef.current?.playing),
       getCurrentTime: () => Number(artRef.current?.currentTime || 0),
+      loadSubtitle: (content: string, label = '外挂字幕') => {
+        const cues = parseSubtitles(content);
+        subtitleCuesRef.current = cues;
+        subtitleOffsetRef.current = 0;
+        setSubtitleOffset(0);
+        setSubtitleLabel(cues.length > 0 ? label : '');
+        setActiveSubText('');
+        showHint(cues.length > 0 ? `已挂载字幕「${label}」(${cues.length} 条)` : '字幕解析为空，请检查格式');
+        return cues.length;
+      },
+      markCurrentAsIntroEnd: () => {
+        const cur = Math.round(Number(artRef.current?.currentTime || 0));
+        if (cur > 0) {
+          saveShowPreciseSkip(showKeyRef.current, { headEnd: cur });
+          setSkipConfig((prev) => ({ ...prev, headEnd: cur, isCustomMarked: true }));
+          showHint(`已记忆本剧片头结束点：${formatTime(cur)}`);
+        }
+        return cur;
+      },
     }),
     []
   );
@@ -138,26 +187,11 @@ export function PlayerShellInner({
   // 自然播完标记，卸载时不回写进度（避免覆盖「已看完」记录）
   const endedRef = useRef(false);
 
-  // 精准跳过片头片尾状态（9zhoukj 机制：每剧独立记忆 + 毫秒级打点）
-  const showKey = episodeKey ? episodeKey.split(':').slice(0, 2).join(':') : (title || '').split(' ')[0] || 'default';
-  const showKeyRef = useRef(showKey);
-  showKeyRef.current = showKey;
-
-  const [skipConfig, setSkipConfig] = useState<PreciseSkipConfig>(() => getShowPreciseSkip(showKey));
-  const skipConfigRef = useRef(skipConfig);
-  skipConfigRef.current = skipConfig;
-
   const [showSkipOpening, setShowSkipOpening] = useState(false);
   const [showSkipEnding, setShowSkipEnding] = useState(false);
   const [undoIntro, setUndoIntro] = useState(false);
   const hasSkippedOpeningRef = useRef(false);
   const hasJumpedEndingRef = useRef(false);
-
-  const showHint = (text: string) => {
-    setHint(text);
-    if (hintTimerRef.current) clearTimeout(hintTimerRef.current);
-    hintTimerRef.current = setTimeout(() => setHint(''), 2500);
-  };
 
   // 片段缓存开启时调大 hls.js 自身缓冲，缓冲之外的空窗由预取器补齐
   const buildHlsConfig = (): Partial<HlsConfig> => {
@@ -437,6 +471,16 @@ export function PlayerShellInner({
       const dur = art.duration;
       const cfg = skipConfigRef.current;
 
+      // 实时刷新外挂字幕对白
+      if (subtitleCuesRef.current.length > 0) {
+        const subText = findActiveSubtitleText(
+          subtitleCuesRef.current,
+          curTime,
+          subtitleOffsetRef.current
+        );
+        setActiveSubText((prev) => (prev === subText ? prev : subText));
+      }
+
       // 9zhoukj 片头精准跳过判定
       if (curTime < cfg.headEnd && curTime >= 0) {
         if (cfg.autoJump && !hasSkippedOpeningRef.current && curTime < 5) {
@@ -627,9 +671,97 @@ export function PlayerShellInner({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adFilter]);
 
+  const adjustSubOffset = (delta: number) => {
+    const next = Math.round((subtitleOffsetRef.current + delta) * 10) / 10;
+    subtitleOffsetRef.current = next;
+    setSubtitleOffset(next);
+    showHint(`字幕时间轴偏移：${next >= 0 ? `+${next}` : next}s`);
+  };
+
   return (
-    <div className="relative w-full h-full">
+    <div
+      className="relative w-full h-full"
+      onDragOver={(e) => {
+        e.preventDefault();
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        const file = e.dataTransfer?.files?.[0];
+        if (!file) return;
+        if (!/\.(srt|vtt|ass)$/i.test(file.name)) {
+          showHint('请拖入 .srt 或 .vtt 字幕文件');
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => {
+          const text = String(reader.result || '');
+          const cues = parseSubtitles(text);
+          subtitleCuesRef.current = cues;
+          subtitleOffsetRef.current = 0;
+          setSubtitleOffset(0);
+          setSubtitleLabel(cues.length > 0 ? file.name : '');
+          showHint(cues.length > 0 ? `已挂载字幕「${file.name}」` : '字幕解析为空');
+        };
+        reader.readAsText(file, 'utf-8');
+      }}
+    >
       <div ref={containerRef} className="w-full h-full" style={{ WebkitTouchCallout: 'none' }} />
+
+      {/* 外挂字幕高清描边渲染层 */}
+      {activeSubText && !error && (
+        <div
+          className="absolute inset-x-4 bottom-12 sm:bottom-16 z-20 flex flex-col items-center pointer-events-none select-none"
+          aria-live="off"
+        >
+          <div
+            className="max-w-[90%] px-3 py-1 rounded-md bg-black/55 backdrop-blur-[1px] text-white text-sm sm:text-base md:text-lg font-semibold text-center whitespace-pre-line leading-snug"
+            style={{ textShadow: '0 1px 3px rgba(0,0,0,0.95), 0 0 6px rgba(0,0,0,0.8)' }}
+          >
+            {activeSubText}
+          </div>
+        </div>
+      )}
+
+      {/* 外挂字幕时间轴校准微胶囊 */}
+      {subtitleLabel && !error && (
+        <div className="absolute top-3 right-3 z-20 flex items-center gap-1 px-2 py-1 rounded-lg bg-black/70 backdrop-blur border border-white/15 text-[11px] text-white/90 pointer-events-auto">
+          <span className="truncate max-w-[100px] text-accent font-medium" title={subtitleLabel}>
+            字幕: {subtitleLabel}
+          </span>
+          <button
+            type="button"
+            onClick={() => adjustSubOffset(-0.5)}
+            className="px-1.5 py-0.5 rounded bg-white/10 hover:bg-white/20 text-[10px] font-mono cursor-pointer"
+            title="字幕提前 0.5 秒"
+          >
+            -0.5s
+          </button>
+          <span className="font-mono text-[10px] text-white/70 px-0.5">
+            {subtitleOffset >= 0 ? `+${subtitleOffset}` : subtitleOffset}s
+          </span>
+          <button
+            type="button"
+            onClick={() => adjustSubOffset(0.5)}
+            className="px-1.5 py-0.5 rounded bg-white/10 hover:bg-white/20 text-[10px] font-mono cursor-pointer"
+            title="字幕延后 0.5 秒"
+          >
+            +0.5s
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              subtitleCuesRef.current = [];
+              setSubtitleLabel('');
+              setActiveSubText('');
+              showHint('已卸载外挂字幕');
+            }}
+            className="ml-0.5 px-1 text-white/60 hover:text-rose-400 cursor-pointer"
+            title="卸载外挂字幕"
+          >
+            ×
+          </button>
+        </div>
+      )}
       {showPoster && !error && (
         <div
           className="absolute inset-0 bg-black pointer-events-none"
@@ -675,12 +807,12 @@ export function PlayerShellInner({
         </div>
       )}
 
-      {/* 片头跳过浮层药丸 */}
+      {/* 片头跳过与一键打点记忆浮层药丸 */}
       {showSkipOpening && !error && (
-        <div className="absolute bottom-12 left-3 sm:bottom-14 sm:left-4 z-20 flex items-center animate-fade-in pointer-events-auto">
+        <div className="absolute bottom-12 left-3 sm:bottom-14 sm:left-4 z-20 flex items-center gap-1.5 animate-fade-in pointer-events-auto">
           <button
             type="button"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/80 hover:bg-black/95 text-white border border-white/20 text-xs sm:text-sm font-medium backdrop-blur shadow-lg transition-all active:scale-95"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/80 hover:bg-black/95 text-white border border-white/20 text-xs sm:text-sm font-medium backdrop-blur shadow-lg transition-all active:scale-95 cursor-pointer"
             onClick={() => {
               if (artRef.current) {
                 artRef.current.currentTime = skipConfig.headEnd;
@@ -692,6 +824,24 @@ export function PlayerShellInner({
           >
             <span>⏩ 跳过片头</span>
             <span className="text-accent text-xs font-mono">{formatTime(skipConfig.headEnd)}</span>
+          </button>
+          <button
+            type="button"
+            className="px-2.5 py-1.5 rounded-full bg-black/75 hover:bg-accent/90 text-white/85 hover:text-white border border-white/15 text-[11px] font-medium backdrop-blur shadow-md transition-all cursor-pointer"
+            title="将当前播放秒数设为本剧片头结束点，后续剧集自动同步"
+            onClick={() => {
+              if (!artRef.current) return;
+              const cur = Math.round(artRef.current.currentTime);
+              if (cur > 3) {
+                saveShowPreciseSkip(showKeyRef.current, { headEnd: cur });
+                setSkipConfig((prev) => ({ ...prev, headEnd: cur, isCustomMarked: true }));
+                showHint(`已记住本剧片头结束点：${formatTime(cur)}`);
+              } else {
+                showHint('请拖动或播放至片头结束处再点击标记');
+              }
+            }}
+          >
+            📌 设当前秒为片头
           </button>
         </div>
       )}

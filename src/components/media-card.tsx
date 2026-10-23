@@ -78,9 +78,9 @@ export function MediaCard({
     <div
       className={cn(
         'group relative flex flex-col rounded-xl overflow-hidden cursor-pointer select-none',
-        'bg-card dark:bg-[#161F30]/90 border border-line dark:border-slate-700/40 hover:border-accent/60',
+        'bg-surface border border-line/60 hover:border-accent/60',
         'hover:shadow-2xl hover:shadow-black/50 hover:-translate-y-1.5 active:scale-95',
-        'transition-all duration-300 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 touch-manipulation',
+        'transition-all duration-300 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:border-accent focus-visible:-translate-y-1 touch-manipulation',
         className
       )}
       role="button"

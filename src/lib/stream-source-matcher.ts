@@ -4,6 +4,12 @@
  */
 
 import type { SourceConfig } from './types';
+import {
+  canProbeSource,
+  getSourceQoSScore,
+  recordSourceFailure,
+  recordSourceSuccess,
+} from './source-circuit-breaker';
 
 export interface TargetMediaInfo {
   title: string;
@@ -327,11 +333,22 @@ const FAST_LANE_SOURCE_REGEX = /量子|非凡|红牛|极速|光速|金鹰|快车
 
 export function sortSourcesByPriority(sources: SourceConfig[]): SourceConfig[] {
   return [...sources].sort((a, b) => {
+    const aCanProbe = canProbeSource(a.key);
+    const bCanProbe = canProbeSource(b.key);
+    if (aCanProbe && !bCanProbe) return -1;
+    if (!aCanProbe && bCanProbe) return 1;
+
+    const aQos = getSourceQoSScore(a.key);
+    const bQos = getSourceQoSScore(b.key);
+    if (Math.abs(aQos - bQos) >= 12) {
+      return bQos - aQos;
+    }
+
     const aFast = FAST_LANE_SOURCE_REGEX.test(`${a.name || ''} ${a.url || ''}`);
     const bFast = FAST_LANE_SOURCE_REGEX.test(`${b.name || ''} ${b.url || ''}`);
     if (aFast && !bFast) return -1;
     if (!aFast && bFast) return 1;
-    return 0;
+    return bQos - aQos;
   });
 }
 
@@ -442,6 +459,11 @@ export class StreamSourceMatcher {
       derivativeTags?: string[];
     }
   ): Promise<void> {
+    // 熔断防御：若该源近期连续超时/报错处于 Open 熔断期，且总源充足，直接跳过以释放并发通道
+    if (this.sources.length > 3 && !canProbeSource(source.key)) {
+      return;
+    }
+
     const startMs = Date.now();
     const singleController = new AbortController();
     const timeoutMs = this.options.timeoutMs || 5000;
@@ -467,10 +489,19 @@ export class StreamSourceMatcher {
         headers: { Accept: 'application/json' },
       });
 
-      if (!res.ok) return;
+      if (!res.ok) {
+        recordSourceFailure(source.key);
+        return;
+      }
 
       const data = await res.json().catch(() => null);
-      if (!data || typeof data !== 'object') return;
+      if (!data || typeof data !== 'object') {
+        recordSourceFailure(source.key);
+        return;
+      }
+
+      // 源响应健康，记录 QoS 延迟
+      recordSourceSuccess(source.key, Date.now() - startMs);
 
       const rawList = Array.isArray(data.list)
         ? data.list
@@ -546,6 +577,11 @@ export class StreamSourceMatcher {
         this.hasReportedFirst = true;
       }
       this.options.onSourceFound?.(matched, isFirst);
+    } catch (err) {
+      if (!this.abortController.signal.aborted) {
+        recordSourceFailure(source.key);
+      }
+      throw err;
     } finally {
       clearTimeout(timeoutTimer);
       this.abortController.signal.removeEventListener('abort', onGlobalAbort);

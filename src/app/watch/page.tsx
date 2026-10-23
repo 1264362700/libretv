@@ -520,6 +520,16 @@ function WatchContent() {
                 >
                   📝 挂载字幕
                 </button>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-ghost px-2 text-xs"
+                  onClick={() => {
+                    void playerRef.current?.togglePip();
+                  }}
+                  title="开启/退出画中画悬浮小窗模式，边浏览其他页面边看剧"
+                >
+                  🖼️ 画中画
+                </button>
                 <input
                   ref={subInputRef}
                   type="file"

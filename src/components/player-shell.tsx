@@ -70,6 +70,8 @@ export interface PlayerShellHandle {
   loadSubtitle: (content: string, label?: string) => number;
   /** 将当前播放秒数设为本剧片头结束点，返回标记的秒数 */
   markCurrentAsIntroEnd: () => number;
+  /** 切换画中画（Picture-in-Picture）悬浮小窗模式 */
+  togglePip: () => Promise<boolean>;
 }
 
 export function PlayerShellInner({
@@ -154,6 +156,28 @@ export function PlayerShellInner({
           showHint(`已记忆本剧片头结束点：${formatTime(cur)}`);
         }
         return cur;
+      },
+      togglePip: async () => {
+        const art = artRef.current;
+        if (!art) return false;
+        try {
+          const video = art.video as HTMLVideoElement | undefined;
+          if (typeof document !== 'undefined' && document.pictureInPictureElement) {
+            await document.exitPictureInPicture();
+            showHint('已退出画中画小窗');
+            return false;
+          }
+          if (video && typeof video.requestPictureInPicture === 'function') {
+            await video.requestPictureInPicture();
+            showHint('已开启画中画悬浮小窗');
+            return true;
+          }
+          art.pip = !art.pip;
+          return Boolean(art.pip);
+        } catch {
+          showHint('当前浏览器或视频暂不支持画中画小窗');
+          return false;
+        }
       },
     }),
     []

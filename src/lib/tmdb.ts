@@ -13,6 +13,7 @@ const CACHE_TTL_MS = 30 * 60 * 1000; // 30 分钟缓存
 export interface TmdbMediaItem extends DoubanItem {
   backdrop?: string;
   overview?: string;
+  card_subtitle?: string;
   area?: string;
   category?: 'movie' | 'tv';
   categoryName?: string;
@@ -242,11 +243,16 @@ export function mapTmdbItem(
     typeof item.vote_average === 'number' && item.vote_average > 0
       ? item.vote_average.toFixed(1)
       : undefined;
-  const firstGenre = item.genre_ids?.[0] ? GENRE_ID_NAME_MAP[item.genre_ids[0]] : undefined;
+  const genreNames = (item.genre_ids || [])
+    .map((gid) => GENRE_ID_NAME_MAP[gid])
+    .filter(Boolean)
+    .slice(0, 2);
+  const firstGenre = genreNames[0];
   const categoryName = firstGenre || (isTv ? '精选剧集' : '院线电影');
   const cover = item.poster_path ? `${IMAGE_BASE_W500}${item.poster_path}` : '';
   const backdrop = item.backdrop_path ? `${IMAGE_BASE_ORIGINAL}${item.backdrop_path}` : cover;
   const area = overrideArea || item.origin_country?.[0] || undefined;
+  const cardSubtitle = [year, area, ...genreNames].filter(Boolean).join(' · ') || categoryName;
 
   return {
     id: `tmdb_${item.id}`,
@@ -259,6 +265,7 @@ export function mapTmdbItem(
     area,
     category: isTv ? 'tv' : 'movie',
     categoryName,
+    card_subtitle: cardSubtitle,
     overview: item.overview || undefined,
     remarks: rating ? `TMDB ${rating}` : year ? `${year} · 4K` : '4K 臻彩',
     episodes_info: categoryName,

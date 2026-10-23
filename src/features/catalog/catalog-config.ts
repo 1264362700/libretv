@@ -2,7 +2,7 @@ import type { ChannelType } from '@/lib/channels';
 import type { SourceConfig } from '@/lib/types';
 
 /**
- * 片库页的静态配置：影视资料库仅保留 TMDB 官方源（AI 漫剧与影视解说走采集源）。
+ * 片库页静态配置：全频道统一仅使用 TMDB 官方影视资料库。
  */
 
 export type CatalogSourceId = 'tmdb' | 'cms';
@@ -23,33 +23,19 @@ export const CATALOG_SOURCES: CatalogSourceMeta[] = [
     badge: 'TMDB 4K · 多维探索',
     subTitle: 'The Movie Database 官方 4K 影视资料库 · 支持类型 / 地区 / 年份 / 评分四维筛选',
   },
-  {
-    id: 'cms',
-    label: '点播源片库',
-    icon: '🎞️',
-    badge: '直连秒播',
-    subTitle: '标准点播采集源 · 每日实时更新',
-  },
 ];
 
 export const CHANNEL_SOURCES: Record<ChannelType, CatalogSourceId[]> = {
   movie: ['tmdb'],
   tv: ['tmdb'],
-  short_drama: ['tmdb', 'cms'],
-  ai_comic: ['cms'],
-  movie_commentary: ['cms'],
   anime: ['tmdb'],
   variety: ['tmdb'],
   documentary: ['tmdb'],
 };
 
-export const CHANNEL_PREFERRED_CMS_HOSTS: Partial<Record<ChannelType, string[]>> = {
-  movie_commentary: ['bfzyapi.com', 'lziapi.com', 'suoniapi.com'],
-  ai_comic: ['bfzyapi.com', 'lziapi.com', 'guangsuapi.com', 'jyzyapi.com'],
-};
+export const CHANNEL_PREFERRED_CMS_HOSTS: Partial<Record<ChannelType, string[]>> = {};
 
 export const FALLBACK_SEED_SOURCES: SourceConfig[] = [
-  { key: 'curated_tyyszy', name: '天涯资源 (蓝光秒播·短剧专区)', url: 'https://tyyszyapi.com/api.php/provide/vod' },
   { key: 'curated_ffzy', name: '非凡资源 (极速秒播)', url: 'https://cj.ffzyapi.com/api.php/provide/vod' },
   { key: 'curated_lzzy', name: '量子资源 (蓝光秒开)', url: 'https://cj.lziapi.com/api.php/provide/vod' },
   { key: 'curated_snzy', name: '索尼资源 (高清秒播)', url: 'https://suoniapi.com/api.php/provide/vod' },
@@ -60,9 +46,6 @@ export const FALLBACK_SEED_SOURCES: SourceConfig[] = [
 export const CHANNEL_HOT_KEYWORDS: Record<ChannelType, string[]> = {
   movie: ['沙丘2', '奥本海默', '死侍与金刚狼', '异形：夺命舰', '头脑特工队2', '周处除三害', '星际穿越'],
   tv: ['幕府将军', '庆余年', '黑袍纠察队', '怪奇物语', '龙之家族', '三体', '唐朝诡事录'],
-  short_drama: ['战神归来', '龙王赘婿', '顾总太太', '无双世子', '重回1990', '天降神豪', '千金回归'],
-  ai_comic: ['落魄厨神摆摊', '妖王大人偷听我心声', '崽崽怎么褪色了', '朕和爱妃的系统绑反了'],
-  movie_commentary: ['杀妻同盟军', '叛我更幸福', '小心许愿'],
   anime: ['葬送的芙莉莲', '咒术回战', '鬼灭之刃', '间谍过家家', '进击的巨人', '链锯人'],
   variety: ['歌手2024', '乘风2024', '奔跑吧', '极速前进', '喜人奇妙夜'],
   documentary: ['地球脉动', '蓝色星球', '我们的星球', '宇宙时空之旅', '舌尖上的中国'],

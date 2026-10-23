@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { db, addSearchHistory, removeSearchHistory, clearSearchHistory } from '@/lib/db';
-import { fetchDoubanSuggest } from '@/lib/douban-api';
 import { TRENDING_SEARCH_KEYWORDS } from './search-history';
 import { Icon } from './icon';
 import { SmartImage } from './smart-image';
@@ -14,6 +13,31 @@ import { useAppStore } from '@/lib/store';
 import { buildWatchUrl, cn, formatTime } from '@/lib/utils';
 import { useTranslation } from '@/lib/i18n';
 import { QUICK_CHANNELS as QUICK_CHANNELS_SOURCE } from '@/lib/channels';
+import type { TmdbMediaItem } from '@/lib/tmdb';
+
+interface SpotlightSuggestItem {
+  id: string;
+  title: string;
+  year?: string;
+  img?: string;
+  subTitle?: string;
+}
+
+async function fetchTmdbSuggest(keyword: string, signal?: AbortSignal): Promise<SpotlightSuggestItem[]> {
+  const q = keyword.trim();
+  if (!q) return [];
+  const res = await fetch(`/api/tmdb?q=${encodeURIComponent(q)}&page=1`, { signal });
+  if (!res.ok) return [];
+  const data = await res.json();
+  const items: TmdbMediaItem[] = Array.isArray(data.items) ? data.items : [];
+  return items.slice(0, 6).map((item) => ({
+    id: item.id,
+    title: item.title,
+    year: item.year,
+    img: item.cover,
+    subTitle: item.card_subtitle || item.overview,
+  }));
+}
 
 interface SpotlightModalProps {
   open: boolean;
@@ -61,10 +85,10 @@ export function SpotlightModal({ open, onClose }: SpotlightModalProps) {
     enabled: open,
   });
 
-  // 豆瓣实时海报联想：输入关键词时即时返回匹配的影视条目与海报
+  // TMDB 实时海报联想：输入关键词时即时返回匹配的影视条目与海报
   const suggestQuery = useQuery({
-    queryKey: ['spotlight-douban-suggest', debouncedQuery],
-    queryFn: ({ signal }) => fetchDoubanSuggest(debouncedQuery, signal),
+    queryKey: ['spotlight-tmdb-suggest', debouncedQuery],
+    queryFn: ({ signal }) => fetchTmdbSuggest(debouncedQuery, signal),
     enabled: open && debouncedQuery.length > 0 && !debouncedQuery.startsWith('>'),
     staleTime: 5 * 60_000,
   });
@@ -582,7 +606,7 @@ export function SpotlightModal({ open, onClose }: SpotlightModalProps) {
               关闭
             </span>
           </div>
-          <span className="hidden sm:inline font-mono tracking-tight text-accent/80">cl.tv 极速秒播引擎</span>
+          <span className="hidden sm:inline font-mono tracking-tight text-amber-400/90">NovaTV Cinema Ultra · TMDB 4K</span>
         </div>
       </div>
     </div>

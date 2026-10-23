@@ -69,15 +69,15 @@ const TV_CATEGORIES: {
 ];
 
 /**
- * NovaTV Cinema Ultra 首页双层影视大厅：
- * Floor 1: 今日重磅热播 (左侧 4x2 海报网格 + 右侧 热播飙升榜 TOP 10 含 NO.1 宽幅大图)
- * Floor 2: 热播剧集专区 (连载同步更新 · 蓝光臻彩)
+ * NovaTV Cinema Ultra 左图右榜双栏楼层：
+ * - 左侧 2 行 8~10 张高清海报网格（桌面端悬停透出剧情看点、主演阵容与一键追剧）
+ * - 右侧固定内嵌「🔥 热播飙升榜 TOP 10」（NO.1 宽版图文卡片 + NO.2~10 金银铜序号紧凑列表）
  */
 export function RecommendSection({ onPick }: { onPick: (title: string) => void }) {
   const [activeMovieTab, setActiveMovieTab] = useState(MOVIE_CATEGORIES[0]);
   const [activeTvTab, setActiveTvTab] = useState(TV_CATEGORIES[0]);
 
-  // Floor 1 左侧：今日重磅热播电影
+  // Floor 1 左侧：今日重磅热播电影（2行 x 5列 = 10张）
   const movieQuery = useQuery({
     queryKey: [
       'novatv-floor-movies',
@@ -101,13 +101,13 @@ export function RecommendSection({ onPick }: { onPick: (title: string) => void }
   });
 
   // Floor 1 右侧：热播飙升榜 TOP 10 (TMDB Trending)
-  const top10Query = useQuery({
-    queryKey: ['novatv-top10-ranking'],
+  const top10MovieQuery = useQuery({
+    queryKey: ['novatv-top10-trending'],
     queryFn: ({ signal }) => fetchTmdbClient({ type: 'trending', page: 1 }, signal),
     staleTime: 10 * 60_000,
   });
 
-  // Floor 2：热播剧集专区
+  // Floor 2 左侧：热播剧集专区（2行 x 5列 = 10张）
   const tvQuery = useQuery({
     queryKey: [
       'novatv-floor-tv',
@@ -130,15 +130,22 @@ export function RecommendSection({ onPick }: { onPick: (title: string) => void }
     staleTime: 5 * 60_000,
   });
 
-  const movieItems = (movieQuery.data?.items ?? []).slice(0, 8);
-  const rankingItems = (top10Query.data?.items ?? []).slice(0, 10);
-  const tvItems = (tvQuery.data?.items ?? []).slice(0, 8);
+  // Floor 2 右侧：剧集高分飙升榜 TOP 10
+  const top10TvQuery = useQuery({
+    queryKey: ['novatv-top10-tv'],
+    queryFn: ({ signal }) => fetchTmdbClient({ type: 'tv', sort: 'rank', page: 1 }, signal),
+    staleTime: 10 * 60_000,
+  });
+
+  const movieItems = (movieQuery.data?.items ?? []).slice(0, 10);
+  const movieRankingItems = (top10MovieQuery.data?.items ?? []).slice(0, 10);
+  const tvItems = (tvQuery.data?.items ?? []).slice(0, 10);
+  const tvRankingItems = (top10TvQuery.data?.items ?? []).slice(0, 10);
 
   return (
     <div className="space-y-4">
-      {/* Floor 1: 今日重磅热播 (左侧 8 部海报网格 + 右侧 TOP 10 热播飙升榜) */}
+      {/* Floor 1: 今日重磅热播 (左侧 2行 10 张海报网格 + 右侧 🔥 热播飙升榜 TOP 10) */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Section Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-2 border-b border-white/5">
           <div className="flex items-center gap-3">
             <div className="w-1.5 h-6 rounded-full bg-amber-400 shadow-glow-gold" />
@@ -146,11 +153,10 @@ export function RecommendSection({ onPick }: { onPick: (title: string) => void }
               <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight flex items-center gap-2">
                 今日重磅热播
               </h2>
-              <p className="text-xs text-slate-400 mt-0.5">全网聚合高分资源 · 每日精选更新</p>
+              <p className="text-xs text-slate-400 mt-0.5">TMDB 4K 全球院线大片 · 悬停预览剧情与一键追剧</p>
             </div>
           </div>
 
-          {/* Filter Pills & View More */}
           <div className="flex items-center justify-between sm:justify-end gap-3">
             <div className="flex items-center gap-1 overflow-x-auto py-1 no-scrollbar">
               {MOVIE_CATEGORIES.map((cat) => {
@@ -182,13 +188,13 @@ export function RecommendSection({ onPick }: { onPick: (title: string) => void }
           </div>
         </div>
 
-        {/* Main Double-Column Layout: Left Grid + Right TOP 10 Ranking */}
+        {/* 左图右榜双栏排版 */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          {/* Left Column: Media Poster Grid (Span 8 or 9 cols on large screen) */}
+          {/* 左侧：2 行 10 张高清海报网格 */}
           <div className="lg:col-span-8 xl:col-span-9">
             {movieQuery.isLoading ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 sm:gap-5">
-                {Array.from({ length: 8 }).map((_, idx) => (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
+                {Array.from({ length: 10 }).map((_, idx) => (
                   <div
                     key={idx}
                     className="aspect-[2/3] rounded-xl bg-slate-800/60 animate-pulse border border-white/5"
@@ -196,7 +202,7 @@ export function RecommendSection({ onPick }: { onPick: (title: string) => void }
                 ))}
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 sm:gap-5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
                 {movieItems.map((item) => (
                   <DoubanCard
                     key={item.id}
@@ -208,18 +214,20 @@ export function RecommendSection({ onPick }: { onPick: (title: string) => void }
             )}
           </div>
 
-          {/* Right Column: NovaTV TOP 10 Ranking Board */}
+          {/* 右侧固定内嵌：🔥 热播飙升榜 TOP 10 */}
           <div className="lg:col-span-4 xl:col-span-3 w-full">
             <NovaTop10Ranking
-              items={rankingItems}
-              isLoading={top10Query.isLoading}
+              title="🔥 热播飙升榜"
+              subtitle="实时热度 · 全网风向标"
+              items={movieRankingItems}
+              isLoading={top10MovieQuery.isLoading}
               onPick={onPick}
             />
           </div>
         </div>
       </section>
 
-      {/* Floor 2: 热播剧集专区 */}
+      {/* Floor 2: 热播剧集专区 (左侧 2行 10 张海报网格 + 右侧 🔥 剧集口碑榜 TOP 10) */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-2 border-b border-white/5">
           <div className="flex items-center gap-3">
@@ -263,39 +271,57 @@ export function RecommendSection({ onPick }: { onPick: (title: string) => void }
           </div>
         </div>
 
-        {tvQuery.isLoading ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 sm:gap-5">
-            {Array.from({ length: 8 }).map((_, idx) => (
-              <div
-                key={idx}
-                className="aspect-[2/3] rounded-xl bg-slate-800/60 animate-pulse border border-white/5"
-              />
-            ))}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          <div className="lg:col-span-8 xl:col-span-9">
+            {tvQuery.isLoading ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
+                {Array.from({ length: 10 }).map((_, idx) => (
+                  <div
+                    key={idx}
+                    className="aspect-[2/3] rounded-xl bg-slate-800/60 animate-pulse border border-white/5"
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
+                {tvItems.map((item) => (
+                  <DoubanCard
+                    key={item.id}
+                    item={item}
+                    onClick={() => onPick(item.title)}
+                  />
+                ))}
+              </div>
+            )}
           </div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 sm:gap-5">
-            {tvItems.map((item) => (
-              <DoubanCard
-                key={item.id}
-                item={item}
-                onClick={() => onPick(item.title)}
-              />
-            ))}
+
+          <div className="lg:col-span-4 xl:col-span-3 w-full">
+            <NovaTop10Ranking
+              title="🔥 剧集飙升榜"
+              subtitle="高分神作 · 必看连续剧"
+              items={tvRankingItems}
+              isLoading={top10TvQuery.isLoading}
+              onPick={onPick}
+            />
           </div>
-        )}
+        </div>
       </section>
     </div>
   );
 }
 
 /**
- * NovaTV 热播飙升榜 TOP 10 (含 NO.1 16:9 宽画幅皇冠卡片 + NO.2~10 紧凑榜单)
+ * NovaTV 热播飙升榜 TOP 10（NO.1 宽版图文卡片 + NO.2~10 金银铜序号紧凑列表）
  */
 function NovaTop10Ranking({
+  title,
+  subtitle,
   items,
   isLoading,
   onPick,
 }: {
+  title: string;
+  subtitle: string;
   items: TmdbMediaItem[];
   isLoading: boolean;
   onPick: (title: string) => void;
@@ -307,15 +333,13 @@ function NovaTop10Ranking({
     <div className="w-full glass-panel rounded-2xl p-5 border border-white/10 shadow-cinema flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between pb-4 border-b border-white/5 mb-4">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-amber-500 to-red-500 flex items-center justify-center text-white shadow-glow-gold">
-            <span className="text-sm">🔥</span>
-          </div>
+        <div className="flex items-center gap-2.5">
           <div>
             <h3 className="text-base font-bold text-white tracking-tight flex items-center gap-1.5">
-              热播飙升榜 <span className="text-amber-400 font-extrabold text-xs">TOP 10</span>
+              <span>{title}</span>
+              <span className="text-amber-400 font-extrabold text-xs">TOP 10</span>
             </h3>
-            <p className="text-[11px] text-slate-400">实时热度 · 全网风向标</p>
+            <p className="text-[11px] text-slate-400 mt-0.5">{subtitle}</p>
           </div>
         </div>
         <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-white/5 text-amber-300/80 border border-white/5">
@@ -332,11 +356,11 @@ function NovaTop10Ranking({
         </div>
       ) : (
         <>
-          {/* NO. 1 Featured Wide Card */}
+          {/* NO. 1 宽版图文卡片 */}
           <button
             type="button"
             onClick={() => onPick(top1.title)}
-            className="group relative block w-full text-left rounded-xl overflow-hidden mb-4 border border-amber-500/30 hover:border-amber-400/80 transition-all duration-300 shadow-lg cursor-pointer"
+            className="group relative block w-full text-left rounded-xl overflow-hidden mb-4 border border-amber-500/35 hover:border-amber-400/85 transition-all duration-300 shadow-lg cursor-pointer"
           >
             <div className="relative aspect-[16/9] w-full overflow-hidden bg-slate-900">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -350,14 +374,14 @@ function NovaTop10Ranking({
               <div className="absolute inset-0 bg-gradient-to-t from-[#0B0F19] via-[#0B0F19]/60 to-transparent" />
               <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors" />
 
-              {/* Rank 1 Crown Badge */}
-              <div className="absolute top-2 left-2 z-10 px-2 py-0.5 rounded-md bg-gradient-to-r from-amber-500 to-yellow-400 text-black text-xs font-black shadow-glow-gold flex items-center gap-1">
-                <span>👑 TOP 1</span>
+              {/* NO.1 鎏金皇冠角标 */}
+              <div className="absolute top-2 left-2 z-10 px-2.5 py-0.5 rounded-md bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 text-slate-950 text-xs font-black shadow-glow-gold flex items-center gap-1">
+                <span>👑 NO.1</span>
               </div>
 
               {/* Hover Play Button */}
               <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                <div className="w-12 h-12 rounded-full bg-amber-500 text-black flex items-center justify-center shadow-glow-gold transform group-hover:scale-110 transition-transform">
+                <div className="w-11 h-11 rounded-full bg-amber-500 text-black flex items-center justify-center shadow-glow-gold transform group-hover:scale-110 transition-transform">
                   <svg className="w-5 h-5 ml-0.5 fill-current" viewBox="0 0 24 24">
                     <path d="M8 5v14l11-7z" />
                   </svg>
@@ -378,22 +402,28 @@ function NovaTop10Ranking({
                   )}
                 </div>
                 <div className="flex items-center justify-between text-[11px] text-slate-300 mt-0.5">
-                  <span className="truncate max-w-[150px]">{top1.episodes_info || top1.year || '院线热映'}</span>
-                  <span className="text-amber-400 font-mono font-medium">100万+ 热度</span>
+                  <span className="truncate max-w-[160px]">
+                    {top1.overview || top1.card_subtitle || top1.year || '院线热映'}
+                  </span>
+                  <span className="text-amber-400 font-mono font-medium shrink-0">100万+ 热度</span>
                 </div>
               </div>
             </div>
           </button>
 
-          {/* NO. 2 ~ NO. 10 Compact List */}
+          {/* NO. 2 ~ NO. 10 金银铜序号紧凑列表 */}
           <div className="space-y-1.5 flex-1 overflow-y-auto pr-1">
             {rest.map((item, idx) => {
               const rank = idx + 2;
-              let rankBadgeClass = 'text-slate-400 bg-white/5';
+              let rankBadgeClass = 'text-slate-400 bg-white/5 border border-white/5';
               if (rank === 2) {
-                rankBadgeClass = 'text-slate-100 bg-slate-400/20 font-bold';
+                // 银牌 NO.2
+                rankBadgeClass =
+                  'bg-gradient-to-br from-slate-200 to-slate-400 text-slate-950 font-black shadow-sm';
               } else if (rank === 3) {
-                rankBadgeClass = 'text-amber-300 bg-amber-600/20 font-bold';
+                // 铜牌 NO.3
+                rankBadgeClass =
+                  'bg-gradient-to-br from-amber-500 to-amber-700 text-slate-950 font-black shadow-sm';
               }
 
               return (
@@ -403,9 +433,9 @@ function NovaTop10Ranking({
                   onClick={() => onPick(item.title)}
                   className="w-full group flex items-center gap-3 p-1.5 rounded-lg hover:bg-white/5 transition-all duration-200 border border-transparent hover:border-white/5 text-left cursor-pointer"
                 >
-                  {/* Rank Index */}
+                  {/* 金银铜序号徽章 */}
                   <span
-                    className={`w-6 h-6 rounded flex items-center justify-center text-xs font-mono shrink-0 ${rankBadgeClass}`}
+                    className={`w-6 h-6 rounded-md flex items-center justify-center text-xs font-mono shrink-0 ${rankBadgeClass}`}
                   >
                     {rank < 10 ? `0${rank}` : rank}
                   </span>
@@ -442,7 +472,7 @@ function NovaTop10Ranking({
                   <div className="text-right shrink-0">
                     {item.rating ? (
                       <span className="text-xs font-bold text-amber-400/90 font-mono">
-                        {item.rating}
+                        ★ {item.rating}
                       </span>
                     ) : (
                       <span className="text-[10px] text-slate-400 font-mono">热播</span>

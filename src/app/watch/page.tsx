@@ -25,7 +25,6 @@ import type { PlayerShellHandle } from '@/components/player-shell';
 import { resolveSource, useAppStore } from '@/lib/store';
 import { db, favoriteIdOf, markFavoriteSeenEpisodes, toggleFavorite } from '@/lib/db';
 import { buildWatchUrl, cn, formatTime } from '@/lib/utils';
-import { fetchDoubanDetail } from '@/lib/douban-api';
 import { getSourceQoSBadge } from '@/lib/source-circuit-breaker';
 import { parseNames, sanitizeDesc } from '@/features/watch/watch-utils';
 import { QrHandoffModal, SpeedSuggestionDialog, WatchFallbackState } from '@/features/watch/watch-dialogs';
@@ -87,13 +86,6 @@ function WatchContent() {
   const hasStaleSource = Boolean(sourceKey && !source);
 
   // 2. 主查询 Hooks
-  const doubanQuery = useQuery({
-    queryKey: ['douban-detail-watch', doubanIdParam],
-    queryFn: ({ signal }) => fetchDoubanDetail(doubanIdParam, signal),
-    enabled: Boolean(doubanIdParam),
-    staleTime: 24 * 3600_000,
-  });
-
   const detailQuery = useQuery({
     queryKey: ['detail', sourceKey, vodId, source?.url],
     queryFn: ({ signal }) => api.detail(vodId, source!, signal),
@@ -183,38 +175,25 @@ function WatchContent() {
     toast,
   });
 
-  // 影片元数据合成（豆瓣门面优先，采集源详情与候选兜底）
-  const doubanMeta = doubanQuery.data;
+  // 影片元数据合成（采集源详情与候选源合并）
   const videoInfo = detailQuery.data?.videoInfo;
-  const coverUrl = doubanMeta?.cover || videoInfo?.cover || candidates.find((c) => c.result.pic)?.result.pic;
-  const yearText = doubanMeta?.year || videoInfo?.year || candidates.find((c) => c.result.year)?.result.year;
-  const typeText =
-    doubanMeta?.genres && doubanMeta.genres.length > 0
-      ? doubanMeta.genres.join(' / ')
-      : videoInfo?.typeName || candidates.find((c) => c.result.typeName)?.result.typeName;
-  const areaText =
-    doubanMeta?.countries && doubanMeta.countries.length > 0
-      ? doubanMeta.countries.join(' / ')
-      : videoInfo?.area || candidates.find((c) => c.result.area)?.result.area;
-  const remarksText =
-    doubanMeta?.rate && doubanMeta.rate !== '暂无评分'
-      ? `豆瓣评分 ★${doubanMeta.rate}`
-      : videoInfo?.remarks || candidates.find((c) => c.result.remarks)?.result.remarks;
+  const coverUrl = videoInfo?.cover || candidates.find((c) => c.result.pic)?.result.pic;
+  const yearText = videoInfo?.year || candidates.find((c) => c.result.year)?.result.year;
+  const typeText = videoInfo?.typeName || candidates.find((c) => c.result.typeName)?.result.typeName;
+  const areaText = videoInfo?.area || candidates.find((c) => c.result.area)?.result.area;
+  const remarksText = videoInfo?.remarks || candidates.find((c) => c.result.remarks)?.result.remarks;
 
   const actorList = useMemo(() => {
-    if (doubanMeta?.actors && doubanMeta.actors.length > 0) return doubanMeta.actors;
     return parseNames(videoInfo?.actor);
-  }, [doubanMeta?.actors, videoInfo?.actor]);
+  }, [videoInfo?.actor]);
 
   const directorList = useMemo(() => {
-    if (doubanMeta?.directors && doubanMeta.directors.length > 0) return doubanMeta.directors;
     return parseNames(videoInfo?.director);
-  }, [doubanMeta?.directors, videoInfo?.director]);
+  }, [videoInfo?.director]);
 
   const cleanDesc = useMemo(() => {
-    if (doubanMeta?.intro) return doubanMeta.intro;
     return sanitizeDesc(videoInfo?.desc);
-  }, [doubanMeta?.intro, videoInfo?.desc]);
+  }, [videoInfo?.desc]);
 
   const extraPics = useMemo(() => {
     const list: string[] = [];

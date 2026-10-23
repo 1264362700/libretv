@@ -20,71 +20,71 @@ describe('media-library-service: resolveEpisodeBadge 集数角标优先级', () 
       ['繁花', '全30集'],
     ]);
 
-    const doubanItem = {
+    const mediaItem = {
       title: '庆余年 第二季',
-      episodes_info: '更新至20集', // 豆瓣可能滞后
+      episodes_info: '更新至20集',
       card_subtitle: '2024 / 中国大陆 / 剧情',
     };
 
-    const badge = resolveEpisodeBadge(doubanItem, cmsMap);
+    const badge = resolveEpisodeBadge(mediaItem, cmsMap);
     expect(badge).toBe('更新至28集');
   });
 
-  it('优先级 2：豆瓣原生 episodes_info（无采集源更新时使用）', () => {
+  it('优先级 2：原生 episodes_info（无采集源更新时使用）', () => {
     const cmsMap = new Map<string, string>();
-    const doubanItem = {
+    const mediaItem = {
       title: '白夜破晓',
       episodes_info: '更新至12集',
       card_subtitle: '2024 / 中国大陆',
     };
 
-    const badge = resolveEpisodeBadge(doubanItem, cmsMap);
+    const badge = resolveEpisodeBadge(mediaItem, cmsMap);
     expect(badge).toBe('更新至12集');
   });
 
   it('优先级 3：从 card_subtitle 正则提取更新集数', () => {
     const cmsMap = new Map<string, string>();
-    const doubanItem = {
+    const mediaItem = {
       title: '凡人修仙传',
       card_subtitle: '2024 / 国产动漫 / 更新至110集',
     };
 
-    const badge = resolveEpisodeBadge(doubanItem, cmsMap);
+    const badge = resolveEpisodeBadge(mediaItem, cmsMap);
     expect(badge).toBe('更新至110集');
   });
 
   it('优先级 4：电影提取年份作为兜底标签', () => {
     const cmsMap = new Map<string, string>();
-    const doubanItem = {
+    const mediaItem = {
       title: '沙丘2',
       card_subtitle: '2024 / 美国 / 科幻',
     };
 
-    const badge = resolveEpisodeBadge(doubanItem, cmsMap);
+    const badge = resolveEpisodeBadge(mediaItem, cmsMap);
     expect(badge).toBe('2024 · 正片');
   });
 
   it('无任何集数或年份信息时兜底为热播', () => {
     const cmsMap = new Map<string, string>();
-    const doubanItem = {
+    const mediaItem = {
       title: '神秘大片',
     };
 
-    const badge = resolveEpisodeBadge(doubanItem, cmsMap);
+    const badge = resolveEpisodeBadge(mediaItem, cmsMap);
     expect(badge).toBe('热播');
   });
 });
 
 describe('media-library-service: fetchDoubanCollectionItems', () => {
-  it('全面请求 /api/douban 开放图床并映射为直连 MediaItem 结构', async () => {
+  it('全面请求 /api/tmdb 官方接口并映射为直连 MediaItem 结构', async () => {
     let capturedUrl = '';
     const mockItems = [
       {
-        id: '360_test_101',
-        title: '抓特务',
-        cover: 'https://p0.qhimg.com/d/dy_180dbcd5a8635102d926f6387993700e.jpg',
-        rating: '7.8',
-        year: '2026',
+        id: 'tmdb_movie_693134',
+        title: '沙丘2',
+        cover: 'https://image.tmdb.org/t/p/w500/dune2.jpg',
+        rating: '8.4',
+        year: '2024',
       },
     ];
 
@@ -100,13 +100,12 @@ describe('media-library-service: fetchDoubanCollectionItems', () => {
 
     const res = await fetchDoubanCollectionItems('movie_top250', 0, 14);
 
-    expect(capturedUrl).toContain('/api/douban');
+    expect(capturedUrl).toContain('/api/tmdb');
     expect(capturedUrl).toContain('type=movie');
     expect(capturedUrl).toContain('sort=rank');
-    expect(capturedUrl).toContain('pageSize=14');
     expect(res.items).toHaveLength(1);
-    expect(res.items[0].cover).toBe('https://p0.qhimg.com/d/dy_180dbcd5a8635102d926f6387993700e.jpg');
-    expect(res.items[0].title).toBe('抓特务');
+    expect(res.items[0].cover).toBe('https://image.tmdb.org/t/p/w500/dune2.jpg');
+    expect(res.items[0].title).toBe('沙丘2');
     expect(res.items[0].typeName).toBe('电影');
 
     vi.unstubAllGlobals();

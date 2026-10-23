@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { SearchResultItem } from '@/lib/types';
 import { useAppStore } from '@/lib/store';
+import { db, favoriteIdOf, toggleFavorite } from '@/lib/db';
 import { SmartImage } from './smart-image';
 
 // —— 跨源同名聚合 ——
@@ -263,18 +264,48 @@ export function VideoCard({ item, onClick }: { item: SearchResultItem; onClick: 
   );
 }
 
-/** NovaTV Cinema Ultra 海报竖卡 (MediaCard 1:1 复刻) */
+/**
+ * NovaTV Cinema Ultra 海报悬停卡片 (MediaCard)
+ * 桌面端悬停即时透出：剧情看点 (overview)、主演/制作阵容 (actors/card_subtitle)、立即播放与一键追剧按钮
+ */
 export function DoubanCard({
   item,
   onClick,
 }: {
-  item: { title: string; cover: string; rating?: string; episodes_info?: string; year?: string; card_subtitle?: string };
+  item: {
+    id?: string;
+    title: string;
+    cover: string;
+    rating?: string;
+    episodes_info?: string;
+    year?: string;
+    card_subtitle?: string;
+    overview?: string;
+    actors?: string[];
+  };
   onClick: () => void;
 }) {
   const imageProxyMode = useAppStore((s) => s.imageProxyMode);
   const customImageProxy = useAppStore((s) => s.customImageProxy);
   const [imgFailed, setImgFailed] = useState(false);
+  const [favorited, setFavorited] = useState(false);
+
   useEffect(() => setImgFailed(false), [item.cover]);
+
+  useEffect(() => {
+    let mounted = true;
+    if (item.title) {
+      db.favorites
+        .get(favoriteIdOf(item.title))
+        .then((entry) => {
+          if (mounted) setFavorited(Boolean(entry));
+        })
+        .catch(() => {});
+    }
+    return () => {
+      mounted = false;
+    };
+  }, [item.title]);
 
   const numericRating = useMemo(() => {
     if (item.rating === undefined || item.rating === null) return null;
@@ -293,6 +324,41 @@ export function DoubanCard({
     return text.length > 8 ? `${text.slice(0, 8)}…` : text;
   }, [item.episodes_info]);
 
+  const castOrSubtitle = useMemo(() => {
+    if (item.actors && item.actors.length > 0) {
+      return `主演：${item.actors.slice(0, 3).join(' / ')}`;
+    }
+    if (item.card_subtitle) {
+      return item.card_subtitle;
+    }
+    return `${item.year || '2026'} · TMDB 4K 原画`;
+  }, [item.actors, item.card_subtitle, item.year]);
+
+  const plotSummary = useMemo(() => {
+    if (item.overview && item.overview.trim()) {
+      return item.overview.trim();
+    }
+    return 'TMDB 全球高分臻选佳作，支持多源流式并发测速与蓝光秒播。';
+  }, [item.overview]);
+
+  const handleToggleFav = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!item.title) return;
+    try {
+      const added = await toggleFavorite({
+        title: item.title,
+        sourceKey: 'tmdb',
+        vodId: item.id || item.title,
+        pic: item.cover,
+        year: item.year,
+        remarks: statusBadge,
+      });
+      setFavorited(added);
+    } catch {
+      // ignore
+    }
+  };
+
   return (
     <div
       className="group relative flex flex-col cursor-pointer select-none touch-manipulation"
@@ -306,14 +372,14 @@ export function DoubanCard({
         }
       }}
     >
-      <div className="block relative aspect-[2/3] w-full rounded-xl overflow-hidden bg-slate-800 border border-white/5 group-hover:border-amber-400/60 transition-all duration-300 shadow-md group-hover:shadow-glow-gold">
+      <div className="block relative aspect-[2/3] w-full rounded-xl overflow-hidden bg-slate-800 border border-white/5 group-hover:border-amber-400/70 transition-all duration-300 shadow-md group-hover:shadow-glow-gold group-hover:-translate-y-1">
         {item.cover && !imgFailed ? (
           <SmartImage
             url={item.cover}
             mode={imageProxyMode}
             customProxy={customImageProxy}
             alt={item.title}
-            className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500 ease-out"
+            className="w-full h-full object-cover object-center group-hover:scale-110 transition-transform duration-500 ease-out"
             onExhausted={() => setImgFailed(true)}
           />
         ) : (
@@ -324,41 +390,75 @@ export function DoubanCard({
           </div>
         )}
 
-        {/* Gradient Overlay */}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#0B0F19] via-transparent to-black/20 opacity-80 group-hover:opacity-90 transition-opacity pointer-events-none" />
+        {/* 默认态渐变遮罩 */}
+        <div className="absolute inset-0 bg-gradient-to-t from-[#0B0F19] via-transparent to-black/20 opacity-80 group-hover:opacity-0 transition-opacity pointer-events-none" />
 
-        {/* Top Badges */}
+        {/* 顶部角标（年份 + 集数状态） */}
         <div className="absolute top-2 inset-x-2 flex items-center justify-between pointer-events-none z-10">
           <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/90 text-slate-950 shadow-sm">
             {item.year || '4K'}
           </span>
 
           {statusBadge && (
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-black/60 backdrop-blur-md text-emerald-400 border border-emerald-500/20">
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-black/65 backdrop-blur-md text-emerald-400 border border-emerald-500/25">
               {statusBadge}
             </span>
           )}
         </div>
 
-        {/* Bottom Rating Badge */}
+        {/* 默认态左下角评分角标 */}
         {numericRating && (
-          <div className="absolute bottom-2 left-2 z-10 flex items-center gap-1 px-1.5 py-0.5 rounded bg-black/70 backdrop-blur-md text-amber-400 text-xs font-bold border border-amber-500/30">
+          <div className="absolute bottom-2 left-2 z-10 flex items-center gap-1 px-1.5 py-0.5 rounded bg-black/75 backdrop-blur-md text-amber-400 text-xs font-bold border border-amber-500/30 group-hover:opacity-0 transition-opacity">
             <span>★</span>
             <span>{numericRating}</span>
           </div>
         )}
 
-        {/* Center Hover Play Action */}
-        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 bg-black/30 backdrop-blur-[2px] pointer-events-none">
-          <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-amber-500 to-yellow-400 text-slate-950 flex items-center justify-center shadow-glow-gold transform group-hover:scale-110 active:scale-95 transition-transform">
-            <svg className="w-5 h-5 ml-0.5 fill-current" viewBox="0 0 24 24">
-              <path d="M8 5v14l11-7z" />
-            </svg>
+        {/* 桌面端悬停信息层：即时透出剧情看点、主演/阵容与一键追剧按钮 */}
+        <div className="absolute inset-0 z-20 flex flex-col justify-end p-3 bg-gradient-to-t from-[#0B0F19] via-[#0B0F19]/92 to-[#0B0F19]/45 backdrop-blur-[3px] opacity-0 group-hover:opacity-100 transition-all duration-300">
+          <div className="space-y-1.5 transform translate-y-2 group-hover:translate-y-0 transition-transform duration-300">
+            <div className="flex items-center justify-between gap-1.5">
+              <h4 className="text-xs sm:text-sm font-bold text-white truncate">{item.title}</h4>
+              {numericRating && (
+                <span className="text-xs font-bold text-amber-400 shrink-0">★ {numericRating}</span>
+              )}
+            </div>
+
+            {/* 主演阵容 / 分类标签 */}
+            <p className="text-[11px] text-amber-300/90 font-medium truncate">{castOrSubtitle}</p>
+
+            {/* 剧情看点简介 */}
+            <p className="text-[11px] text-slate-300/95 line-clamp-3 leading-relaxed">
+              {plotSummary}
+            </p>
+
+            {/* 立即播放 + 一键追剧 双动作按钮 */}
+            <div className="flex items-center gap-1.5 pt-1.5">
+              <span className="flex-1 py-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 font-bold text-[11px] flex items-center justify-center gap-1 shadow-glow-gold">
+                <svg className="w-3 h-3 fill-current" viewBox="0 0 24 24">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+                <span>立即播放</span>
+              </span>
+              <button
+                type="button"
+                onClick={handleToggleFav}
+                title={favorited ? '移出追剧单' : '一键追剧'}
+                className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border transition-all cursor-pointer shrink-0 flex items-center gap-1 ${
+                  favorited
+                    ? 'bg-amber-500/25 border-amber-400 text-amber-300'
+                    : 'bg-white/10 hover:bg-white/20 border-white/15 text-white'
+                }`}
+              >
+                <span>{favorited ? '★' : '＋'}</span>
+                <span>{favorited ? '已追' : '追剧'}</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Meta Title & Subtitle */}
+      {/* 底部常规片名与副标题 */}
       <div className="mt-2.5 space-y-0.5 px-0.5">
         <div
           className="text-xs sm:text-sm font-semibold text-slate-200 group-hover:text-amber-400 transition-colors line-clamp-1"
@@ -367,7 +467,7 @@ export function DoubanCard({
           {item.title}
         </div>
         <p className="text-[11px] text-slate-400 truncate">
-          {item.card_subtitle || item.episodes_info || item.year || 'TMDB 4K 原画'}
+          {castOrSubtitle}
         </p>
       </div>
     </div>

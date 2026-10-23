@@ -6,7 +6,6 @@ import { useQuery } from '@tanstack/react-query';
 import { Header } from '@/components/header';
 import { HeroBillboardBanner } from '@/components/hero-billboard-banner';
 import { RecommendSection } from '@/components/douban-section';
-import { ContinueWatchingRow } from '@/components/continue-watching-row';
 import { AggregatedCard, aggregateResults } from '@/components/video-card';
 import {
   useAppStore,
@@ -22,7 +21,6 @@ import { EmptyState } from '@/components/states';
 import { SiteFooter } from '@/components/site-footer';
 import {
   fetchDoubanCollectionItems,
-  syncRecentUpdates,
   type MediaItem,
 } from '@/lib/media-library-service';
 
@@ -51,7 +49,7 @@ function HomeContent() {
 
   const [streamedOutcomes, setStreamedOutcomes] = useState<SourceSearchOutcome[]>([]);
 
-  // 收集当前可用播放采集源
+  // 收集当前可用播放采集源（供全网搜索与点击秒播使用）
   const selectedSources = useMemo(() => {
     const seen = new Set<string>();
     return selectedKeys
@@ -65,21 +63,7 @@ function HomeContent() {
       .filter((s) => !isInDisabledSubscription({ subscriptions }, s.key));
   }, [customAPIs, envSources, selectedKeys, sourceHealth, subscriptions]);
 
-  const masterSource = selectedSources[0] || envSources[0];
-
-  // 1. 主力采集源最近更新静默对齐服务 (用于匹配更新集数角标)
-  const recentUpdatesQuery = useQuery({
-    queryKey: ['recent-updates-syncer', masterSource?.key],
-    queryFn: ({ signal }) => syncRecentUpdates(masterSource, signal),
-    staleTime: 30 * 60_000,
-    enabled: Boolean(masterSource?.url),
-  });
-
-  const cmsRemarksMap = useMemo(() => {
-    return recentUpdatesQuery.data?.remarksMap ?? new Map<string, string>();
-  }, [recentUpdatesQuery.data]);
-
-  // 2. TMDB 全球 4K 趋势大片（供首屏 HeroBillboard 全屏巨幕使用）
+  // TMDB 全球 4K 趋势大片（供首屏 HeroBillboard 巨幕轮播使用，100% 走 /api/tmdb）
   const trendingHeroQuery = useQuery({
     queryKey: ['home-tmdb-trending-hero'],
     queryFn: ({ signal }) => fetchDoubanCollectionItems('trending', 0, 8, signal),
@@ -91,7 +75,7 @@ function HomeContent() {
     return (trendingHeroQuery.data?.items ?? []).slice(0, 6);
   }, [trendingHeroQuery.data]);
 
-  // 播放前强制校验登录并直通 LibreTV 多源测速播放页
+  // 播放前强制校验登录并直通多源测速播放页
   const handlePlayMedia = (item: MediaItem) => {
     const watchUrl = buildWatchUrl({
       title: item.title,
@@ -228,42 +212,15 @@ function HomeContent() {
         </main>
       ) : (
         <main className="flex-1 pb-24 md:pb-12">
-          {/* Hero Massive Billboard Carousel */}
+          {/* 1. Hero 巨幕大轮播 */}
           <HeroBillboardBanner
             items={heroBillboardItems}
-            cmsRemarksMap={cmsRemarksMap}
             onPlay={handlePlayMedia}
             onDetail={handlePlayMedia}
           />
 
-          {/* Main Content Area (NovaTV 515b18d Layout) */}
-          <div className="-mt-8 sm:-mt-12 relative z-20 space-y-4">
-            {/* Source Badge Bar */}
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between text-xs text-slate-400">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-                <span>当前数据源：TMDB 4K 官方原画 + 全网点播专线</span>
-              </div>
-              <span className="text-[11px] font-mono text-slate-500">
-                TMDB API v3 · Dual Core Active
-              </span>
-            </div>
-
-            {/* Continue Watching Row (only renders if user has history) */}
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <ContinueWatchingRow
-                cmsRemarksMap={cmsRemarksMap}
-                onNavigate={(watchUrl) => {
-                  if (!verified) {
-                    router.push(`/login?redirect=${encodeURIComponent(watchUrl)}`);
-                    return;
-                  }
-                  router.push(watchUrl);
-                }}
-              />
-            </div>
-
-            {/* Floor 1 (今日重磅热播 + TOP 10 热播飙升榜) & Floor 2 (热播剧集专区) */}
+          {/* 2. 左图右榜双栏楼层（无 LibreTV 冗余搜索框/轮播轨） */}
+          <div className="-mt-8 sm:-mt-12 relative z-20 space-y-2">
             <Suspense fallback={null}>
               <RecommendSection onPick={handlePickByTitle} />
             </Suspense>

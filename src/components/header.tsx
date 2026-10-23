@@ -248,9 +248,6 @@ function useCurrentChannelId(): string {
     const t = searchParams?.get('type');
     if (t === 'movie') return 'movie';
     if (t === 'tv') return 'tv';
-    if (t === 'short_drama') return 'short_drama';
-    if (t === 'ai_comic') return 'ai_comic';
-    if (t === 'movie_commentary') return 'movie_commentary';
     if (t === 'anime') return 'anime';
     if (t === 'variety') return 'variety';
     if (t === 'documentary') return 'documentary';

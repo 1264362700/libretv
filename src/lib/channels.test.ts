@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { CHANNELS, DRAWER_NAV, HEADER_NAV, QUICK_CHANNELS, channelHref, getChannel, isChannelType } from './channels';
 
 describe('channels: 频道定义单一来源', () => {
-  it('频道 ID 唯一且不可为空', () => {
+  it('频道 ID 唯一且仅保留五大核心频道（无短剧/AI漫剧/影视解说）', () => {
     const ids = CHANNELS.map((c) => c.id);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(ids.length).toBeGreaterThan(0);
+    expect(ids).toEqual(['movie', 'tv', 'anime', 'variety', 'documentary']);
   });
 
   it('每个频道的筛选条件都以「全部」打头', () => {
@@ -36,18 +36,12 @@ describe('channels: 频道定义单一来源', () => {
   });
 
   it('channelHref / getChannel / isChannelType 行为一致', () => {
-    expect(channelHref('movie_commentary')).toBe('/catalog?type=movie_commentary');
-    expect(getChannel('ai_comic')?.label).toBe('AI 漫剧');
-    expect(getChannel('nope')).toBeUndefined();
+    expect(channelHref('movie')).toBe('/catalog?type=movie');
+    expect(getChannel('tv')?.label).toBe('电视剧');
+    expect(getChannel('short_drama')).toBeUndefined();
+    expect(getChannel('ai_comic')).toBeUndefined();
+    expect(getChannel('movie_commentary')).toBeUndefined();
     expect(isChannelType('movie')).toBe(true);
-    expect(isChannelType('nope')).toBe(false);
-  });
-
-  it('解说与 AI 漫剧的图标沿用各自入口原有取值（不做无意义视觉变更）', () => {
-    const commentary = getChannel('movie_commentary');
-    expect(commentary?.quickIcon).toBe('🎙️');
-    expect(commentary?.drawerIcon).toBe('🎙️');
-    const drawerEntry = DRAWER_NAV.find((n) => n.href === '/catalog?type=ai_comic');
-    expect(drawerEntry?.icon).toBe('🤖');
+    expect(isChannelType('short_drama')).toBe(false);
   });
 });

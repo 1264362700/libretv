@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  groupAlternateLiveUrls,
   isSlowSource,
   matchesAlive,
   matchesKeyword,
+  normalizeChannelKey,
   normalizeForSearch,
+  pickNextLiveRoute,
   probeRank,
   sortChannels,
   type ProbeLike,
@@ -155,5 +158,39 @@ describe('sortChannels', () => {
       ['u1', 1],
     ]);
     expect(sortChannels(list, 'recent', { recentOrder }).map((c) => c.url)).toEqual(['u3', 'u1', 'u2']);
+  });
+});
+
+describe('normalizeChannelKey & groupAlternateLiveUrls & pickNextLiveRoute', () => {
+  it('将不同清晰度后缀的同台名称归一化为相同聚合键', () => {
+    expect(normalizeChannelKey('CCTV-1 综合')).toBe('cctv1');
+    expect(normalizeChannelKey('CCTV1 HD')).toBe('cctv1');
+    expect(normalizeChannelKey('CCTV_1_高清')).toBe('cctv1');
+  });
+
+  it('聚合跨源同名频道的多条备用流并按 URL 去重', () => {
+    const all = [
+      channel({ name: 'CCTV-5 体育', url: 'https://a.example/cctv5.m3u8' }),
+      channel({ name: 'CCTV-5 HD', url: 'https://b.example/cctv5-hd.m3u8', tvgId: 'CCTV5' }),
+      channel({ name: 'CCTV5 超清', url: 'https://c.example/cctv5.m3u8', tvgId: 'cctv-5' }),
+      channel({ name: '湖南卫视', url: 'https://a.example/hunan.m3u8' }),
+    ];
+    const current = all[1];
+    const routes = groupAlternateLiveUrls(all, current);
+    expect(routes.map((r) => r.url)).toEqual([
+      'https://b.example/cctv5-hd.m3u8',
+      'https://c.example/cctv5.m3u8',
+    ]);
+  });
+
+  it('断流自动换线挑选下一条未失败的备用线路', () => {
+    const routes = [
+      channel({ name: 'CCTV-1', url: 'u1' }),
+      channel({ name: 'CCTV-1 HD', url: 'u2' }),
+      channel({ name: 'CCTV-1 4K', url: 'u3' }),
+    ];
+    const failed = new Set<string>(['u1', 'u2']);
+    const next = pickNextLiveRoute(routes, 'u1', failed);
+    expect(next?.url).toBe('u3');
   });
 });

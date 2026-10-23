@@ -46,10 +46,14 @@ interface LivePlayerProps {
   /** 上一台/下一台：传入时注册为播放器控制条按钮（全屏内也可操作） */
   onPrevChannel?: () => void;
   onNextChannel?: () => void;
+  /** 当前流直连与代理均失败时的回调（供外层自动切换同频道的备用线路） */
+  onStreamError?: (reason: string) => void;
 }
 
-export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePlayerProps) {
+export function LivePlayer({ url, title, onPrevChannel, onNextChannel, onStreamError }: LivePlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const onStreamErrorRef = useRef(onStreamError);
+  onStreamErrorRef.current = onStreamError;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const artRef = useRef<any>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -96,6 +100,11 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePla
     /** 原生播放注册的 error 监听清理函数（切台/销毁时调用） */
     let nativeCleanup: (() => void) | null = null;
 
+    const failWith = (msg: string) => {
+      setError(msg);
+      onStreamErrorRef.current?.(msg);
+    };
+
     const cleanupEngines = () => {
       hlsRef.current?.destroy();
       hlsRef.current = null;
@@ -131,7 +140,7 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePla
           setupNative(video, proxyUrl(url), false, failMessage);
           return;
         }
-        setError(failMessage || '该地址不是可播放的直播流（内容可能是文件或错误提示）');
+        failWith(failMessage || '该地址不是可播放的直播流（内容可能是文件或错误提示）');
       };
       video.addEventListener('error', onError);
       nativeCleanup = () => video.removeEventListener('error', onError);
@@ -185,7 +194,7 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePla
             hls.recoverMediaError();
             return;
           }
-          setError('直播流解码失败，可能该频道编码不受当前浏览器支持，请尝试其他频道');
+          failWith('直播流解码失败，可能该频道编码不受当前浏览器支持，请尝试其他频道');
           return;
         }
         if (!playbackStarted) {
@@ -208,7 +217,7 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePla
           // 播放中网络抖动：尝试恢复拉流；连续失败达到阈值则报错退出
           liveNetRetryCount++;
           if (liveNetRetryCount > 5) {
-            setError(`直播流中断${codeHint}，该源可能已失效，请尝试其他频道`);
+            failWith(`直播流中断${codeHint}，该源可能已失效，请尝试其他频道`);
             return;
           }
           hls.startLoad();
@@ -227,12 +236,12 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePla
       try {
         Mpegts = (await import('mpegts.js')).default;
       } catch {
-        setError('FLV 播放模块加载失败，请检查网络后重试');
+        failWith('FLV 播放模块加载失败，请检查网络后重试');
         return;
       }
       if (disposed || destroyed) return;
       if (!Mpegts.getFeatureList().mseLivePlayback) {
-        setError('当前浏览器不支持 FLV 直播播放');
+        failWith('当前浏览器不支持 FLV 直播播放');
         return;
       }
       const player = Mpegts.createPlayer(
@@ -259,7 +268,7 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePla
           void setupFlv(video, proxyUrl(url), false);
           return;
         }
-        setError(`直播流加载失败（${errType}），请尝试其他频道`);
+        failWith(`直播流加载失败（${errType}），请尝试其他频道`);
       });
       player.play().catch(() => {});
     };
@@ -355,7 +364,7 @@ export function LivePlayer({ url, title, onPrevChannel, onNextChannel }: LivePla
     // 15s 内未起播则提示
     const startTimer = setTimeout(() => {
       if (!playbackStarted && !disposed && !destroyed) {
-        setError('频道加载超时，可能该源已失效，请尝试其他频道');
+        failWith('频道加载超时，可能该源已失效，请尝试其他频道');
       }
     }, 15000);
 

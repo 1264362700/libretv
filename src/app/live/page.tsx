@@ -20,7 +20,9 @@ import { LiveChannelList, type LiveChannelItem } from '@/components/live-channel
 import { LiveEpgPanel } from '@/components/live-epg-panel';
 import { Spinner } from '@/components/states';
 import { useAuth } from '@/components/auth';
+import { useToast } from '@/components/toast';
 import { allLiveSources, useAppStore } from '@/lib/store';
+import { groupAlternateLiveUrls, pickNextLiveRoute } from '@/lib/live-channel-filter';
 import { cn } from '@/lib/utils';
 import { SmartImage } from '@/components/smart-image';
 
@@ -49,7 +51,10 @@ function LiveContent() {
   const imageProxyMode = useAppStore((s) => s.imageProxyMode);
   const customImageProxy = useAppStore((s) => s.customImageProxy);
   const { verified, checked } = useAuth();
+  const { toast } = useToast();
   const [copied, setCopied] = useState(false);
+  const failedLiveUrlsRef = useRef<Set<string>>(new Set());
+  const [failedLiveUrls, setFailedLiveUrls] = useState<Set<string>>(new Set());
 
   // 直播播放前强制校验登录状态：未登录直接拦截重定向至 /login
   useEffect(() => {
@@ -121,6 +126,12 @@ function LiveContent() {
     } as LiveChannelItem;
   }, [channels, currentUrl, searchParams]);
 
+  // 聚合多源中同名/同电视台的所有备用直播流线路
+  const alternateRoutes = useMemo(
+    () => groupAlternateLiveUrls(channels, currentChannel),
+    [channels, currentChannel]
+  );
+
   useEffect(() => {
     setLogoFailed(false);
   }, [currentChannel?.url]);
@@ -149,6 +160,19 @@ function LiveContent() {
     },
     [router]
   );
+
+  // 当前直播流断流或解码失败时，自动切换至同频道的下一条备用源
+  const handleStreamError = useCallback(() => {
+    if (!currentUrl) return;
+    failedLiveUrlsRef.current.add(currentUrl);
+    setFailedLiveUrls(new Set(failedLiveUrlsRef.current));
+    const nextRoute = pickNextLiveRoute(alternateRoutes, currentUrl, failedLiveUrlsRef.current);
+    if (nextRoute) {
+      const idx = alternateRoutes.findIndex((r) => r.url === nextRoute.url);
+      toast(`当前直播线路受阻，已为您自动切换至同台「线路 ${idx + 1}」`, 'info');
+      selectChannel(nextRoute);
+    }
+  }, [currentUrl, alternateRoutes, selectChannel, toast]);
 
   const handleFilteredChange = useCallback((list: LiveChannelItem[]) => {
     filteredRef.current = list;
@@ -247,6 +271,7 @@ function LiveContent() {
                   title={currentChannel?.name || '直播'}
                   onPrevChannel={goPrevChannel}
                   onNextChannel={goNextChannel}
+                  onStreamError={handleStreamError}
                 />
               ) : (
                 <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-black">
@@ -390,6 +415,52 @@ function LiveContent() {
                       </svg>
                     )}
                   </button>
+                </div>
+              </div>
+            )}
+
+            {/* 同频道多源备用线路切换栏（当多源中存在同名频道的多条直播流时展示） */}
+            {currentChannel && alternateRoutes.length > 1 && (
+              <div className="bg-surface-raised border border-line rounded-lg p-3 mt-3">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <span className="text-xs font-semibold text-content">
+                    同台备用线路（共 {alternateRoutes.length} 条源 · 断流自动换线）
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5">
+                  {alternateRoutes.map((route, idx) => {
+                    const isCur = route.url === currentChannel.url;
+                    const isFailed = failedLiveUrls.has(route.url);
+                    return (
+                      <button
+                        key={route.url}
+                        type="button"
+                        onClick={() => selectChannel(route)}
+                        className={cn(
+                          'px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1.5 border shrink-0 cursor-pointer',
+                          isCur
+                            ? 'bg-accent text-white border-accent shadow-xs'
+                            : isFailed
+                              ? 'bg-surface text-danger/80 border-danger/30 hover:border-danger/60'
+                              : 'bg-surface hover:bg-hover text-muted hover:text-content border-line'
+                        )}
+                        title={route.url}
+                      >
+                        <span
+                          className={cn(
+                            'w-1.5 h-1.5 rounded-full shrink-0',
+                            isCur ? 'bg-white animate-pulse' : isFailed ? 'bg-danger' : 'bg-emerald-500'
+                          )}
+                        />
+                        <span>线路 {idx + 1}</span>
+                        {route.name !== currentChannel.name && (
+                          <span className="text-[10px] opacity-80">({route.name})</span>
+                        )}
+                        {isCur && <span className="text-[10px] opacity-80">（当前）</span>}
+                        {isFailed && !isCur && <span className="text-[10px] text-danger">（受阻）</span>}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}

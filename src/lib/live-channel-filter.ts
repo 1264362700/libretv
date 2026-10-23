@@ -128,3 +128,62 @@ export function sortChannels<T extends KeywordMatchable & { url: string }>(
   }
   return out;
 }
+
+/** 常见清晰度/后缀词：聚合多源同名频道备选线路时剥离，使「CCTV-5 高清」与「CCTV5 HD」归入同一频道簇 */
+const QUALITY_SUFFIX_RE = /(?:fhd|uhd|hd|sd|4k|8k|1080p|720p|50fps|60fps|超清|高清|标清|蓝光|频道|综合)$/gi;
+
+/**
+ * 计算频道的归一化聚合键：
+ * 忽略大小写、常见分隔符与末尾清晰度标识，用于跨源匹配同一电视台的多条备用流。
+ */
+export function normalizeChannelKey(name: string, tvgId?: string): string {
+  const raw = (tvgId?.trim() || name || '').toLowerCase();
+  const stripped = raw.replace(SEPARATOR_RE, '').replace(QUALITY_SUFFIX_RE, '');
+  return stripped || normalizeForSearch(name);
+}
+
+/**
+ * 给定全部频道列表与当前选中频道，聚合同名/同台的所有可用线路（按 URL 去重）。
+ */
+export function groupAlternateLiveUrls<T extends { name: string; url: string; tvgId?: string }>(
+  channels: T[],
+  current: { name: string; url: string; tvgId?: string } | undefined
+): T[] {
+  if (!current || !current.url) return [];
+  const targetKey = normalizeChannelKey(current.name, current.tvgId);
+  if (!targetKey) return [];
+
+  const seenUrls = new Set<string>();
+  const matched: T[] = [];
+
+  for (const ch of channels) {
+    if (!ch.url || seenUrls.has(ch.url)) continue;
+    const key = normalizeChannelKey(ch.name, ch.tvgId);
+    if (key === targetKey) {
+      seenUrls.add(ch.url);
+      matched.push(ch);
+    }
+  }
+
+  return matched;
+}
+
+/**
+ * 当当前直播流断流或解码失败时，从同频道的多条备用线路中挑选下一条未失败的线路。
+ */
+export function pickNextLiveRoute<T extends { url: string }>(
+  routes: T[],
+  currentUrl: string,
+  failedUrls: ReadonlySet<string>
+): T | undefined {
+  if (routes.length <= 1) return undefined;
+  const curIdx = routes.findIndex((r) => r.url === currentUrl);
+  for (let offset = 1; offset < routes.length; offset++) {
+    const idx = curIdx >= 0 ? (curIdx + offset) % routes.length : offset;
+    const candidate = routes[idx];
+    if (candidate && candidate.url !== currentUrl && !failedUrls.has(candidate.url)) {
+      return candidate;
+    }
+  }
+  return undefined;
+}

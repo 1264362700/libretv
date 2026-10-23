@@ -2,7 +2,10 @@
 
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
-import { SORTS } from './catalog-config';
+import { useTranslation } from '@/lib/i18n';
+import { MobileFilterSheet } from '@/components/mobile-filter-sheet';
+import { SORTS, YEARS } from './catalog-config';
+import type { CatalogFilterChanges } from './use-catalog-query';
 
 /**
  * 片库页的筛选面板（从 app/catalog/page.tsx 抽出）：
@@ -231,5 +234,214 @@ export function FilterRow({
         })}
       </div>
     </div>
+  );
+}
+
+export function CatalogFilterSection({
+  regions,
+  genres,
+  currentRegion,
+  currentGenre,
+  currentYear,
+  currentSort,
+  hasActiveFilters,
+  activeFilterCount,
+  totalCount,
+  onUpdateFilters,
+  onReset,
+}: {
+  regions: string[];
+  genres: string[];
+  currentRegion: string;
+  currentGenre: string;
+  currentYear: string;
+  currentSort: string;
+  hasActiveFilters: boolean;
+  activeFilterCount: number;
+  totalCount: number;
+  onUpdateFilters: (changes: CatalogFilterChanges) => void;
+  onReset: () => void;
+}) {
+  const { t } = useTranslation();
+  const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
+
+  return (
+    <>
+      {/* 网页版多维聚合筛选器面板 (桌面端 >= 1024px) */}
+      <div className="hidden lg:block bg-chip/35 border border-line/50 rounded-2xl p-3 sm:p-4 space-y-2.5 sm:space-y-3">
+        <FilterRow
+          label={t('catalog.region', '地区')}
+          options={regions}
+          active={currentRegion}
+          onSelect={(r) => onUpdateFilters({ region: r })}
+        />
+        <FilterRow
+          label={t('catalog.genre', '类型')}
+          options={genres}
+          active={currentGenre}
+          onSelect={(g) => onUpdateFilters({ genre: g })}
+        />
+        <FilterRow
+          label={t('catalog.year', '年份')}
+          options={YEARS}
+          active={currentYear}
+          onSelect={(y) => onUpdateFilters({ year: y })}
+        />
+
+        <div className="flex items-center justify-between pt-1 border-t border-line/40 gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <span className="text-xs font-semibold text-faint shrink-0 w-8 sm:w-10 text-left sm:text-right">
+              {t('catalog.sort', '排序')}:
+            </span>
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+              {SORTS.map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => onUpdateFilters({ sort: s.id })}
+                  className={cn(
+                    'px-3 py-1 rounded-lg text-xs font-medium transition-all shrink-0 active:scale-95 touch-manipulation',
+                    currentSort === s.id
+                      ? 'bg-accent text-on-accent font-semibold shadow-xs'
+                      : 'text-muted hover:text-content hover:bg-hover bg-surface/50'
+                  )}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {hasActiveFilters && (
+            <button
+              onClick={onReset}
+              className="text-xs text-accent hover:underline flex items-center gap-1 shrink-0 ml-auto cursor-pointer"
+            >
+              <span>重置所有筛选</span>
+              <span>✕</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* iPad 平板端专属流式触控筛选卡片 (768px ~ 1024px) */}
+      <TabletFilterPanel
+        regions={regions}
+        genres={genres}
+        years={YEARS}
+        activeRegion={currentRegion}
+        activeGenre={currentGenre}
+        activeYear={currentYear}
+        activeSort={currentSort}
+        onUpdateFilters={onUpdateFilters}
+        onReset={onReset}
+        hasActiveFilters={hasActiveFilters}
+      />
+
+      {/* 移动端专属精炼筛选栏 (手机端) */}
+      <div className="md:hidden space-y-2">
+        <div className="flex items-center justify-between gap-2 bg-chip/50 border border-line/60 rounded-xl p-2">
+          <button
+            type="button"
+            onClick={() => setMobileFilterOpen(true)}
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all active:scale-95 touch-manipulation cursor-pointer border shrink-0',
+              activeFilterCount > 0
+                ? 'bg-accent text-on-accent border-accent shadow-xs'
+                : 'bg-surface border-line text-content hover:bg-hover'
+            )}
+          >
+            <svg
+              className="w-3.5 h-3.5"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+            </svg>
+            <span>筛选</span>
+            {activeFilterCount > 0 && (
+              <span className="w-4 h-4 rounded-full bg-white text-accent text-[10px] font-bold flex items-center justify-center">
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
+
+          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
+            {SORTS.map((s) => (
+              <button
+                key={s.id}
+                onClick={() => onUpdateFilters({ sort: s.id })}
+                className={cn(
+                  'px-2.5 py-1 rounded-lg text-xs font-medium transition-all shrink-0 active:scale-95 touch-manipulation',
+                  currentSort === s.id
+                    ? 'bg-accent text-on-accent font-semibold shadow-xs'
+                    : 'text-muted hover:text-content bg-surface border border-line/50'
+                )}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+
+          {hasActiveFilters && (
+            <button
+              onClick={onReset}
+              className="text-xs text-muted hover:text-accent shrink-0 p-1 active:scale-90"
+              title="重置全部筛选"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+
+        {activeFilterCount > 0 && (
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar text-xs py-0.5 px-0.5">
+            <span className="text-muted text-[11px] shrink-0">已选:</span>
+            {currentRegion !== '全部' && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 border border-accent/30 text-accent font-medium text-[11px] shrink-0">
+                {currentRegion}
+                <button onClick={() => onUpdateFilters({ region: '全部' })} className="hover:opacity-70">
+                  ×
+                </button>
+              </span>
+            )}
+            {currentGenre !== '全部' && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 border border-accent/30 text-accent font-medium text-[11px] shrink-0">
+                {currentGenre}
+                <button onClick={() => onUpdateFilters({ genre: '全部' })} className="hover:opacity-70">
+                  ×
+                </button>
+              </span>
+            )}
+            {currentYear !== '全部' && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 border border-accent/30 text-accent font-medium text-[11px] shrink-0">
+                {currentYear}年
+                <button onClick={() => onUpdateFilters({ year: '全部' })} className="hover:opacity-70">
+                  ×
+                </button>
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
+      <MobileFilterSheet
+        open={mobileFilterOpen}
+        onClose={() => setMobileFilterOpen(false)}
+        regions={regions}
+        genres={genres}
+        years={YEARS}
+        activeRegion={currentRegion}
+        activeGenre={currentGenre}
+        activeYear={currentYear}
+        onApply={(f) => {
+          onUpdateFilters({ region: f.region, genre: f.genre, year: f.year });
+        }}
+        totalCount={totalCount}
+      />
+    </>
   );
 }

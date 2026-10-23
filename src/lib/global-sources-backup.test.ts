@@ -93,23 +93,20 @@ describe('Global Sources Backup and Merge', () => {
       'utf-8'
     );
 
-    // 2. 设置环境变量 DEFAULT_SOURCES 与 DEFAULT_LIVE_SOURCES
+    // 2. 设置环境变量 DEFAULT_SOURCES
     process.env.DEFAULT_SOURCES = JSON.stringify([
       {
         name: '环境变量点播源',
         url: 'https://env-vod.com/api.php/provide/vod',
       },
+      {
+        name: '环境变量点播源2',
+        url: 'https://env-vod2.com/api.php/provide/vod',
+      },
       // 重复的 URL（不同斜杠与大小写），应被去重
       {
         name: '历史自定义源重复项',
         url: 'https://LEGACY-vod.com/api.php/provide/vod',
-      },
-    ]);
-
-    process.env.DEFAULT_LIVE_SOURCES = JSON.stringify([
-      {
-        name: '央视高清',
-        url: 'https://live.example.com/cctv.m3u8',
       },
     ]);
 
@@ -131,7 +128,7 @@ describe('Global Sources Backup and Merge', () => {
     expect(urls.some((u) => u.includes('legacy-vod.com'))).toBe(true);
     // 验证包含环境变量源
     expect(urls.some((u) => u.includes('env-vod.com'))).toBe(true);
-    expect(urls.some((u) => u.includes('live.example.com'))).toBe(true);
+    expect(urls.some((u) => u.includes('env-vod2.com'))).toBe(true);
 
     // 验证去重：legacy-vod.com 只有 1 个实例
     const legacyCount = sources.filter((s) => s.url.toLowerCase().includes('legacy-vod.com')).length;

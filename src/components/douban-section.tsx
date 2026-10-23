@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import type { TmdbMediaItem } from '@/lib/tmdb';
+import { resolveEpisodeBadge } from '@/lib/media-library-service';
 import { DoubanCard } from './video-card';
 
 interface TmdbApiResponse {
@@ -33,7 +34,7 @@ async function fetchTmdbClient(
   if (params.genre && params.genre !== '全部') sp.set('genre', params.genre);
   if (params.year && params.year !== '全部') sp.set('year', params.year);
 
-  const res = await fetch(`/api/tmdb?${sp.toString()}`, { signal });
+  const res = await fetch(`/api/media/feed?${sp.toString()}`, { signal });
   if (!res.ok) {
     throw new Error(`资料库请求失败 (${res.status})`);
   }
@@ -73,7 +74,13 @@ const TV_CATEGORIES: {
  * - 左侧 2 行 8~10 张高清海报网格（桌面端悬停透出剧情看点、主演阵容与一键追剧）
  * - 右侧固定内嵌「🔥 热播飙升榜 TOP 10」（NO.1 宽版图文卡片 + NO.2~10 金银铜序号紧凑列表）
  */
-export function RecommendSection({ onPick }: { onPick: (title: string) => void }) {
+export function RecommendSection({
+  onPick,
+  cmsRemarksMap,
+}: {
+  onPick: (title: string) => void;
+  cmsRemarksMap?: Map<string, string>;
+}) {
   const [activeMovieTab, setActiveMovieTab] = useState(MOVIE_CATEGORIES[0]);
   const [activeTvTab, setActiveTvTab] = useState(TV_CATEGORIES[0]);
 
@@ -207,6 +214,7 @@ export function RecommendSection({ onPick }: { onPick: (title: string) => void }
                   <DoubanCard
                     key={item.id}
                     item={item}
+                    cmsRemarksMap={cmsRemarksMap}
                     onClick={() => onPick(item.title)}
                   />
                 ))}
@@ -221,6 +229,7 @@ export function RecommendSection({ onPick }: { onPick: (title: string) => void }
               subtitle="实时热度 · 全网风向标"
               items={movieRankingItems}
               isLoading={top10MovieQuery.isLoading}
+              cmsRemarksMap={cmsRemarksMap}
               onPick={onPick}
             />
           </div>
@@ -288,6 +297,7 @@ export function RecommendSection({ onPick }: { onPick: (title: string) => void }
                   <DoubanCard
                     key={item.id}
                     item={item}
+                    cmsRemarksMap={cmsRemarksMap}
                     onClick={() => onPick(item.title)}
                   />
                 ))}
@@ -301,6 +311,7 @@ export function RecommendSection({ onPick }: { onPick: (title: string) => void }
               subtitle="高分神作 · 必看连续剧"
               items={tvRankingItems}
               isLoading={top10TvQuery.isLoading}
+              cmsRemarksMap={cmsRemarksMap}
               onPick={onPick}
             />
           </div>
@@ -318,16 +329,19 @@ function NovaTop10Ranking({
   subtitle,
   items,
   isLoading,
+  cmsRemarksMap,
   onPick,
 }: {
   title: string;
   subtitle: string;
   items: TmdbMediaItem[];
   isLoading: boolean;
+  cmsRemarksMap?: Map<string, string>;
   onPick: (title: string) => void;
 }) {
   const top1 = items[0];
   const rest = items.slice(1, 10);
+  const top1Badge = top1 ? resolveEpisodeBadge(top1, cmsRemarksMap) : '';
 
   return (
     <div className="w-full glass-panel rounded-2xl p-5 border border-line shadow-cinema flex flex-col">
@@ -402,10 +416,10 @@ function NovaTop10Ranking({
                   )}
                 </div>
                 <div className="flex items-center justify-between text-[11px] text-slate-200 mt-0.5">
-                  <span className="truncate max-w-[160px]">
+                  <span className="truncate max-w-[150px]">
                     {top1.overview || top1.card_subtitle || top1.year || '院线热映'}
                   </span>
-                  <span className="text-amber-400 font-mono font-medium shrink-0">100万+ 热度</span>
+                  <span className="text-emerald-400 font-medium shrink-0">{top1Badge}</span>
                 </div>
               </div>
             </div>
@@ -415,6 +429,7 @@ function NovaTop10Ranking({
           <div className="space-y-1.5 flex-1 overflow-y-auto pr-1">
             {rest.map((item, idx) => {
               const rank = idx + 2;
+              const itemBadge = resolveEpisodeBadge(item, cmsRemarksMap);
               let rankBadgeClass = 'text-muted bg-chip border border-line';
               if (rank === 2) {
                 // 银牌 NO.2
@@ -462,8 +477,8 @@ function NovaTop10Ranking({
                       <span className="text-[10px] text-muted truncate">
                         {item.year || '热门'}
                       </span>
-                      {item.episodes_info && (
-                        <span className="text-[10px] text-emerald-500 dark:text-emerald-400 truncate">{item.episodes_info}</span>
+                      {itemBadge && (
+                        <span className="text-[10px] text-emerald-500 dark:text-emerald-400 truncate">{itemBadge}</span>
                       )}
                     </div>
                   </div>

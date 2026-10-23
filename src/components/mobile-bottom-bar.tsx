@@ -33,7 +33,6 @@ export function MobileBottomBar() {
 
   const isHome = pathname === '/';
   const isCatalog = pathname.startsWith('/catalog');
-  const isLive = pathname.startsWith('/live');
   const isLogin = pathname.startsWith('/login');
 
   return (
@@ -75,21 +74,6 @@ export function MobileBottomBar() {
           <path d="M17 16.5h4" />
         </svg>
         <span>{t('nav.catalog', '片库')}</span>
-      </Link>
-
-      {/* 电视直播 */}
-      <Link
-        href="/live"
-        className={cn(
-          'flex flex-1 flex-col items-center justify-center py-0.5 rounded-xl text-[10px] font-medium transition-all active:scale-90 touch-manipulation',
-          isLive ? 'text-accent font-semibold' : 'text-muted hover:text-content'
-        )}
-      >
-        <svg className="w-5 h-5 mb-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={isLive ? '2.2' : '1.8'} strokeLinecap="round" strokeLinejoin="round">
-          <rect width="20" height="15" x="2" y="7" rx="2" />
-          <polyline points="17 2 12 7 7 2" />
-        </svg>
-        <span>{t('nav.live', '直播')}</span>
       </Link>
 
       {/* 观看历史 */}

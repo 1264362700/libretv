@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { sessionFromCookieHeader } from '@/lib/auth';
 import { listGlobalSources, ensureGistLoaded } from '@/lib/auth-store';
 import { getEnvSources } from '@/lib/env-sources';
-import { getEnvLiveSources } from '@/lib/env-live-sources';
 import { getEnvSubscriptions } from '@/lib/env-subscriptions';
 import { getEnvRecommendSource } from '@/lib/env-recommend-source';
 import { getEnvImageMode } from '@/lib/env-image-mode';
@@ -18,9 +17,6 @@ export async function GET(req: Request) {
   const vodGlobals = globalSources
     .filter((s) => s.type === 'vod')
     .map((s) => ({ key: s.key, name: s.name, url: s.url }));
-  const liveGlobals = globalSources
-    .filter((s) => s.type === 'live')
-    .map((s) => ({ key: s.key, name: s.name, url: s.url }));
 
   return NextResponse.json({
     passwordRequired: true,
@@ -30,7 +26,7 @@ export async function GET(req: Request) {
     kickMessage: session.message || null,
     version: process.env.APP_VERSION || 'dev',
     defaultSources: [...getEnvSources(), ...vodGlobals],
-    defaultLiveSources: [...getEnvLiveSources(), ...liveGlobals],
+    defaultLiveSources: [],
     defaultSubscriptions: getEnvSubscriptions(),
     defaultRecommendSource: getEnvRecommendSource() ?? null,
     defaultImageMode: getEnvImageMode() ?? null,

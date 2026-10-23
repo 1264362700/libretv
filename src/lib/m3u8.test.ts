@@ -35,18 +35,11 @@ describe('rewriteM3u8', () => {
     expect(out).toBe('/api/proxy?url=' + encodeURIComponent('https://cdn.example.com/live/seg1.ts'));
   });
 
-  it('直播前缀改写为 /api/live/stream?url= 形式', () => {
-    const out = rewriteM3u8('https://cdn.example.com/live/seg1.ts', BASE, 0, '/api/live/stream?url=');
-    expect(out).toBe('/api/live/stream?url=' + encodeURIComponent('https://cdn.example.com/live/seg1.ts'));
-  });
-
-  it('已是代理地址的行（新旧两种形式）不重复改写', () => {
+  it('已是代理地址的行不重复改写', () => {
     const legacy = '/api/proxy/' + encodeURIComponent('https://x.com/a.ts');
     expect(rewriteM3u8(legacy, BASE)).toBe(legacy);
     const modern = '/api/proxy?url=' + encodeURIComponent('https://x.com/a.ts');
     expect(rewriteM3u8(modern, BASE)).toBe(modern);
-    const legacyLive = '/api/live/stream/' + encodeURIComponent('https://x.com/live.m3u8');
-    expect(rewriteM3u8(legacyLive, BASE, 0, '/api/live/stream?url=')).toBe(legacyLive);
   });
 
   it('超过递归深度限制时原样返回', () => {
@@ -59,7 +52,6 @@ describe('isProxiedUri', () => {
   it('新旧两种代理形式均识别', () => {
     expect(isProxiedUri('/api/proxy/' + encodeURIComponent('https://x.com/a.ts'))).toBe(true);
     expect(isProxiedUri('/api/proxy?url=' + encodeURIComponent('https://x.com/a.ts'))).toBe(true);
-    expect(isProxiedUri('/api/live/stream?url=' + encodeURIComponent('https://x.com/live.m3u8'))).toBe(true);
     expect(isProxiedUri('https://cdn.example.com/seg1.ts')).toBe(false);
     expect(isProxiedUri('/relative/seg1.ts')).toBe(false);
   });

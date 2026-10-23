@@ -32,14 +32,50 @@ describe('tmdb: 环境变量与实体映射', () => {
       0
     );
 
-    expect(mapped.id).toBe('tmdb_693134');
+    expect(mapped.id).toBe('m_693134');
     expect(mapped.title).toBe('沙丘2');
     expect(mapped.cover).toBe('https://image.tmdb.org/t/p/w500/dune2_poster.jpg');
     expect(mapped.backdrop).toBe('https://image.tmdb.org/t/p/original/dune2_backdrop_4k.jpg');
     expect(mapped.rating).toBe('8.4');
     expect(mapped.year).toBe('2024');
-    expect(mapped.episodes_info).toBe('科幻');
+    expect(mapped.episodes_info).toBe('★ 8.4');
     expect(mapped.hotRank).toBe(1);
+  });
+
+  it('mapTmdbItem 正确推导剧集更新状态 (连载中 / 全集完结 / 正则解析集数)', () => {
+    const ongoingTv = mapTmdbItem(
+      {
+        id: 1001,
+        name: '三体',
+        first_air_date: '2025-01-15',
+        overview: '本剧共30集，讲述人类文明与三体文明的交流与较量。',
+      },
+      'tv'
+    );
+    expect(ongoingTv.isTv).toBe(true);
+    expect(ongoingTv.episodes_info).toBe('全30集');
+
+    const recentTv = mapTmdbItem(
+      {
+        id: 1002,
+        name: '繁花',
+        first_air_date: '2025-10-01',
+        overview: '阿宝在九十年代初的上海拼搏。',
+      },
+      'tv'
+    );
+    expect(recentTv.episodes_info).toBe('连载更新中');
+
+    const endedTv = mapTmdbItem(
+      {
+        id: 1003,
+        name: '大明王朝1566',
+        first_air_date: '2007-01-08',
+        overview: '嘉靖帝与海瑞的故事。',
+      },
+      'tv'
+    );
+    expect(endedTv.episodes_info).toBe('全集完结');
   });
 
   it('fetchTmdbCatalog 支持类型、地区、年份、排序四维筛选参数拼接', async () => {

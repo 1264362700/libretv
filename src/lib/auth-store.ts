@@ -2,7 +2,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { getEnvSources } from './env-sources';
-import { getEnvLiveSources } from './env-live-sources';
 import { CUSTOMER_SOURCES_LIST } from './customer-sites';
 import {
   isPostgresConfigured,
@@ -313,22 +312,6 @@ export function bootstrapAndMergeGlobalSources(store: AuthDataStore): void {
         name: envSrc.name,
         url: envSrc.url,
         type: 'vod',
-        createdAt: Date.now(),
-      };
-      store.globalSources[rec.key] = rec;
-      existingMap.set(norm, rec.key);
-    }
-  }
-
-  const envLives = getEnvLiveSources();
-  for (const liveSrc of envLives) {
-    const norm = normalizeSourceUrl(liveSrc.url);
-    if (!existingMap.has(norm)) {
-      const rec: GlobalSourceRecord = {
-        key: liveSrc.key,
-        name: liveSrc.name,
-        url: liveSrc.url,
-        type: 'live',
         createdAt: Date.now(),
       };
       store.globalSources[rec.key] = rec;

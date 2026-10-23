@@ -167,6 +167,7 @@ export function useWatchEngine({
             remarks: sm.remarks || (sm.vodYear ? `${sm.vodYear}` : undefined),
           } as SearchResultItem,
           ms: sm.ms,
+          episodeCount: sm.episodeUrls.length,
         });
       }
     }
@@ -285,9 +286,15 @@ export function useWatchEngine({
       failedSourcesRef.current.add(sourceKey);
       setFailedSources(new Set(failedSourcesRef.current));
 
-      const viable = candidates.filter(
-        (c) => c.source.key !== sourceKey && !failedSourcesRef.current.has(c.source.key)
-      );
+      const viable = candidates
+        .filter((c) => c.source.key !== sourceKey && !failedSourcesRef.current.has(c.source.key))
+        .sort((a, b) => {
+          // 优先选择集数能够覆盖当前正在观看集数（currentIndex + 1）的备用源
+          const reqEp = currentIndex + 1;
+          const aEnough = a.episodeCount === undefined || a.episodeCount >= reqEp ? 1 : 0;
+          const bEnough = b.episodeCount === undefined || b.episodeCount >= reqEp ? 1 : 0;
+          return bEnough - aEnough;
+        });
 
       if (viable.length === 0) {
         if (candidates.length > 1) {
@@ -309,7 +316,7 @@ export function useWatchEngine({
         switchToCandidate(nextTarget, false);
       }, 500);
     },
-    [sourceKey, source?.name, candidates, toast, switchToCandidate]
+    [sourceKey, source?.name, candidates, currentIndex, toast, switchToCandidate]
   );
 
   useEffect(() => {
@@ -348,6 +355,7 @@ export function useWatchEngine({
         title: targetTitle,
         doubanId: doubanIdParam || undefined,
         year: yearParam || undefined,
+        minEpisodes: Math.max(1, currentIndex + 1),
       },
       allCandidateSources,
       {
@@ -400,6 +408,7 @@ export function useWatchEngine({
     allCandidateSources,
     router,
     indexParam,
+    currentIndex,
   ]);
 
   return {

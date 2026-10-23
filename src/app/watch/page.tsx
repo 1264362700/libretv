@@ -438,6 +438,9 @@ function WatchContent() {
                     onPause={handleProgress}
                     onEnded={handleEnded}
                     onRequestSwitchSource={handleAutoFailover}
+                    episodes={episodes}
+                    currentEpisodeIndex={currentIndex}
+                    onSelectEpisode={goEpisode}
                   />
                 ) : (
                   <div className="w-full h-full flex flex-col items-center justify-center p-4 gap-3 bg-black/90">

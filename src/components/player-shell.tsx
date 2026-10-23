@@ -1,6 +1,7 @@
 'use client';
 
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Artplayer from 'artplayer';
 import Hls, { type HlsConfig } from 'hls.js';
 
@@ -51,6 +52,12 @@ interface PlayerShellProps {
   onPause?: (position: number, duration: number) => void;
   /** 恢复策略判源不可用（重试耗尽/格式硬失败）时回调：父级弹出换源面板 */
   onRequestSwitchSource?: (reason: string) => void;
+  /** 剧集地址列表（多集时启用播放器右侧贴边感应「悬浮选集抽屉」，全屏下无需退出即可秒切集数） */
+  episodes?: string[];
+  /** 当前正在播放的集数索引（0-based） */
+  currentEpisodeIndex?: number;
+  /** 播放器内悬浮选集抽屉切集回调 */
+  onSelectEpisode?: (index: number) => void;
 }
 
 /**
@@ -87,6 +94,9 @@ export function PlayerShellInner({
   onEnded,
   onPause,
   onRequestSwitchSource,
+  episodes = [],
+  currentEpisodeIndex = 0,
+  onSelectEpisode,
   ref,
 }: PlayerShellProps & { ref?: React.Ref<PlayerShellHandle> }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -98,6 +108,33 @@ export function PlayerShellInner({
   // 起播前的品牌占位图（沿用旧版 nomedia 素材），实际开始播放后隐藏
   const [showPoster, setShowPoster] = useState(true);
   const hintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 全屏/播放器内右侧贴边感应「悬浮选集抽屉」状态（挂载于 ArtPlayer 容器内，兼容普通态/网页全屏/系统全屏）
+  const [epPortalHost, setEpPortalHost] = useState<HTMLDivElement | null>(null);
+  const [epDrawerOpen, setEpDrawerOpen] = useState(false);
+  const epHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeEpBtnRef = useRef<HTMLButtonElement | null>(null);
+
+  const openEpDrawer = () => {
+    if (epHideTimerRef.current) {
+      clearTimeout(epHideTimerRef.current);
+      epHideTimerRef.current = null;
+    }
+    setEpDrawerOpen(true);
+  };
+
+  const scheduleHideEpDrawer = (delayMs = 280) => {
+    if (epHideTimerRef.current) clearTimeout(epHideTimerRef.current);
+    epHideTimerRef.current = setTimeout(() => {
+      setEpDrawerOpen(false);
+    }, delayMs);
+  };
+
+  useEffect(() => {
+    if (epDrawerOpen && activeEpBtnRef.current) {
+      activeEpBtnRef.current.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }, [epDrawerOpen, currentEpisodeIndex]);
 
   // 外挂字幕状态（支持 SRT / WebVTT 拖拽或按钮导入 + ±0.5s 时间轴校准）
   const subtitleCuesRef = useRef<SubtitleCue[]>([]);
@@ -461,6 +498,10 @@ export function PlayerShellInner({
       },
     });
     artRef.current = art;
+    const epHost = document.createElement('div');
+    epHost.className = 'libretv-ep-portal-host';
+    containerRef.current.appendChild(epHost);
+    setEpPortalHost(epHost);
     art.on('video:loadedmetadata', () => {
       // ArtPlayer 运行时支持 title 选项（类型定义未覆盖），用于界面标题展示
       try {
@@ -611,8 +652,8 @@ export function PlayerShellInner({
       // 已有触控在处理时忽略新手指：否则第二指会把 originalRate 捕获成 3.0，
       // 松手后倍速永久卡在 3x；旧定时器句柄也会被覆盖成无法清除的幽灵触发
       if (isLongPress || longPressTimer) return;
-      // 控制栏 / 设置面板上的长按不触发倍速（按住进度条拖动、长按倍速菜单项会误触）
-      if ((e.target as HTMLElement).closest?.('.art-controls, .art-settings')) return;
+      // 控制栏 / 设置面板 / 悬浮选集抽屉上的长按不触发倍速（按住进度条拖动、长按选集按钮会误触）
+      if ((e.target as HTMLElement).closest?.('.art-controls, .art-settings, .libretv-ep-portal-host')) return;
       originalRate = art.video.playbackRate;
       longPressTimer = setTimeout(() => {
         if (art.video?.paused) return;
@@ -660,6 +701,9 @@ export function PlayerShellInner({
       document.removeEventListener('keydown', shortcuts);
       document.removeEventListener('visibilitychange', saveOnHide);
       if (hintTimerRef.current) clearTimeout(hintTimerRef.current);
+      if (epHideTimerRef.current) clearTimeout(epHideTimerRef.current);
+      setEpPortalHost(null);
+      epHost.remove();
       el?.removeEventListener('touchstart', onTouchStart);
       el?.removeEventListener('touchend', onTouchEnd);
       el?.removeEventListener('touchcancel', onTouchEnd);
@@ -908,6 +952,134 @@ export function PlayerShellInner({
           </button>
         </div>
       )}
+
+      {/* 全屏/沉浸态右侧贴边感应「悬浮选集抽屉」（挂载于 ArtPlayer 容器内，全屏下无需退出即可秒切集数） */}
+      {episodes.length > 1 &&
+        onSelectEpisode &&
+        !error &&
+        epPortalHost &&
+        createPortal(
+          <>
+            {/* 右侧 14px 隐形鼠标感应热区：鼠标移至播放器右边缘即滑出选集抽屉 */}
+            <div
+              className="absolute inset-y-12 right-0 w-3.5 z-[115] pointer-events-auto"
+              onMouseEnter={openEpDrawer}
+              title="移至右边缘唤出悬浮选集抽屉"
+            />
+
+            {/* 右上角轻量选集唤醒胶囊（兼顾触屏设备与全屏直观选集） */}
+            {!epDrawerOpen && !subtitleLabel && (
+              <button
+                type="button"
+                onClick={openEpDrawer}
+                onMouseEnter={openEpDrawer}
+                className="absolute top-3 right-3 z-[115] flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/55 hover:bg-black/85 text-white/80 hover:text-white border border-white/15 text-[11px] font-medium backdrop-blur transition-all opacity-60 hover:opacity-100 pointer-events-auto cursor-pointer"
+                title="打开悬浮选集抽屉（也可将鼠标移至播放器最右侧边缘唤出）"
+              >
+                <span>☰ 选集</span>
+                <span className="text-accent font-mono">
+                  {currentEpisodeIndex + 1}/{episodes.length}
+                </span>
+              </button>
+            )}
+
+            {/* 悬浮毛玻璃选集抽屉主体 */}
+            <div
+              onMouseEnter={openEpDrawer}
+              onMouseLeave={() => scheduleHideEpDrawer(280)}
+              className={`
+                absolute inset-y-0 right-0 z-[125] w-64 sm:w-72
+                bg-black/82 backdrop-blur-xl border-l border-white/15 shadow-2xl
+                flex flex-col pointer-events-auto
+                transition-all duration-200 ease-out
+                ${epDrawerOpen ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0 pointer-events-none'}
+              `}
+            >
+              <div className="px-3.5 py-2.5 border-b border-white/10 flex items-center justify-between gap-2 shrink-0">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="text-xs font-semibold text-white truncate">悬浮选集</span>
+                  <span className="text-[11px] text-accent font-mono">
+                    {currentEpisodeIndex + 1}/{episodes.length}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    disabled={currentEpisodeIndex <= 0}
+                    onClick={() => {
+                      if (currentEpisodeIndex > 0) {
+                        onSelectEpisode(currentEpisodeIndex - 1);
+                        showHint(`正在切换至 第 ${currentEpisodeIndex} 集`);
+                      }
+                    }}
+                    className="px-2 py-0.5 rounded bg-white/10 hover:bg-white/20 disabled:opacity-35 text-[11px] text-white cursor-pointer"
+                    title="上一集"
+                  >
+                    上集
+                  </button>
+                  <button
+                    type="button"
+                    disabled={currentEpisodeIndex >= episodes.length - 1}
+                    onClick={() => {
+                      if (currentEpisodeIndex < episodes.length - 1) {
+                        onSelectEpisode(currentEpisodeIndex + 1);
+                        showHint(`正在切换至 第 ${currentEpisodeIndex + 2} 集`);
+                      }
+                    }}
+                    className="px-2 py-0.5 rounded bg-white/10 hover:bg-white/20 disabled:opacity-35 text-[11px] text-white cursor-pointer"
+                    title="下一集"
+                  >
+                    下集
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEpDrawerOpen(false)}
+                    className="ml-0.5 px-1.5 py-0.5 rounded text-white/60 hover:text-white hover:bg-white/10 text-xs cursor-pointer"
+                    title="收起选集抽屉"
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-3 grid grid-cols-4 gap-1.5 content-start">
+                {episodes.map((_, idx) => {
+                  const isActive = idx === currentEpisodeIndex;
+                  return (
+                    <button
+                      key={idx}
+                      ref={isActive ? activeEpBtnRef : undefined}
+                      type="button"
+                      onClick={() => {
+                        if (idx !== currentEpisodeIndex) {
+                          onSelectEpisode(idx);
+                          showHint(`正在切换至 第 ${idx + 1} 集`);
+                        }
+                        setEpDrawerOpen(false);
+                      }}
+                      className={`
+                        h-8 rounded-lg text-xs font-mono font-medium transition-all cursor-pointer flex items-center justify-center border
+                        ${
+                          isActive
+                            ? 'bg-accent text-white border-accent shadow-sm'
+                            : 'bg-white/8 hover:bg-white/18 text-white/85 hover:text-white border-white/10'
+                        }
+                      `}
+                    >
+                      {idx + 1}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="px-3.5 py-2 border-t border-white/10 text-[10px] text-white/50 flex items-center justify-between shrink-0">
+                <span>鼠标移至画面右边缘即可呼出</span>
+                <span>全屏免退切集</span>
+              </div>
+            </div>
+          </>,
+          epPortalHost
+        )}
     </div>
   );
 }

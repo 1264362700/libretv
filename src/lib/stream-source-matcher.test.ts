@@ -102,6 +102,36 @@ describe('stream-source-matcher: matchAndScoreVodItem 防串片打分', () => {
     const score = matchAndScoreVodItem(target, item);
     expect(score).toBeLessThan(60);
   });
+
+  it('反向包含防串片：搜续集/番外时，较短的前作得分低于 60 分门槛，单字候选直接淘汰', () => {
+    const sequelTarget = {
+      title: '唐朝诡事录之西行',
+      cleanTitle: '唐朝诡事录之西行',
+      season: 1,
+      year: '2024',
+    };
+
+    // 前作《唐朝诡事录》（反向包含）不应跨过 60 分正片及格线
+    const season1Item = {
+      vod_name: '唐朝诡事录',
+      vod_year: '2022',
+    };
+    expect(matchAndScoreVodItem(sequelTarget, season1Item)).toBeLessThan(60);
+
+    // 单字反向包含直接 0 分淘汰
+    const singleCharItem = {
+      vod_name: '唐',
+      vod_year: '2024',
+    };
+    expect(matchAndScoreVodItem(sequelTarget, singleCharItem)).toBe(0);
+
+    // 正向包含（含 4K/国语后缀）正常高分通过
+    const validSequelItem = {
+      vod_name: '唐朝诡事录之西行 4K国语',
+      vod_year: '2024',
+    };
+    expect(matchAndScoreVodItem(sequelTarget, validSequelItem)).toBeGreaterThanOrEqual(80);
+  });
 });
 
 describe('stream-source-matcher: 衍生内容（影视解说/二创）匹配特例', () => {

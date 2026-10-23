@@ -1,8 +1,11 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
 import type { MediaItem } from '@/lib/media-library-service';
 import { resolveEpisodeBadge } from '@/lib/media-library-service';
+import { db, favoriteIdOf, toggleFavorite } from '@/lib/db';
+import { useToast } from './toast';
 import { cn } from '@/lib/utils';
 
 export interface MediaCardProps {
@@ -37,6 +40,13 @@ export function MediaCard({
   }, [item.cover]);
 
   const [candidateIdx, setCandidateIdx] = useState(0);
+  const { toast } = useToast();
+
+  const favEntry = useLiveQuery(
+    () => (item.title ? db.favorites.get(favoriteIdOf(item.title)) : undefined),
+    [item.title]
+  );
+  const isFavorited = Boolean(favEntry);
 
   // 当封面变化时重置索引
   useEffect(() => {
@@ -162,12 +172,49 @@ export function MediaCard({
           )}
         </div>
 
-        {/* Hover 时悬浮浮现的半透明播放按钮 (Netflix 质感) */}
-        <div className="absolute inset-0 bg-black/40 backdrop-blur-[1.5px] opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center pointer-events-none z-20">
-          <div className="w-12 h-12 rounded-full bg-accent text-on-accent flex items-center justify-center shadow-xl shadow-accent/50 transform scale-75 group-hover:scale-100 transition-transform duration-300">
-            <svg className="w-6 h-6 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+        {/* Hover 时悬浮浮现的半透明播放按钮 + 9zhoukj 快捷追剧与剧情看点预览浮层 */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/45 to-black/30 backdrop-blur-[1.5px] opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-between p-2.5 pointer-events-none z-20">
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={async (e) => {
+                e.stopPropagation();
+                if (!item.title) return;
+                const added = await toggleFavorite({
+                  title: item.title,
+                  pic: item.cover,
+                  year: item.year,
+                  typeName: item.typeName,
+                  remarks: episodeBadge,
+                });
+                toast(
+                  added ? `已将「${item.title}」加入追剧单` : `已将「${item.title}」移出追剧单`,
+                  added ? 'success' : 'info'
+                );
+              }}
+              className={cn(
+                'pointer-events-auto px-2 py-0.5 rounded-full text-[10px] font-semibold border backdrop-blur-md transition-all cursor-pointer flex items-center gap-0.5 shadow-sm',
+                isFavorited
+                  ? 'bg-amber-500/85 text-slate-950 border-amber-300'
+                  : 'bg-black/65 hover:bg-accent text-white border-white/20'
+              )}
+              title={isFavorited ? '已在追剧单中，点击取消追剧' : '一键加入追剧单'}
+            >
+              <span>{isFavorited ? '★' : '☆'}</span>
+              <span>{isFavorited ? '已追' : '追剧'}</span>
+            </button>
+          </div>
+
+          <div className="self-center w-11 h-11 rounded-full bg-accent text-on-accent flex items-center justify-center shadow-xl shadow-accent/50 transform scale-75 group-hover:scale-100 transition-transform duration-300">
+            <svg className="w-5 h-5 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
               <path d="M8 5v14l11-7z" />
             </svg>
+          </div>
+
+          <div className="space-y-0.5 text-left">
+            <p className="text-[10px] text-white/90 line-clamp-2 leading-snug font-medium">
+              {item.card_subtitle || subtitleText || `${item.year || ''} ${item.typeName || '高清正片'}`.trim()}
+            </p>
           </div>
         </div>
       </div>

@@ -263,12 +263,12 @@ export function VideoCard({ item, onClick }: { item: SearchResultItem; onClick: 
   );
 }
 
-/** 豆瓣与片库推荐卡片（天涯影视+9zhoukj 影院级高质感：微浮起、景深阴影、剧集状态透出、悬浮立即播放） */
+/** NovaTV Cinema Ultra 海报竖卡 (MediaCard 1:1 复刻) */
 export function DoubanCard({
   item,
   onClick,
 }: {
-  item: { title: string; cover: string; rating?: string; episodes_info?: string; year?: string };
+  item: { title: string; cover: string; rating?: string; episodes_info?: string; year?: string; card_subtitle?: string };
   onClick: () => void;
 }) {
   const imageProxyMode = useAppStore((s) => s.imageProxyMode);
@@ -276,7 +276,6 @@ export function DoubanCard({
   const [imgFailed, setImgFailed] = useState(false);
   useEffect(() => setImgFailed(false), [item.cover]);
 
-  // 严格校验纯数字评分（如 7.1, 9.0），非数字文本一律不展示，防止长短评污染海报
   const numericRating = useMemo(() => {
     if (item.rating === undefined || item.rating === null) return null;
     const trimmed = String(item.rating).trim();
@@ -288,17 +287,15 @@ export function DoubanCard({
     return null;
   }, [item.rating]);
 
-  // 非纯数字的角标状态（如“全80集”、“更新至12集”、“微短剧”、“AI精选”等）
   const statusBadge = useMemo(() => {
-    if (numericRating) return null;
-    const text = (item.episodes_info || item.rating || '').trim();
-    if (!text || text === '0' || text === 'null') return null;
+    const text = (item.episodes_info || '').trim();
+    if (!text || text === '0' || text === 'null') return '正片';
     return text.length > 8 ? `${text.slice(0, 8)}…` : text;
-  }, [numericRating, item.episodes_info, item.rating]);
+  }, [item.episodes_info]);
 
   return (
     <div
-      className="group relative flex flex-col rounded-2xl overflow-hidden cursor-pointer bg-surface/60 dark:bg-white/[0.03] backdrop-blur-xl border border-black/[0.07] dark:border-white/[0.09] hover:border-black/20 dark:hover:border-white/25 hover:shadow-2xl hover:shadow-black/30 hover:-translate-y-1.5 active:scale-95 transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:border-accent focus-visible:-translate-y-1 touch-manipulation"
+      className="group relative flex flex-col cursor-pointer select-none touch-manipulation"
       role="button"
       tabIndex={0}
       onClick={onClick}
@@ -309,56 +306,69 @@ export function DoubanCard({
         }
       }}
     >
-      <div className="relative aspect-[2/3] bg-chip/50 overflow-hidden">
+      <div className="block relative aspect-[2/3] w-full rounded-xl overflow-hidden bg-slate-800 border border-white/5 group-hover:border-amber-400/60 transition-all duration-300 shadow-md group-hover:shadow-glow-gold">
         {item.cover && !imgFailed ? (
           <SmartImage
             url={item.cover}
             mode={imageProxyMode}
             customProxy={customImageProxy}
             alt={item.title}
-            className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
+            className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500 ease-out"
             onExhausted={() => setImgFailed(true)}
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center bg-chip">
-            <svg className="w-8 h-8 text-faint" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="w-full h-full flex items-center justify-center bg-slate-800">
+            <svg className="w-8 h-8 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 4v16m10-16v16M3 6a1 1 0 011-1h1a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V6zm4 0a1 1 0 011-1h1a1 1 0 011 1v12a1 1 0 01-1 1h-1a1 1 0 01-1-1V6zm8 0a1 1 0 011-1h1a1 1 0 011 1v12a1 1 0 01-1 1h-1a1 1 0 01-1-1V6zm4 0a1 1 0 011-1h1a1 1 0 011 1v12a1 1 0 01-1 1h-1a1 1 0 01-1-1V6z" />
             </svg>
           </div>
         )}
 
-        {/* 底部柔和暗影 */}
-        <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/75 via-black/25 to-transparent pointer-events-none" />
+        {/* Gradient Overlay */}
+        <div className="absolute inset-0 bg-gradient-to-t from-[#0B0F19] via-transparent to-black/20 opacity-80 group-hover:opacity-90 transition-opacity pointer-events-none" />
 
-        {/* 右上角 iOS 27 冰晶毛玻璃评分胶囊 */}
-        {numericRating ? (
-          <span className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-black/55 backdrop-blur-xl text-[11px] text-amber-300 font-semibold border border-white/15 shadow-xs flex items-center gap-0.5 z-10">
+        {/* Top Badges */}
+        <div className="absolute top-2 inset-x-2 flex items-center justify-between pointer-events-none z-10">
+          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/90 text-slate-950 shadow-sm">
+            {item.year || '4K'}
+          </span>
+
+          {statusBadge && (
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-black/60 backdrop-blur-md text-emerald-400 border border-emerald-500/20">
+              {statusBadge}
+            </span>
+          )}
+        </div>
+
+        {/* Bottom Rating Badge */}
+        {numericRating && (
+          <div className="absolute bottom-2 left-2 z-10 flex items-center gap-1 px-1.5 py-0.5 rounded bg-black/70 backdrop-blur-md text-amber-400 text-xs font-bold border border-amber-500/30">
             <span>★</span>
             <span>{numericRating}</span>
-          </span>
-        ) : statusBadge ? (
-          <span className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-black/55 backdrop-blur-xl text-[10px] text-white/90 font-medium border border-white/15 shadow-xs z-10">
-            {statusBadge}
-          </span>
-        ) : null}
+          </div>
+        )}
 
-        {/* 鼠标悬停时的 Apple TV+ 冰白圆形播放浮层 */}
-        <div className="absolute inset-0 bg-black/35 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center pointer-events-none z-10">
-          <span className="flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-white text-slate-950 text-xs font-semibold shadow-2xl transform translate-y-2 group-hover:translate-y-0 transition-transform duration-300">
-            <span>▶</span>
-            <span>立即播放</span>
-          </span>
+        {/* Center Hover Play Action */}
+        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 bg-black/30 backdrop-blur-[2px] pointer-events-none">
+          <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-amber-500 to-yellow-400 text-slate-950 flex items-center justify-center shadow-glow-gold transform group-hover:scale-110 active:scale-95 transition-transform">
+            <svg className="w-5 h-5 ml-0.5 fill-current" viewBox="0 0 24 24">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          </div>
         </div>
       </div>
 
-      <div className="p-2.5 sm:p-3 flex flex-col flex-1 justify-between">
-        <div className="text-xs sm:text-sm font-semibold text-content line-clamp-1 leading-snug group-hover:text-accent transition-colors" title={item.title}>
+      {/* Meta Title & Subtitle */}
+      <div className="mt-2.5 space-y-0.5 px-0.5">
+        <div
+          className="text-xs sm:text-sm font-semibold text-slate-200 group-hover:text-amber-400 transition-colors line-clamp-1"
+          title={item.title}
+        >
           {item.title}
         </div>
-        <div className="flex items-center justify-between text-[11px] text-muted mt-1">
-          <span className="truncate">{item.episodes_info || statusBadge || 'TMDB 4K'}</span>
-          {item.year && <span className="font-mono shrink-0 ml-1 text-faint">{item.year}</span>}
-        </div>
+        <p className="text-[11px] text-slate-400 truncate">
+          {item.card_subtitle || item.episodes_info || item.year || 'TMDB 4K 原画'}
+        </p>
       </div>
     </div>
   );

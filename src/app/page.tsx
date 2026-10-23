@@ -1,11 +1,10 @@
 'use client';
 
-import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Header } from '@/components/header';
 import { HeroBillboardBanner } from '@/components/hero-billboard-banner';
-import { MediaCarouselRow } from '@/components/media-carousel-row';
 import { RecommendSection } from '@/components/douban-section';
 import { ContinueWatchingRow } from '@/components/continue-watching-row';
 import { AggregatedCard, aggregateResults } from '@/components/video-card';
@@ -17,12 +16,7 @@ import {
 } from '@/lib/store';
 import { api } from '@/lib/client-api';
 import type { SourceSearchOutcome } from '@/lib/types';
-import {
-  SearchHistoryDropdown,
-  useSearchHistory,
-  TRENDING_SEARCH_KEYWORDS,
-} from '@/components/search-history';
-import { cn, validateSourceUrl, buildWatchUrl } from '@/lib/utils';
+import { validateSourceUrl, buildWatchUrl } from '@/lib/utils';
 import { useAuth } from '@/components/auth';
 import { EmptyState } from '@/components/states';
 import { SiteFooter } from '@/components/site-footer';
@@ -55,9 +49,7 @@ function HomeContent() {
   const sourceHealth = useAppStore((s) => s.sourceHealth);
   const subscriptions = useAppStore((s) => s.subscriptions);
 
-  const [input, setInput] = useState(urlQuery);
   const [streamedOutcomes, setStreamedOutcomes] = useState<SourceSearchOutcome[]>([]);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   // 收集当前可用播放采集源
   const selectedSources = useMemo(() => {
@@ -87,7 +79,7 @@ function HomeContent() {
     return recentUpdatesQuery.data?.remarksMap ?? new Map<string, string>();
   }, [recentUpdatesQuery.data]);
 
-  // 2. TMDB 全球 4K 趋势大片（供首屏 Hero 巨幕使用）
+  // 2. TMDB 全球 4K 趋势大片（供首屏 HeroBillboard 全屏巨幕使用）
   const trendingHeroQuery = useQuery({
     queryKey: ['home-tmdb-trending-hero'],
     queryFn: ({ signal }) => fetchDoubanCollectionItems('trending', 0, 8, signal),
@@ -98,14 +90,6 @@ function HomeContent() {
   const heroBillboardItems = useMemo(() => {
     return (trendingHeroQuery.data?.items ?? []).slice(0, 6);
   }, [trendingHeroQuery.data]);
-
-  // 3. TMDB 影史高分殿堂
-  const topRatedQuery = useQuery({
-    queryKey: ['home-tmdb-top-rated'],
-    queryFn: ({ signal }) => fetchDoubanCollectionItems('movie_top250', 0, 14, signal),
-    staleTime: 60 * 60_000,
-    enabled: !urlQuery,
-  });
 
   // 播放前强制校验登录并直通 LibreTV 多源测速播放页
   const handlePlayMedia = (item: MediaItem) => {
@@ -126,28 +110,6 @@ function HomeContent() {
       title,
       cover: '',
     });
-  };
-
-  useEffect(() => {
-    if (urlQuery) setInput(urlQuery);
-  }, [urlQuery]);
-
-  const searchHistory = useSearchHistory(input);
-
-  const runSearch = (keyword: string) => {
-    const trimmed = keyword.trim();
-    if (!trimmed) {
-      router.push('/');
-      return;
-    }
-    searchHistory.record(trimmed);
-    searchHistory.close();
-    router.push(`/?s=${encodeURIComponent(trimmed)}`);
-  };
-
-  const pickHistory = (kw: string) => {
-    setInput(kw);
-    runSearch(kw);
   };
 
   // 全网多采集源流式并发搜索
@@ -177,21 +139,22 @@ function HomeContent() {
   useEffect(() => setVisibleCount(RESULT_PAGE_SIZE), [groups]);
 
   return (
-    <div className="min-h-screen flex flex-col bg-page text-content transition-colors duration-200">
+    <div className="min-h-screen flex flex-col bg-[#0B0F19] text-white">
+      {/* Top Glass Navigation */}
       <Header />
 
-      <main className="relative flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6 pb-24 md:pb-8 overflow-x-hidden">
-        {urlQuery ? (
-          <section className="space-y-4">
-            <div className="flex items-center justify-between py-2.5 px-4 rounded-2xl ios-glass">
-              <h2 className="text-base sm:text-lg font-bold text-content flex items-center gap-2">
+      {urlQuery ? (
+        <main className="relative flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-24 md:pb-12 overflow-x-hidden">
+          <section className="space-y-5">
+            <div className="flex items-center justify-between py-3 px-4 rounded-2xl glass-panel">
+              <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
                 <span>🔍 全网播放源聚合搜索:</span>
-                <span className="text-accent">“{urlQuery}”</span>
+                <span className="text-amber-400">“{urlQuery}”</span>
               </h2>
               <button
                 type="button"
                 onClick={() => router.push('/')}
-                className="text-xs text-muted hover:text-content px-3.5 py-1.5 rounded-full ios-pill transition-all cursor-pointer"
+                className="text-xs text-slate-300 hover:text-amber-400 px-3.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-all cursor-pointer"
               >
                 返回首页大厅
               </button>
@@ -199,7 +162,7 @@ function HomeContent() {
 
             {visibleGroups.length > 0 ? (
               <>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3.5 sm:gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-5">
                   {visibleGroups.map((group) => (
                     <AggregatedCard
                       key={group.key}
@@ -240,7 +203,8 @@ function HomeContent() {
                 {visibleCount < groups.length && (
                   <div className="flex justify-center mt-6">
                     <button
-                      className="px-6 py-2.5 rounded-full ios-pill text-xs font-semibold text-content hover:opacity-90 transition-all cursor-pointer"
+                      type="button"
+                      className="px-6 py-2.5 rounded-xl glass-panel text-xs font-semibold text-white hover:text-amber-400 transition-all cursor-pointer"
                       onClick={() => setVisibleCount((v) => v + RESULT_PAGE_SIZE)}
                     >
                       加载更多（还剩 {groups.length - visibleCount} 部）
@@ -249,7 +213,7 @@ function HomeContent() {
                 )}
               </>
             ) : isSearching ? (
-              <div className="py-20 text-center text-muted ios-glass rounded-3xl">
+              <div className="py-20 text-center text-slate-400 glass-panel rounded-2xl">
                 正在流式并发检索全网点播采集源…
               </div>
             ) : (
@@ -261,117 +225,51 @@ function HomeContent() {
               />
             )}
           </section>
-        ) : (
-          <div className="space-y-8 animate-fade-in">
-            {/* 1. 首屏 4K 宽画幅巨幕轮播 (TMDB Official) */}
-            <HeroBillboardBanner
-              items={heroBillboardItems}
-              cmsRemarksMap={cmsRemarksMap}
-              onPlay={handlePlayMedia}
-              onDetail={handlePlayMedia}
-            />
+        </main>
+      ) : (
+        <main className="flex-1 pb-24 md:pb-12">
+          {/* Hero Massive Billboard Carousel */}
+          <HeroBillboardBanner
+            items={heroBillboardItems}
+            cmsRemarksMap={cmsRemarksMap}
+            onPlay={handlePlayMedia}
+            onDetail={handlePlayMedia}
+          />
 
-            {/* 2. iOS 27 悬浮空间液态毛玻璃搜索舱 */}
-            <section className="flex flex-col items-center">
-              <div ref={searchHistory.containerRef} className="relative w-full max-w-2xl">
-                <form
-                  className="w-full"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    runSearch(input);
-                  }}
-                >
-                  <div
-                    className={cn(
-                      'flex items-stretch min-h-12 pl-5 pr-1.5 py-1.5 transition-all duration-200 ios-glass',
-                      searchHistory.visible ? 'rounded-t-2xl rounded-b-none' : 'rounded-full'
-                    )}
-                  >
-                    <input
-                      ref={inputRef}
-                      role="combobox"
-                      className="flex-1 min-w-0 pr-3 bg-transparent text-sm text-content placeholder:text-faint focus:outline-none"
-                      placeholder="搜索全网电影、剧集、动漫，多源并发测速秒播..."
-                      value={input}
-                      maxLength={100}
-                      aria-autocomplete="list"
-                      aria-controls="home-search-history"
-                      aria-expanded={searchHistory.visible}
-                      onChange={(e) => {
-                        setInput(e.target.value);
-                        searchHistory.resetActive();
-                      }}
-                      onFocus={searchHistory.onFocus}
-                      onKeyDown={(e) => searchHistory.onKeyDown(e, pickHistory)}
-                    />
-                    <button
-                      type="submit"
-                      className="px-6 rounded-full ios-pill-active text-xs font-semibold transition-all active:scale-95 cursor-pointer"
-                    >
-                      全网搜索
-                    </button>
-                  </div>
-                </form>
-
-                {searchHistory.visible && (
-                  <SearchHistoryDropdown
-                    id="home-search-history"
-                    matches={searchHistory.matches}
-                    activeIndex={searchHistory.activeIndex}
-                    onPick={pickHistory}
-                    onRemove={searchHistory.remove}
-                    onClearAll={searchHistory.clearAll}
-                  />
-                )}
+          {/* Main Content Area (NovaTV 515b18d Layout) */}
+          <div className="-mt-8 sm:-mt-12 relative z-20 space-y-4">
+            {/* Source Badge Bar */}
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between text-xs text-slate-400">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                <span>当前数据源：TMDB 4K 官方原画 + 全网点播专线</span>
               </div>
+              <span className="text-[11px] font-mono text-slate-500">
+                TMDB API v3 · Dual Core Active
+              </span>
+            </div>
 
-              <div className="flex flex-wrap items-center justify-center gap-1.5 mt-3 max-w-2xl">
-                <span className="text-[11px] text-faint">热门搜索:</span>
-                {TRENDING_SEARCH_KEYWORDS.slice(0, 6).map((kw) => (
-                  <button
-                    key={kw}
-                    type="button"
-                    onClick={() => pickHistory(kw)}
-                    className="text-[11px] text-muted hover:text-content px-2.5 py-0.5 rounded-full ios-pill transition-colors cursor-pointer"
-                  >
-                    {kw}
-                  </button>
-                ))}
-              </div>
-            </section>
+            {/* Continue Watching Row (only renders if user has history) */}
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              <ContinueWatchingRow
+                cmsRemarksMap={cmsRemarksMap}
+                onNavigate={(watchUrl) => {
+                  if (!verified) {
+                    router.push(`/login?redirect=${encodeURIComponent(watchUrl)}`);
+                    return;
+                  }
+                  router.push(watchUrl);
+                }}
+              />
+            </div>
 
-            {/* 3. 继续观看与追剧进度轨道 */}
-            <ContinueWatchingRow
-              cmsRemarksMap={cmsRemarksMap}
-              onNavigate={(watchUrl) => {
-                if (!verified) {
-                  router.push(`/login?redirect=${encodeURIComponent(watchUrl)}`);
-                  return;
-                }
-                router.push(watchUrl);
-              }}
-            />
-
-            {/* 4. 核心片库舞台：TMDB 多维探索网格 (左 9 列) + TMDB 全球热力榜 TOP 10 (右 3 列) */}
+            {/* Floor 1 (今日重磅热播 + TOP 10 热播飙升榜) & Floor 2 (热播剧集专区) */}
             <Suspense fallback={null}>
               <RecommendSection onPick={handlePickByTitle} />
             </Suspense>
-
-            {/* 5. TMDB 影史高分殿堂横向精选轨道 */}
-            <MediaCarouselRow
-              title="TMDB 影史高分殿堂"
-              subTitle="全球影迷高分认证 · 4K 典藏佳作"
-              icon="🏆"
-              badge="TMDB Top Rated"
-              moreHref="/catalog?type=movie&sort=rank"
-              items={topRatedQuery.data?.items ?? []}
-              cmsRemarksMap={cmsRemarksMap}
-              onPick={handlePlayMedia}
-              isLoading={topRatedQuery.isLoading}
-            />
           </div>
-        )}
-      </main>
+        </main>
+      )}
 
       <SiteFooter />
     </div>

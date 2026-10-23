@@ -66,8 +66,19 @@ function WatchContent() {
   const [descExpanded, setDescExpanded] = useState(false);
   const [epDescExpanded, setEpDescExpanded] = useState(false);
   const [selectedPoster, setSelectedPoster] = useState<string | undefined>(undefined);
+  const [theaterMode, setTheaterMode] = useState(false);
+  const [lightsOff, setLightsOff] = useState(false);
   const playerRef = useRef<PlayerShellHandle | null>(null);
   const subInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (!lightsOff) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setLightsOff(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [lightsOff]);
 
   const source = resolveSource(store, sourceKey, {
     url: searchParams.get('sourceUrl') || undefined,
@@ -407,11 +418,33 @@ function WatchContent() {
         </div>
       </header>
 
+      {/* 9zhoukj 关灯观影全局沉浸黑幕（点击空白处或按 Esc 自动开灯） */}
+      {lightsOff && (
+        <div
+          className="fixed inset-0 z-40 bg-black/92 backdrop-blur-[2px] transition-opacity duration-300 cursor-pointer animate-fade-in"
+          onClick={() => setLightsOff(false)}
+          title="点击空白处或按 Esc 键开灯"
+        >
+          <button
+            type="button"
+            onClick={() => setLightsOff(false)}
+            className="fixed top-4 right-4 z-50 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white/90 border border-white/20 text-xs font-medium backdrop-blur shadow-lg cursor-pointer"
+          >
+            <span>💡 开灯 (Esc)</span>
+          </button>
+        </div>
+      )}
+
       <main className="flex-1 max-w-7xl w-full mx-auto px-2 sm:px-4 py-3 sm:py-5 overflow-x-hidden">
-        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[minmax(0,1fr)_380px] gap-4 sm:gap-5 items-start">
+        <div
+          className={cn(
+            'grid grid-cols-1 gap-4 sm:gap-5 items-start transition-all duration-300',
+            !theaterMode && 'lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[minmax(0,1fr)_380px]'
+          )}
+        >
           {/* 左侧主视区：动态环境光影 + 播放器 + 视频信息 + 就地选源面板 */}
           <div className="min-w-0 w-full space-y-3.5">
-            <div className="relative">
+            <div className={cn('relative', lightsOff && 'z-50')}>
               {/* 影院级动态环境弥散光晕（Ambient Glow） */}
               {activePoster && (
                 <div
@@ -420,7 +453,13 @@ function WatchContent() {
                   aria-hidden
                 />
               )}
-              <div className="relative aspect-video max-h-[72vh] w-full bg-black rounded-xl overflow-hidden shadow-2xl border border-line/40">
+              <div
+                className={cn(
+                  'relative aspect-video w-full bg-black rounded-xl overflow-hidden shadow-2xl border border-line/40 transition-all duration-300',
+                  theaterMode ? 'max-h-[84vh]' : 'max-h-[72vh]',
+                  lightsOff && 'ring-1 ring-white/15 shadow-[0_0_80px_rgba(0,0,0,0.95)]'
+                )}
+              >
                 {currentUrl ? (
                   <PlayerShell
                     ref={playerRef}
@@ -532,6 +571,28 @@ function WatchContent() {
                   title="开启/退出画中画悬浮小窗模式，边浏览其他页面边看剧"
                 >
                   🖼️ 画中画
+                </button>
+                <button
+                  type="button"
+                  className={cn(
+                    'btn btn-sm px-2 text-xs hidden lg:inline-flex',
+                    theaterMode ? 'bg-accent/15 text-accent border border-accent/40' : 'btn-ghost'
+                  )}
+                  onClick={() => setTheaterMode((prev) => !prev)}
+                  title="切换影院宽屏模式（收起/展开右侧选集栏，配合播放器右边缘悬浮选集抽屉使用）"
+                >
+                  {theaterMode ? '↔ 退出宽屏' : '↔ 影院宽屏'}
+                </button>
+                <button
+                  type="button"
+                  className={cn(
+                    'btn btn-sm px-2 text-xs',
+                    lightsOff ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40' : 'btn-ghost'
+                  )}
+                  onClick={() => setLightsOff((prev) => !prev)}
+                  title="关灯观影：压暗网页四周环境，聚焦播放器画面（按 Esc 可恢复）"
+                >
+                  {lightsOff ? '💡 开灯' : '💡 关灯'}
                 </button>
                 <input
                   ref={subInputRef}

@@ -425,7 +425,7 @@ function HomeContent() {
               isLoading={bangumiQuery.isLoading}
             />
 
-            {/* 5. 板块三 ~ 五：分类横向海报轨道 */}
+            {/* 5. 板块三 ~ 五：分类海报楼层（热门电影与热播剧集启用 9zhoukj 左图右榜双栏 TOP 10 飙升榜） */}
             <MediaCarouselRow
               title="正在热映 · 热门电影榜"
               subTitle="院线热映 · 高分大片"
@@ -436,6 +436,8 @@ function HomeContent() {
               cmsRemarksMap={cmsRemarksMap}
               onPick={handlePlayMedia}
               isLoading={hotMoviesQuery.isLoading}
+              showHotRank
+              rankTitle="电影热播飙升榜 TOP 10"
             />
 
             <MediaCarouselRow
@@ -448,6 +450,8 @@ function HomeContent() {
               cmsRemarksMap={cmsRemarksMap}
               onPick={handlePlayMedia}
               isLoading={hotTvsQuery.isLoading}
+              showHotRank
+              rankTitle="剧集热播霸屏榜 TOP 10"
             />
 
             <MediaCarouselRow

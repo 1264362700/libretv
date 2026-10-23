@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import type { MediaItem } from '@/lib/media-library-service';
 import { resolveEpisodeBadge } from '@/lib/media-library-service';
-import { cn } from '@/lib/utils';
 
 export interface HeroBillboardBannerProps {
   items: MediaItem[];
@@ -13,7 +12,7 @@ export interface HeroBillboardBannerProps {
 }
 
 /**
- * 专为 4K 巨幕设计的自适应高清横幅图（优先加载 TMDB 4K Original Backdrop，失败降级 Poster）
+ * 专为 NovaTV 4K 全屏巨幕设计的自适应高清横幅图（优先加载 TMDB 4K Original Backdrop，失败降级 Poster）
  */
 function BannerImage({ backdrop, cover, title }: { backdrop?: string; cover?: string; title: string }) {
   const [src, setSrc] = useState(backdrop || cover || '');
@@ -33,13 +32,13 @@ function BannerImage({ backdrop, cover, title }: { backdrop?: string; cover?: st
       onError={() => {
         if (cover && src !== cover) setSrc(cover);
       }}
-      className="w-full h-full object-cover object-center filter brightness-[0.96] dark:brightness-[0.82] contrast-[1.04]"
+      className="w-full h-full object-cover object-center transform transition-transform duration-[8000ms] ease-out scale-105"
     />
   );
 }
 
 /**
- * Apple TV+ / iOS 27 Spatial Liquid Glass 巨幕轮播舞台
+ * NovaTV Cinema Ultra 全屏沉浸式 4K 巨幕轮播舞台 (HeroBillboard)
  */
 export function HeroBillboardBanner({
   items,
@@ -49,125 +48,109 @@ export function HeroBillboardBanner({
 }: HeroBillboardBannerProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
-  const [reduceMotion, setReduceMotion] = useState(false);
-  const [userPaused, setUserPaused] = useState(false);
 
-  const banners = items.slice(0, 6);
+  const slides = items.slice(0, 6);
 
   useEffect(() => {
-    if (typeof window === 'undefined' || !window.matchMedia) return;
-    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const sync = () => setReduceMotion(mq.matches);
-    sync();
-    mq.addEventListener('change', sync);
-    return () => mq.removeEventListener('change', sync);
-  }, []);
-
-  useEffect(() => {
-    if (banners.length <= 1 || isPaused || userPaused || reduceMotion) return;
+    if (isPaused || slides.length <= 1) return;
     const timer = setInterval(() => {
-      setCurrentIndex((prev) => (prev + 1) % banners.length);
+      setCurrentIndex((prev) => (prev + 1) % slides.length);
     }, 6500);
     return () => clearInterval(timer);
-  }, [banners.length, isPaused, userPaused, reduceMotion]);
+  }, [isPaused, slides.length]);
 
-  if (banners.length === 0) return null;
-  const current = banners[currentIndex] || banners[0];
+  if (slides.length === 0) return null;
+  const current = slides[currentIndex] || slides[0];
   const episodeBadge = resolveEpisodeBadge(current, cmsRemarksMap);
 
-  const handlePrev = () => {
-    setCurrentIndex((prev) => (prev - 1 + banners.length) % banners.length);
-  };
-
-  const handleNext = () => {
-    setCurrentIndex((prev) => (prev + 1) % banners.length);
-  };
-
   return (
-    <div
-      className={cn(
-        'relative w-full overflow-hidden rounded-[28px] sm:rounded-[36px] mb-8 group select-none transition-all duration-500',
-        'border border-black/[0.08] dark:border-white/[0.12]',
-        'bg-slate-100 dark:bg-[#080a11]',
-        'shadow-[0_24px_60px_-15px_rgba(0,0,0,0.12)] dark:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.22),0_32px_72px_-16px_rgba(0,0,0,0.85)]',
-        'min-h-[320px] sm:min-h-[420px]'
-      )}
-      style={{ height: 'clamp(320px, 56vh, 540px)' }}
+    <section
+      className="relative w-full h-[520px] sm:h-[620px] lg:h-[720px] overflow-hidden select-none bg-[#0B0F19]"
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
-      onFocus={() => setIsPaused(true)}
-      onBlur={() => setIsPaused(false)}
     >
-      {/* 背景 4K 宽画幅剧照层 */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        {banners.map((item, idx) => (
+      {/* Background Backdrops with crossfade transition */}
+      {slides.map((slide, index) => {
+        const isActive = index === currentIndex;
+        return (
           <div
-            key={item.id}
-            className={cn(
-              'absolute inset-0 transition-all duration-1000 ease-out',
-              idx === currentIndex ? 'opacity-100 scale-100' : 'opacity-0 scale-105'
-            )}
+            key={slide.id}
+            className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
+              isActive ? 'opacity-100 scale-100' : 'opacity-0 scale-105 pointer-events-none'
+            }`}
+            style={{ transitionProperty: 'opacity, transform' }}
           >
-            <BannerImage backdrop={item.backdrop} cover={item.cover} title={item.title} />
+            <BannerImage backdrop={slide.backdrop} cover={slide.cover} title={slide.title} />
+            {/* Cinematic Gradient Vignettes */}
+            <div className="absolute inset-0 bg-gradient-to-t from-[#0B0F19] via-[#0B0F19]/60 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-r from-[#0B0F19] via-[#0B0F19]/70 to-transparent w-full md:w-3/4" />
+            <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-[#0B0F19]/80 to-transparent" />
           </div>
-        ))}
+        );
+      })}
 
-        {/* Apple TV+ 空间光学渐晕遮罩 */}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#f4f5f8] via-[#f4f5f8]/65 to-transparent dark:from-[#06070b] dark:via-[#06070b]/55 dark:to-transparent" />
-        <div className="absolute inset-0 bg-gradient-to-r from-[#f4f5f8]/95 via-[#f4f5f8]/70 to-transparent dark:from-[#06070b]/95 dark:via-[#06070b]/65 dark:to-transparent w-full md:w-3/4" />
-      </div>
+      {/* Foreground Hero Content Container */}
+      <div className="relative z-10 max-w-7xl mx-auto h-full px-4 sm:px-6 lg:px-8 flex flex-col justify-end pb-16 sm:pb-24">
+        <div className="max-w-2xl animate-fade-in space-y-4" key={current.id}>
+          {/* Status & Badges */}
+          <div className="flex items-center gap-2.5 flex-wrap">
+            {/* Emerald Breathing Light */}
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-950/80 border border-emerald-500/30 text-emerald-400 text-xs font-medium shadow-glow-emerald">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block" />
+              <span>{episodeBadge || '正在热映'}</span>
+            </div>
 
-      {/* 左下方 Apple Vision 空间信息舱 */}
-      <div className="relative h-full flex flex-col justify-end p-6 sm:p-10 md:p-12 max-w-3xl z-10">
-        <div className="space-y-3.5 sm:space-y-4" key={current.id}>
-          {/* 冰晶毛玻璃元数据胶囊组 */}
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold tracking-wide uppercase backdrop-blur-2xl bg-slate-900/85 text-white dark:bg-white/15 dark:text-white border border-white/20 shadow-xs">
-              <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse" />
-              <span>TMDB 4K Official</span>
+            {/* Category Tag */}
+            <span className="px-2.5 py-1 rounded-full bg-white/10 border border-white/10 text-slate-200 text-xs font-medium">
+              TMDB 4K Official
             </span>
 
-            {current.rating && (
-              <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full backdrop-blur-2xl bg-amber-500/15 dark:bg-amber-400/15 border border-amber-500/30 dark:border-amber-300/30 text-amber-700 dark:text-amber-300 font-bold text-xs">
-                <span>★</span>
-                <span>{current.rating}</span>
-              </span>
-            )}
-
+            {/* Year */}
             {current.year && (
-              <span className="px-3 py-1 rounded-full backdrop-blur-2xl bg-black/[0.05] dark:bg-white/[0.08] border border-black/[0.08] dark:border-white/[0.12] text-slate-700 dark:text-slate-200 text-xs font-medium">
+              <span className="px-2 py-0.5 rounded text-slate-400 text-xs font-mono">
                 {current.year}
               </span>
             )}
 
-            <span className="px-3 py-1 rounded-full backdrop-blur-2xl bg-black/[0.05] dark:bg-white/[0.08] border border-black/[0.08] dark:border-white/[0.12] text-slate-700 dark:text-slate-200 text-xs font-medium">
-              {episodeBadge}
-            </span>
+            {/* Rating */}
+            {current.rating && (
+              <div className="flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-400 text-xs font-bold shadow-glow-gold">
+                <span>★</span>
+                <span>{current.rating}</span>
+              </div>
+            )}
           </div>
 
-          {/* 影院级大字标题 */}
+          {/* Title */}
           <h1
-            className="text-2xl sm:text-4xl md:text-5xl font-extrabold text-slate-950 dark:text-white tracking-tight line-clamp-1 cursor-pointer hover:opacity-85 transition-opacity"
             onClick={() => onPlay(current)}
+            className="text-3xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight drop-shadow-md leading-tight cursor-pointer hover:text-amber-400 transition-colors"
           >
             {current.title}
           </h1>
 
-          {/* 剧情简介 */}
-          <p className="text-slate-600 dark:text-slate-300/90 text-xs sm:text-sm md:text-base line-clamp-2 max-w-2xl leading-relaxed font-normal">
+          {/* Subtitle / Actors */}
+          {current.card_subtitle && (
+            <p className="text-xs sm:text-sm text-slate-400 font-medium line-clamp-1">
+              {current.card_subtitle}
+            </p>
+          )}
+
+          {/* Summary */}
+          <p className="text-xs sm:text-sm text-slate-300 line-clamp-2 leading-relaxed drop-shadow max-w-xl">
             {current.overview ||
               current.card_subtitle ||
-              'TMDB 全球高分院线臻选，支持全网多源流式并发测速秒播与自适应蓝光画质。'}
+              'TMDB 全球 4K 原画臻选大片，支持全网多点播采集源流式并发测速秒播。'}
           </p>
 
-          {/* Apple TV+ 胶囊按钮组 */}
-          <div className="flex items-center gap-3 pt-1.5">
+          {/* Action Buttons */}
+          <div className="flex items-center gap-3.5 pt-2">
             <button
               type="button"
               onClick={() => onPlay(current)}
-              className="flex items-center gap-2 px-7 py-2.5 sm:py-3 rounded-full bg-slate-950 text-white dark:bg-white dark:text-slate-950 font-semibold text-xs sm:text-sm shadow-[0_8px_24px_rgba(0,0,0,0.25)] dark:shadow-[0_0_28px_rgba(255,255,255,0.25)] hover:scale-[1.02] active:scale-95 transition-all cursor-pointer touch-manipulation"
+              className="flex items-center gap-2.5 px-6 py-3 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 text-slate-950 font-bold text-sm sm:text-base hover:brightness-110 shadow-glow-gold transition-all duration-200 hover:scale-[1.02] active:scale-95 cursor-pointer"
             >
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
                 <path d="M8 5v14l11-7z" />
               </svg>
               <span>立即播放</span>
@@ -177,85 +160,36 @@ export function HeroBillboardBanner({
               <button
                 type="button"
                 onClick={() => onDetail(current)}
-                className="flex items-center gap-2 px-5 py-2.5 sm:py-3 rounded-full ios-pill text-slate-800 dark:text-white/90 hover:bg-black/10 dark:hover:bg-white/15 font-medium text-xs sm:text-sm active:scale-95 transition-all cursor-pointer touch-manipulation"
+                className="flex items-center gap-2 px-5 py-3 rounded-xl glass-panel text-slate-200 hover:text-white font-medium text-sm sm:text-base hover:bg-white/10 transition-all duration-200 cursor-pointer"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
+                <svg className="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
                 </svg>
-                <span>更多剧集</span>
+                <span>加入追剧</span>
               </button>
             )}
           </div>
         </div>
+
+        {/* Bottom Carousel Navigation Indicators */}
+        {slides.length > 1 && (
+          <div className="absolute right-4 sm:right-8 bottom-16 sm:bottom-24 z-20 flex items-center gap-2">
+            {slides.map((slide, idx) => (
+              <button
+                key={slide.id}
+                type="button"
+                onClick={() => setCurrentIndex(idx)}
+                aria-label={`切换至第 ${idx + 1} 部`}
+                className={`h-2 rounded-full transition-all duration-300 cursor-pointer ${
+                  idx === currentIndex
+                    ? 'w-8 bg-amber-400 shadow-glow-gold'
+                    : 'w-2 bg-white/30 hover:bg-white/60'
+                }`}
+              />
+            ))}
+          </div>
+        )}
       </div>
-
-      {/* 左右空间毛玻璃导航圆钮 */}
-      {banners.length > 1 && (
-        <>
-          <button
-            type="button"
-            onClick={handlePrev}
-            aria-label="上一部"
-            className="absolute left-4 top-1/2 -translate-y-1/2 z-20 w-10 h-10 rounded-full flex items-center justify-center ios-pill text-slate-800 dark:text-white opacity-0 group-hover:opacity-100 transition-all cursor-pointer active:scale-90"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            onClick={handleNext}
-            aria-label="下一部"
-            className="absolute right-4 top-1/2 -translate-y-1/2 z-20 w-10 h-10 rounded-full flex items-center justify-center ios-pill text-slate-800 dark:text-white opacity-0 group-hover:opacity-100 transition-all cursor-pointer active:scale-90"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            onClick={() => setUserPaused((prev) => !prev)}
-            aria-label={userPaused ? '继续自动轮播' : '暂停自动轮播'}
-            aria-pressed={userPaused}
-            className="absolute right-4 bottom-4 z-20 w-9 h-9 rounded-full flex items-center justify-center ios-pill text-slate-800 dark:text-white opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-all cursor-pointer active:scale-90"
-          >
-            {userPaused ? (
-              <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M8 5v14l11-7z" />
-              </svg>
-            ) : (
-              <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M6 5h4v14H6zM14 5h4v14h-4z" />
-              </svg>
-            )}
-          </button>
-        </>
-      )}
-
-      {/* 底部胶囊进度指示器 */}
-      {banners.length > 1 && (
-        <div className="absolute bottom-5 right-16 flex items-center gap-1.5 z-20 px-2.5 py-1.5 rounded-full backdrop-blur-xl bg-black/10 dark:bg-white/[0.06] border border-white/10">
-          {banners.map((_, idx) => (
-            <button
-              key={idx}
-              type="button"
-              onClick={() => setCurrentIndex(idx)}
-              className={cn(
-                'h-1.5 rounded-full transition-all duration-300 cursor-pointer',
-                idx === currentIndex
-                  ? 'w-6 bg-slate-900 dark:bg-white'
-                  : 'w-1.5 bg-slate-900/25 hover:bg-slate-900/50 dark:bg-white/30 dark:hover:bg-white/60'
-              )}
-              title={`切换至第 ${idx + 1} 部影片`}
-            />
-          ))}
-        </div>
-      )}
-    </div>
+    </section>
   );
 }

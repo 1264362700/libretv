@@ -3,47 +3,8 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
-import { cn } from '@/lib/utils';
 import type { TmdbMediaItem } from '@/lib/tmdb';
 import { DoubanCard } from './video-card';
-
-type TmdbChannel = 'trending' | 'movie' | 'tv' | 'anime' | 'variety' | 'documentary';
-
-const TMDB_CHANNELS: { id: TmdbChannel; label: string; icon: string }[] = [
-  { id: 'trending', label: '今日热映', icon: '🔥' },
-  { id: 'movie', label: '电影', icon: '🎬' },
-  { id: 'tv', label: '剧集', icon: '📺' },
-  { id: 'anime', label: '动漫', icon: '✨' },
-  { id: 'variety', label: '综艺', icon: '🎤' },
-  { id: 'documentary', label: '纪录片', icon: '🌍' },
-];
-
-const GENRE_OPTIONS = [
-  '全部',
-  '动作',
-  '科幻',
-  '悬疑',
-  '喜剧',
-  '爱情',
-  '动画',
-  '犯罪',
-  '奇幻',
-  '古装',
-  '战争',
-  '恐怖',
-  '家庭',
-  '历史',
-];
-
-const REGION_OPTIONS = ['全部', '大陆', '美国', '韩国', '日本', '香港', '台湾', '英国', '法国', '泰国'];
-
-const YEAR_OPTIONS = ['全部', '2026', '2025', '2024', '2023', '2022', '2021', '2020', '2019', '更早'];
-
-const SORT_OPTIONS: { id: 'recommend' | 'rank' | 'time'; label: string }[] = [
-  { id: 'recommend', label: '综合热度' },
-  { id: 'rank', label: 'TMDB高分' },
-  { id: 'time', label: '最新上映' },
-];
 
 interface TmdbApiResponse {
   items: TmdbMediaItem[];
@@ -79,225 +40,164 @@ async function fetchTmdbClient(
   return res.json();
 }
 
+const MOVIE_CATEGORIES: {
+  label: string;
+  area?: string;
+  genre?: string;
+  sort?: 'recommend' | 'rank' | 'time';
+}[] = [
+  { label: '最新院线', sort: 'recommend' },
+  { label: '动作', genre: '动作', sort: 'recommend' },
+  { label: '科幻', genre: '科幻', sort: 'recommend' },
+  { label: '悬疑', genre: '悬疑', sort: 'recommend' },
+  { label: '华语精选', area: '大陆', sort: 'recommend' },
+  { label: '高分榜单', sort: 'rank' },
+];
+
+const TV_CATEGORIES: {
+  label: string;
+  area?: string;
+  genre?: string;
+  sort?: 'recommend' | 'rank' | 'time';
+}[] = [
+  { label: '热门连续剧', sort: 'recommend' },
+  { label: '悬疑', genre: '悬疑', sort: 'recommend' },
+  { label: '科幻', genre: '科幻', sort: 'recommend' },
+  { label: '欧美大剧', area: '美国', sort: 'recommend' },
+  { label: '日韩剧集', area: '韩国', sort: 'recommend' },
+  { label: '高分口碑', sort: 'rank' },
+];
+
 /**
- * 首页核心片库区（纯 TMDB 官方引擎 + iOS 27 Spatial Liquid Glass 空间毛玻璃 + 左主网格 & 右 TOP10 热播榜）
+ * NovaTV Cinema Ultra 首页双层影视大厅：
+ * Floor 1: 今日重磅热播 (左侧 4x2 海报网格 + 右侧 热播飙升榜 TOP 10 含 NO.1 宽幅大图)
+ * Floor 2: 热播剧集专区 (连载同步更新 · 蓝光臻彩)
  */
 export function RecommendSection({ onPick }: { onPick: (title: string) => void }) {
-  const [channel, setChannel] = useState<TmdbChannel>('trending');
-  const [genre, setGenre] = useState('全部');
-  const [region, setRegion] = useState('全部');
-  const [year, setYear] = useState('全部');
-  const [sort, setSort] = useState<'recommend' | 'rank' | 'time'>('recommend');
-  const [page, setPage] = useState(1);
-  const [filterExpanded, setFilterExpanded] = useState(false);
+  const [activeMovieTab, setActiveMovieTab] = useState(MOVIE_CATEGORIES[0]);
+  const [activeTvTab, setActiveTvTab] = useState(TV_CATEGORIES[0]);
 
-  const activeFilterCount =
-    (genre !== '全部' ? 1 : 0) + (region !== '全部' ? 1 : 0) + (year !== '全部' ? 1 : 0);
-
-  // 当用户在「今日热映」下主动选择了类型/地区/年份筛选时，自动切换到 movie/tv Discover 引擎以生效筛选
-  const effectiveType =
-    channel === 'trending' && (activeFilterCount > 0 || sort !== 'recommend') ? 'movie' : channel;
-
-  const mainQuery = useQuery({
-    queryKey: ['tmdb-home-grid', effectiveType, genre, region, year, sort, page],
+  // Floor 1 左侧：今日重磅热播电影
+  const movieQuery = useQuery({
+    queryKey: [
+      'novatv-floor-movies',
+      activeMovieTab.label,
+      activeMovieTab.area,
+      activeMovieTab.genre,
+      activeMovieTab.sort,
+    ],
     queryFn: ({ signal }) =>
       fetchTmdbClient(
         {
-          type: effectiveType,
-          area: region,
-          genre,
-          year,
-          sort,
-          page,
+          type: 'movie',
+          area: activeMovieTab.area,
+          genre: activeMovieTab.genre,
+          sort: activeMovieTab.sort,
+          page: 1,
         },
         signal
       ),
     staleTime: 5 * 60_000,
   });
 
-  // 右侧固定 TMDB 全球实时热力 TOP 10
-  const trendingTop10Query = useQuery({
-    queryKey: ['tmdb-trending-top10'],
+  // Floor 1 右侧：热播飙升榜 TOP 10 (TMDB Trending)
+  const top10Query = useQuery({
+    queryKey: ['novatv-top10-ranking'],
     queryFn: ({ signal }) => fetchTmdbClient({ type: 'trending', page: 1 }, signal),
     staleTime: 10 * 60_000,
   });
 
-  const items = mainQuery.data?.items ?? [];
-  const totalPages = Math.min(500, Math.max(1, mainQuery.data?.totalPages ?? 1));
-  const top10Items = (trendingTop10Query.data?.items ?? []).slice(0, 10);
+  // Floor 2：热播剧集专区
+  const tvQuery = useQuery({
+    queryKey: [
+      'novatv-floor-tv',
+      activeTvTab.label,
+      activeTvTab.area,
+      activeTvTab.genre,
+      activeTvTab.sort,
+    ],
+    queryFn: ({ signal }) =>
+      fetchTmdbClient(
+        {
+          type: 'tv',
+          area: activeTvTab.area,
+          genre: activeTvTab.genre,
+          sort: activeTvTab.sort,
+          page: 1,
+        },
+        signal
+      ),
+    staleTime: 5 * 60_000,
+  });
 
-  const handleResetFilters = () => {
-    setGenre('全部');
-    setRegion('全部');
-    setYear('全部');
-    setSort('recommend');
-    setPage(1);
-  };
+  const movieItems = (movieQuery.data?.items ?? []).slice(0, 8);
+  const rankingItems = (top10Query.data?.items ?? []).slice(0, 10);
+  const tvItems = (tvQuery.data?.items ?? []).slice(0, 8);
 
   return (
-    <section aria-label="TMDB 全球影视探索大厅" className="space-y-5">
-      {/* 顶栏：iOS 27 悬浮胶囊频道切换 + 排序与可折叠筛选抽屉开关 */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-        {/* 左侧：频道分段毛玻璃胶囊 */}
-        <div className="flex items-center gap-1 p-1.5 rounded-full ios-glass overflow-x-auto no-scrollbar self-start max-w-full">
-          {TMDB_CHANNELS.map((tab) => {
-            const isActive = channel === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => {
-                  setChannel(tab.id);
-                  setPage(1);
-                }}
-                className={cn(
-                  'px-3.5 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all duration-200 flex items-center gap-1.5 shrink-0 cursor-pointer touch-manipulation',
-                  isActive
-                    ? 'ios-pill-active font-semibold'
-                    : 'text-muted hover:text-content hover:bg-black/[0.04] dark:hover:bg-white/[0.06]'
-                )}
-              >
-                <span>{tab.icon}</span>
-                <span>{tab.label}</span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* 右侧：排序分段胶囊 + 四维筛选开关 + 片库大厅 */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-0.5 p-1 rounded-full ios-pill">
-            {SORT_OPTIONS.map((s) => {
-              const isSelected = sort === s.id;
-              return (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => {
-                    setSort(s.id);
-                    setPage(1);
-                  }}
-                  className={cn(
-                    'px-3 py-1 rounded-full text-xs font-medium transition-all cursor-pointer whitespace-nowrap',
-                    isSelected
-                      ? 'ios-pill-active font-semibold'
-                      : 'text-muted hover:text-content'
-                  )}
-                >
-                  {s.label}
-                </button>
-              );
-            })}
+    <div className="space-y-4">
+      {/* Floor 1: 今日重磅热播 (左侧 8 部海报网格 + 右侧 TOP 10 热播飙升榜) */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {/* Section Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-2 border-b border-white/5">
+          <div className="flex items-center gap-3">
+            <div className="w-1.5 h-6 rounded-full bg-amber-400 shadow-glow-gold" />
+            <div>
+              <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight flex items-center gap-2">
+                今日重磅热播
+              </h2>
+              <p className="text-xs text-slate-400 mt-0.5">全网聚合高分资源 · 每日精选更新</p>
+            </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setFilterExpanded((prev) => !prev)}
-            className={cn(
-              'flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer',
-              filterExpanded || activeFilterCount > 0
-                ? 'ios-pill-active font-semibold'
-                : 'ios-pill text-muted hover:text-content'
-            )}
-          >
-            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="4" y1="6" x2="20" y2="6" />
-              <line x1="7" y1="12" x2="17" y2="12" />
-              <line x1="10" y1="18" x2="14" y2="18" />
-            </svg>
-            <span>四维筛选</span>
-            {activeFilterCount > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full bg-sky-500 text-white text-[10px] font-bold">
-                {activeFilterCount}
-              </span>
-            )}
-          </button>
-
-          <Link
-            href={`/catalog?type=${channel === 'trending' ? 'movie' : channel}`}
-            className="flex items-center gap-1 px-3.5 py-1.5 rounded-full ios-pill text-xs text-muted hover:text-content font-medium transition-all shrink-0"
-          >
-            <span>全库探索</span>
-            <span>›</span>
-          </Link>
-        </div>
-      </div>
-
-      {/* 可折叠 iOS 27 空间毛玻璃四维筛选舱（默认收起保持首屏极简通透，点击「四维筛选」平滑展开） */}
-      {(filterExpanded || activeFilterCount > 0) && (
-        <div className="ios-glass rounded-3xl p-4 sm:p-5 space-y-3 animate-fade-in">
-          <SpatialFilterRow
-            label="类型"
-            options={GENRE_OPTIONS}
-            active={genre}
-            onSelect={(val) => {
-              setGenre(val);
-              setPage(1);
-            }}
-          />
-          <SpatialFilterRow
-            label="地区"
-            options={REGION_OPTIONS}
-            active={region}
-            onSelect={(val) => {
-              setRegion(val);
-              setPage(1);
-            }}
-          />
-          <div className="flex items-center justify-between gap-2 pt-1 border-t border-black/[0.05] dark:border-white/[0.06]">
-            <div className="flex-1 min-w-0">
-              <SpatialFilterRow
-                label="年份"
-                options={YEAR_OPTIONS}
-                active={year}
-                onSelect={(val) => {
-                  setYear(val);
-                  setPage(1);
-                }}
-              />
+          {/* Filter Pills & View More */}
+          <div className="flex items-center justify-between sm:justify-end gap-3">
+            <div className="flex items-center gap-1 overflow-x-auto py-1 no-scrollbar">
+              {MOVIE_CATEGORIES.map((cat) => {
+                const isActive = activeMovieTab.label === cat.label;
+                return (
+                  <button
+                    key={cat.label}
+                    type="button"
+                    onClick={() => setActiveMovieTab(cat)}
+                    className={`px-3 py-1 rounded-lg text-xs font-medium transition-all duration-200 whitespace-nowrap cursor-pointer ${
+                      isActive
+                        ? 'bg-amber-400 text-slate-950 font-bold shadow-glow-gold'
+                        : 'text-slate-400 hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    {cat.label}
+                  </button>
+                );
+              })}
             </div>
-            {activeFilterCount > 0 && (
-              <button
-                type="button"
-                onClick={handleResetFilters}
-                className="px-3 py-1 rounded-full text-xs text-muted hover:text-content ios-pill shrink-0 cursor-pointer"
-              >
-                重置 ✕
-              </button>
-            )}
+
+            <Link
+              href="/catalog?type=movie"
+              className="flex items-center gap-1 text-xs text-slate-400 hover:text-amber-400 font-medium transition-colors shrink-0 group"
+            >
+              <span>更多</span>
+              <span className="group-hover:translate-x-0.5 transition-transform">›</span>
+            </Link>
           </div>
         </div>
-      )}
 
-      {/* 主舞台：左侧 9 列海报网格 + 右侧 3 列 TMDB 全球实时热力 TOP 10 */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* 左侧 9 列：TMDB 海报网格 + 分页 */}
-        <div className="lg:col-span-9 space-y-6">
-          {mainQuery.isLoading ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3.5 sm:gap-4">
-              {Array.from({ length: 15 }).map((_, idx) => (
-                <div
-                  key={idx}
-                  className="aspect-[2/3] rounded-2xl bg-chip/50 animate-pulse border border-black/[0.04] dark:border-white/[0.05]"
-                />
-              ))}
-            </div>
-          ) : items.length === 0 ? (
-            <div className="ios-glass rounded-3xl py-20 px-4 text-center space-y-3">
-              <p className="text-3xl">🎬</p>
-              <p className="text-sm font-semibold text-content">当前筛选条件下暂无匹配影片</p>
-              <button
-                type="button"
-                onClick={handleResetFilters}
-                className="px-4 py-1.5 rounded-full ios-pill-active text-xs font-semibold cursor-pointer"
-              >
-                重置筛选条件
-              </button>
-            </div>
-          ) : (
-            <>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3.5 sm:gap-4">
-                {items.slice(0, 20).map((item) => (
+        {/* Main Double-Column Layout: Left Grid + Right TOP 10 Ranking */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          {/* Left Column: Media Poster Grid (Span 8 or 9 cols on large screen) */}
+          <div className="lg:col-span-8 xl:col-span-9">
+            {movieQuery.isLoading ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 sm:gap-5">
+                {Array.from({ length: 8 }).map((_, idx) => (
+                  <div
+                    key={idx}
+                    className="aspect-[2/3] rounded-xl bg-slate-800/60 animate-pulse border border-white/5"
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 sm:gap-5">
+                {movieItems.map((item) => (
                   <DoubanCard
                     key={item.id}
                     item={item}
@@ -305,152 +205,255 @@ export function RecommendSection({ onPick }: { onPick: (title: string) => void }
                   />
                 ))}
               </div>
-
-              {/* 底部 iOS 27 悬浮胶囊分页器 */}
-              {totalPages > 1 && (
-                <div className="flex items-center justify-center gap-2 pt-2">
-                  <button
-                    type="button"
-                    disabled={page <= 1 || mainQuery.isFetching}
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    className="px-4 py-1.5 rounded-full ios-pill text-xs font-medium text-content disabled:opacity-35 cursor-pointer"
-                  >
-                    ‹ 上一页
-                  </button>
-                  <span className="px-4 py-1.5 rounded-full ios-glass text-xs font-mono text-muted">
-                    {page} / {totalPages}
-                  </span>
-                  <button
-                    type="button"
-                    disabled={page >= totalPages || mainQuery.isFetching}
-                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                    className="px-4 py-1.5 rounded-full ios-pill text-xs font-medium text-content disabled:opacity-35 cursor-pointer"
-                  >
-                    下一页 ›
-                  </button>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-
-        {/* 右侧 3 列：TMDB 全球热力榜 TOP 10 空间玻璃舱 */}
-        <aside className="lg:col-span-3 ios-glass rounded-3xl p-4 sm:p-5 space-y-4 lg:sticky lg:top-20">
-          <div className="flex items-center justify-between pb-3 border-b border-black/[0.06] dark:border-white/[0.08]">
-            <div className="flex items-center gap-2">
-              <span className="text-base">🔥</span>
-              <h3 className="text-sm font-bold tracking-tight text-content">TMDB 全球热播榜</h3>
-            </div>
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold ios-pill text-muted">
-              TOP 10
-            </span>
+            )}
           </div>
 
-          {trendingTop10Query.isLoading ? (
-            <div className="space-y-2.5">
-              {Array.from({ length: 8 }).map((_, i) => (
-                <div key={i} className="h-14 rounded-2xl bg-chip/40 animate-pulse" />
-              ))}
+          {/* Right Column: NovaTV TOP 10 Ranking Board */}
+          <div className="lg:col-span-4 xl:col-span-3 w-full">
+            <NovaTop10Ranking
+              items={rankingItems}
+              isLoading={top10Query.isLoading}
+              onPick={onPick}
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* Floor 2: 热播剧集专区 */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-2 border-b border-white/5">
+          <div className="flex items-center gap-3">
+            <div className="w-1.5 h-6 rounded-full bg-amber-400 shadow-glow-gold" />
+            <div>
+              <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight flex items-center gap-2">
+                热播剧集专区
+              </h2>
+              <p className="text-xs text-slate-400 mt-0.5">连载同步更新 · 蓝光臻彩</p>
             </div>
-          ) : (
-            <div className="space-y-2">
-              {top10Items.map((item, idx) => {
-                const rank = idx + 1;
-                const isTop3 = rank <= 3;
+          </div>
+
+          <div className="flex items-center justify-between sm:justify-end gap-3">
+            <div className="flex items-center gap-1 overflow-x-auto py-1 no-scrollbar">
+              {TV_CATEGORIES.map((cat) => {
+                const isActive = activeTvTab.label === cat.label;
                 return (
                   <button
-                    key={item.id}
+                    key={cat.label}
                     type="button"
-                    onClick={() => onPick(item.title)}
-                    className="w-full group flex items-center gap-3 p-2 rounded-2xl hover:bg-black/[0.04] dark:hover:bg-white/[0.06] transition-all text-left cursor-pointer"
+                    onClick={() => setActiveTvTab(cat)}
+                    className={`px-3 py-1 rounded-lg text-xs font-medium transition-all duration-200 whitespace-nowrap cursor-pointer ${
+                      isActive
+                        ? 'bg-amber-400 text-slate-950 font-bold shadow-glow-gold'
+                        : 'text-slate-400 hover:text-white hover:bg-white/5'
+                    }`}
                   >
-                    {/* 排名徽章 */}
-                    <span
-                      className={cn(
-                        'w-6 h-6 rounded-full flex items-center justify-center text-xs font-mono font-bold shrink-0',
-                        rank === 1
-                          ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-950 shadow-sm'
-                          : isTop3
-                            ? 'bg-sky-500/15 text-sky-600 dark:text-sky-300 border border-sky-400/30'
-                            : 'text-faint bg-black/[0.03] dark:bg-white/[0.04]'
-                      )}
-                    >
-                      {rank}
-                    </span>
+                    {cat.label}
+                  </button>
+                );
+              })}
+            </div>
 
-                    {/* 迷你海报 */}
+            <Link
+              href="/catalog?type=tv"
+              className="flex items-center gap-1 text-xs text-slate-400 hover:text-amber-400 font-medium transition-colors shrink-0 group"
+            >
+              <span>更多</span>
+              <span className="group-hover:translate-x-0.5 transition-transform">›</span>
+            </Link>
+          </div>
+        </div>
+
+        {tvQuery.isLoading ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 sm:gap-5">
+            {Array.from({ length: 8 }).map((_, idx) => (
+              <div
+                key={idx}
+                className="aspect-[2/3] rounded-xl bg-slate-800/60 animate-pulse border border-white/5"
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 sm:gap-5">
+            {tvItems.map((item) => (
+              <DoubanCard
+                key={item.id}
+                item={item}
+                onClick={() => onPick(item.title)}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+/**
+ * NovaTV 热播飙升榜 TOP 10 (含 NO.1 16:9 宽画幅皇冠卡片 + NO.2~10 紧凑榜单)
+ */
+function NovaTop10Ranking({
+  items,
+  isLoading,
+  onPick,
+}: {
+  items: TmdbMediaItem[];
+  isLoading: boolean;
+  onPick: (title: string) => void;
+}) {
+  const top1 = items[0];
+  const rest = items.slice(1, 10);
+
+  return (
+    <div className="w-full glass-panel rounded-2xl p-5 border border-white/10 shadow-cinema flex flex-col">
+      {/* Header */}
+      <div className="flex items-center justify-between pb-4 border-b border-white/5 mb-4">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-amber-500 to-red-500 flex items-center justify-center text-white shadow-glow-gold">
+            <span className="text-sm">🔥</span>
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-white tracking-tight flex items-center gap-1.5">
+              热播飙升榜 <span className="text-amber-400 font-extrabold text-xs">TOP 10</span>
+            </h3>
+            <p className="text-[11px] text-slate-400">实时热度 · 全网风向标</p>
+          </div>
+        </div>
+        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-white/5 text-amber-300/80 border border-white/5">
+          24H 动态
+        </span>
+      </div>
+
+      {isLoading || !top1 ? (
+        <div className="space-y-3">
+          <div className="aspect-[16/9] rounded-xl bg-slate-800/60 animate-pulse" />
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="h-12 rounded-lg bg-slate-800/40 animate-pulse" />
+          ))}
+        </div>
+      ) : (
+        <>
+          {/* NO. 1 Featured Wide Card */}
+          <button
+            type="button"
+            onClick={() => onPick(top1.title)}
+            className="group relative block w-full text-left rounded-xl overflow-hidden mb-4 border border-amber-500/30 hover:border-amber-400/80 transition-all duration-300 shadow-lg cursor-pointer"
+          >
+            <div className="relative aspect-[16/9] w-full overflow-hidden bg-slate-900">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={top1.backdrop || top1.cover}
+                alt={top1.title}
+                referrerPolicy="no-referrer"
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+              />
+              {/* Gradients */}
+              <div className="absolute inset-0 bg-gradient-to-t from-[#0B0F19] via-[#0B0F19]/60 to-transparent" />
+              <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors" />
+
+              {/* Rank 1 Crown Badge */}
+              <div className="absolute top-2 left-2 z-10 px-2 py-0.5 rounded-md bg-gradient-to-r from-amber-500 to-yellow-400 text-black text-xs font-black shadow-glow-gold flex items-center gap-1">
+                <span>👑 TOP 1</span>
+              </div>
+
+              {/* Hover Play Button */}
+              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                <div className="w-12 h-12 rounded-full bg-amber-500 text-black flex items-center justify-center shadow-glow-gold transform group-hover:scale-110 transition-transform">
+                  <svg className="w-5 h-5 ml-0.5 fill-current" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                </div>
+              </div>
+
+              {/* Info Overlay */}
+              <div className="absolute bottom-2.5 left-3 right-3 z-10">
+                <div className="flex items-center justify-between gap-2">
+                  <h4 className="text-white font-bold text-sm truncate group-hover:text-amber-400 transition-colors">
+                    {top1.title}
+                  </h4>
+                  {top1.rating && (
+                    <span className="flex items-center gap-0.5 text-xs font-bold text-amber-400 shrink-0">
+                      <span>★</span>
+                      <span>{top1.rating}</span>
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center justify-between text-[11px] text-slate-300 mt-0.5">
+                  <span className="truncate max-w-[150px]">{top1.episodes_info || top1.year || '院线热映'}</span>
+                  <span className="text-amber-400 font-mono font-medium">100万+ 热度</span>
+                </div>
+              </div>
+            </div>
+          </button>
+
+          {/* NO. 2 ~ NO. 10 Compact List */}
+          <div className="space-y-1.5 flex-1 overflow-y-auto pr-1">
+            {rest.map((item, idx) => {
+              const rank = idx + 2;
+              let rankBadgeClass = 'text-slate-400 bg-white/5';
+              if (rank === 2) {
+                rankBadgeClass = 'text-slate-100 bg-slate-400/20 font-bold';
+              } else if (rank === 3) {
+                rankBadgeClass = 'text-amber-300 bg-amber-600/20 font-bold';
+              }
+
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => onPick(item.title)}
+                  className="w-full group flex items-center gap-3 p-1.5 rounded-lg hover:bg-white/5 transition-all duration-200 border border-transparent hover:border-white/5 text-left cursor-pointer"
+                >
+                  {/* Rank Index */}
+                  <span
+                    className={`w-6 h-6 rounded flex items-center justify-center text-xs font-mono shrink-0 ${rankBadgeClass}`}
+                  >
+                    {rank < 10 ? `0${rank}` : rank}
+                  </span>
+
+                  {/* Poster Thumbnail */}
+                  <div className="w-9 h-12 rounded overflow-hidden shrink-0 bg-slate-800 relative">
                     {item.cover && (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={item.cover}
                         alt={item.title}
                         referrerPolicy="no-referrer"
-                        className="w-10 h-14 rounded-xl object-cover shrink-0 bg-chip border border-black/[0.06] dark:border-white/[0.08]"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                       />
                     )}
+                  </div>
 
-                    {/* 标题与元数据 */}
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-semibold text-content truncate group-hover:text-accent transition-colors">
-                        {item.title}
-                      </p>
-                      <div className="flex items-center gap-2 mt-1 text-[11px] text-muted">
-                        {item.rating && (
-                          <span className="text-amber-500 dark:text-amber-300 font-semibold">
-                            ★ {item.rating}
-                          </span>
-                        )}
-                        {item.year && <span>{item.year}</span>}
-                        {item.episodes_info && (
-                          <span className="truncate text-faint">{item.episodes_info}</span>
-                        )}
-                      </div>
+                  {/* Title & Category */}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium text-slate-200 truncate group-hover:text-amber-400 transition-colors">
+                      {item.title}
+                    </p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-[10px] text-slate-400 truncate">
+                        {item.year || '热门'}
+                      </span>
+                      {item.episodes_info && (
+                        <span className="text-[10px] text-emerald-400 truncate">{item.episodes_info}</span>
+                      )}
                     </div>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </aside>
-      </div>
-    </section>
-  );
-}
+                  </div>
 
-function SpatialFilterRow({
-  label,
-  options,
-  active,
-  onSelect,
-}: {
-  label: string;
-  options: string[];
-  active: string;
-  onSelect: (val: string) => void;
-}) {
-  return (
-    <div className="flex items-center gap-2.5 text-xs">
-      <span className="shrink-0 text-faint font-medium w-9 text-right">{label}</span>
-      <div className="flex items-center gap-1.5 flex-1 overflow-x-auto no-scrollbar py-0.5">
-        {options.map((opt) => {
-          const isSelected = opt === active;
-          return (
-            <button
-              key={opt}
-              type="button"
-              onClick={() => onSelect(opt)}
-              className={cn(
-                'px-3 py-1 rounded-full text-xs transition-all duration-150 shrink-0 cursor-pointer touch-manipulation',
-                isSelected
-                  ? 'ios-pill-active font-semibold'
-                  : 'text-muted hover:text-content hover:bg-black/[0.04] dark:hover:bg-white/[0.06]'
-              )}
-            >
-              {opt}
-            </button>
-          );
-        })}
-      </div>
+                  {/* Rating */}
+                  <div className="text-right shrink-0">
+                    {item.rating ? (
+                      <span className="text-xs font-bold text-amber-400/90 font-mono">
+                        {item.rating}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-slate-400 font-mono">热播</span>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
     </div>
   );
 }

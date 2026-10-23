@@ -6,13 +6,13 @@ import { useAuth } from '@/components/auth';
 export function SiteFooter() {
   const { version } = useAuth();
   return (
-    <footer className="border-t border-line py-4">
-      <p className="text-center text-xs text-faint">
-        <span className="font-medium text-muted">
-          cl Cinema{version ? ` v${version}` : ''}
+    <footer className="border-t border-white/5 bg-[#0B0F19] py-6">
+      <p className="text-center text-xs text-slate-500">
+        <span className="font-semibold text-amber-400/90">
+          NovaTV Cinema Ultra{version ? ` v${version}` : ''}
         </span>
         {' · '}
-        影院级超清影视探索平台
+        TMDB 4K 官方影视库与多源极速点播平台
       </p>
     </footer>
   );

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { SearchResultItem } from '@/lib/types';
 import { useAppStore } from '@/lib/store';
 import { db, favoriteIdOf, toggleFavorite } from '@/lib/db';
+import { resolveEpisodeBadge } from '@/lib/media-library-service';
 import { SmartImage } from './smart-image';
 
 // —— 跨源同名聚合 ——
@@ -270,6 +271,7 @@ export function VideoCard({ item, onClick }: { item: SearchResultItem; onClick: 
  */
 export function DoubanCard({
   item,
+  cmsRemarksMap,
   onClick,
 }: {
   item: {
@@ -282,7 +284,12 @@ export function DoubanCard({
     card_subtitle?: string;
     overview?: string;
     actors?: string[];
+    isTv?: boolean;
+    category?: string;
+    typeName?: string;
+    remarks?: string;
   };
+  cmsRemarksMap?: Map<string, string>;
   onClick: () => void;
 }) {
   const imageProxyMode = useAppStore((s) => s.imageProxyMode);
@@ -319,10 +326,8 @@ export function DoubanCard({
   }, [item.rating]);
 
   const statusBadge = useMemo(() => {
-    const text = (item.episodes_info || '').trim();
-    if (!text || text === '0' || text === 'null') return '正片';
-    return text.length > 8 ? `${text.slice(0, 8)}…` : text;
-  }, [item.episodes_info]);
+    return resolveEpisodeBadge(item, cmsRemarksMap);
+  }, [item, cmsRemarksMap]);
 
   const castOrSubtitle = useMemo(() => {
     if (item.actors && item.actors.length > 0) {
@@ -347,7 +352,7 @@ export function DoubanCard({
     try {
       const added = await toggleFavorite({
         title: item.title,
-        sourceKey: 'tmdb',
+        sourceKey: 'media',
         vodId: item.id || item.title,
         pic: item.cover,
         year: item.year,

@@ -4,9 +4,8 @@ import { fetchTmdbCatalog } from '@/lib/tmdb';
 export const runtime = 'nodejs';
 
 /**
- * TMDB 官方全球影视资料库统一路由：
- * 支持热门趋势榜 (type=trending)、全频道探索 (movie/tv/anime/variety/documentary)
- * 以及类型 (genre)、地区 (area)、年份 (year)、排序 (sort) 四维联合筛选与关键词检索 (q)
+ * 全球多维影视资料流与检索接口 (/api/media/feed)
+ * 支持全频道探索、智能分类榜单、多维属性联合筛选与全局联想搜索
  */
 export async function GET(req: Request) {
   const url = new URL(req.url);
@@ -52,7 +51,7 @@ export async function GET(req: Request) {
         total: 0,
         totalPages: 1,
         page: 1,
-        warning: err instanceof Error ? err.message : '资料库请求失败',
+        warning: err instanceof Error ? err.message : '影视资料库请求失败',
       },
       { status: 200 }
     );

@@ -322,7 +322,7 @@ export function useCatalogData(filters: ReturnType<typeof useCatalogFilters>) {
         return { items: [], total: 0, pagecount: 1, subCategories: [] };
       }
 
-      // 默认统一走 TMDB 官方资料库接口 (/api/tmdb)
+      // 默认统一走官方全维资料库流式接口 (/api/media/feed)
       const q = new URLSearchParams({
         type: currentChannel,
         page: String(currentPage),
@@ -333,7 +333,7 @@ export function useCatalogData(filters: ReturnType<typeof useCatalogFilters>) {
       if (currentYear && currentYear !== '全部') q.set('year', currentYear);
       if (catalogKeyword) q.set('q', catalogKeyword);
 
-      const res = await fetch(`/api/tmdb?${q.toString()}`, { signal });
+      const res = await fetch(`/api/media/feed?${q.toString()}`, { signal });
       if (!res.ok) {
         return { items: [], total: 0, pagecount: 1, subCategories: [] };
       }

@@ -24,15 +24,15 @@ describe('channels: 频道定义单一来源', () => {
     }
   });
 
-  it('导航项数量为频道数 + 固定项（顶栏 +2、抽屉 +3、快捷 +1）', () => {
-    expect(HEADER_NAV.length).toBe(CHANNELS.length + 2);
-    expect(DRAWER_NAV.length).toBe(CHANNELS.length + 3);
-    expect(QUICK_CHANNELS.length).toBe(CHANNELS.length + 1);
+  it('导航项数量为频道数 + 固定项（顶栏 +1、抽屉 +2、快捷 +0）', () => {
+    expect(HEADER_NAV.length).toBe(CHANNELS.length + 1);
+    expect(DRAWER_NAV.length).toBe(CHANNELS.length + 2);
+    expect(QUICK_CHANNELS.length).toBe(CHANNELS.length);
   });
 
-  it('顶栏导航以首页开头、直播结尾', () => {
+  it('顶栏导航以首页开头，不包含已下线的直播入口', () => {
     expect(HEADER_NAV[0].href).toBe('/');
-    expect(HEADER_NAV[HEADER_NAV.length - 1].href).toBe('/live');
+    expect(HEADER_NAV.some((n) => n.href === '/live')).toBe(false);
   });
 
   it('channelHref / getChannel / isChannelType 行为一致', () => {

@@ -6,6 +6,7 @@ import { resolveEpisodeBadge } from '@/lib/media-library-service';
 
 export interface HeroBillboardBannerProps {
   items: MediaItem[];
+  isLoading?: boolean;
   cmsRemarksMap?: Map<string, string>;
   onPlay: (item: MediaItem) => void;
   onDetail?: (item: MediaItem) => void;
@@ -40,6 +41,7 @@ function BannerImage({ backdrop, cover, title }: { backdrop?: string; cover?: st
  */
 export function HeroBillboardBanner({
   items,
+  isLoading,
   cmsRemarksMap,
   onPlay,
   onDetail,
@@ -57,13 +59,16 @@ export function HeroBillboardBanner({
     return () => clearInterval(timer);
   }, [isPaused, slides.length]);
 
-  if (slides.length === 0) return null;
+  if (isLoading || slides.length === 0) {
+    return <HeroBillboardSkeleton />;
+  }
+
   const current = slides[currentIndex] || slides[0];
   const episodeBadge = resolveEpisodeBadge(current, cmsRemarksMap);
 
   return (
     <section
-      className="relative w-full h-[520px] sm:h-[620px] lg:h-[720px] overflow-hidden select-none bg-[#0B0F19]"
+      className="relative w-full h-[520px] sm:h-[620px] lg:h-[720px] overflow-hidden select-none bg-page transition-colors"
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
     >
@@ -187,6 +192,58 @@ export function HeroBillboardBanner({
             ))}
           </div>
         )}
+      </div>
+    </section>
+  );
+}
+
+/**
+ * NovaTV 巨幕大轮播骨架屏占位
+ * 避免数据未加载完成时首页视口高度坍塌或剧烈抖动
+ */
+export function HeroBillboardSkeleton() {
+  return (
+    <section className="relative w-full h-[520px] sm:h-[620px] lg:h-[720px] overflow-hidden select-none bg-chip/35 border-b border-line animate-pulse">
+      {/* 渐变遮罩 */}
+      <div className="absolute inset-0 bg-gradient-to-t from-page via-page/60 to-transparent" />
+      <div className="absolute inset-0 bg-gradient-to-r from-page via-page/75 to-transparent w-full md:w-3/4" />
+      <div className="absolute inset-x-0 top-0 h-36 bg-gradient-to-b from-page/85 to-transparent" />
+
+      {/* 前台骨架文字与按钮 */}
+      <div className="relative z-10 max-w-7xl mx-auto h-full px-4 sm:px-6 lg:px-8 flex flex-col justify-end pb-16 sm:pb-24">
+        <div className="max-w-2xl space-y-4">
+          {/* 标签栏骨架 */}
+          <div className="flex items-center gap-2.5">
+            <div className="w-24 h-6 rounded-full bg-chip border border-line" />
+            <div className="w-20 h-6 rounded-full bg-chip border border-line" />
+            <div className="w-12 h-6 rounded-md bg-chip" />
+          </div>
+
+          {/* 标题骨架 */}
+          <div className="w-3/4 max-w-lg h-10 sm:h-14 rounded-2xl bg-chip/90" />
+
+          {/* 副标题骨架 */}
+          <div className="w-1/2 max-w-xs h-4 rounded-lg bg-chip/80" />
+
+          {/* 剧情简介骨架 */}
+          <div className="space-y-2 max-w-xl">
+            <div className="w-full h-4 rounded-lg bg-chip/70" />
+            <div className="w-4/5 h-4 rounded-lg bg-chip/60" />
+          </div>
+
+          {/* 按钮骨架 */}
+          <div className="flex items-center gap-3.5 pt-2">
+            <div className="w-32 sm:w-36 h-11 sm:h-12 rounded-xl bg-amber-400/25 border border-amber-400/35" />
+            <div className="w-28 sm:w-32 h-11 sm:h-12 rounded-xl bg-chip border border-line" />
+          </div>
+        </div>
+
+        {/* 轮播点指示器骨架 */}
+        <div className="absolute right-4 sm:right-8 bottom-16 sm:bottom-24 hidden sm:flex items-center gap-2">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="w-2.5 h-2.5 rounded-full bg-chip border border-line" />
+          ))}
+        </div>
       </div>
     </section>
   );

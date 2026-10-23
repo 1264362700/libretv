@@ -53,7 +53,24 @@ describe('media-library-service: resolveEpisodeBadge 集数角标优先级', () 
     expect(badge).toBe('更新至110集');
   });
 
-  it('优先级 4：电影提取年份作为兜底标签', () => {
+  it('优先级 4：剧集无精确集数时按年份推导连载中或完结', () => {
+    const cmsMap = new Map<string, string>();
+    const ongoingTv = {
+      title: '狂飙2',
+      isTv: true,
+      year: '2025',
+    };
+    expect(resolveEpisodeBadge(ongoingTv, cmsMap)).toBe('连载更新中');
+
+    const completedTv = {
+      title: '琅琊榜',
+      isTv: true,
+      year: '2015',
+    };
+    expect(resolveEpisodeBadge(completedTv, cmsMap)).toBe('全集完结');
+  });
+
+  it('优先级 5：电影提取年份作为兜底标签', () => {
     const cmsMap = new Map<string, string>();
     const mediaItem = {
       title: '沙丘2',
@@ -76,11 +93,11 @@ describe('media-library-service: resolveEpisodeBadge 集数角标优先级', () 
 });
 
 describe('media-library-service: fetchDoubanCollectionItems', () => {
-  it('全面请求 /api/tmdb 官方接口并映射为直连 MediaItem 结构', async () => {
+  it('全面请求 /api/media/feed 官方接口并映射为直连 MediaItem 结构', async () => {
     let capturedUrl = '';
     const mockItems = [
       {
-        id: 'tmdb_movie_693134',
+        id: 'media_movie_693134',
         title: '沙丘2',
         cover: 'https://image.tmdb.org/t/p/w500/dune2.jpg',
         rating: '8.4',
@@ -100,7 +117,7 @@ describe('media-library-service: fetchDoubanCollectionItems', () => {
 
     const res = await fetchDoubanCollectionItems('movie_top250', 0, 14);
 
-    expect(capturedUrl).toContain('/api/tmdb');
+    expect(capturedUrl).toContain('/api/media/feed');
     expect(capturedUrl).toContain('type=movie');
     expect(capturedUrl).toContain('sort=rank');
     expect(res.items).toHaveLength(1);

@@ -26,7 +26,7 @@ interface SpotlightSuggestItem {
 async function fetchTmdbSuggest(keyword: string, signal?: AbortSignal): Promise<SpotlightSuggestItem[]> {
   const q = keyword.trim();
   if (!q) return [];
-  const res = await fetch(`/api/tmdb?q=${encodeURIComponent(q)}&page=1`, { signal });
+  const res = await fetch(`/api/media/feed?q=${encodeURIComponent(q)}&page=1`, { signal });
   if (!res.ok) return [];
   const data = await res.json();
   const items: TmdbMediaItem[] = Array.isArray(data.items) ? data.items : [];

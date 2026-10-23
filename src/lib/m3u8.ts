@@ -10,12 +10,10 @@ import { encodeUrlToken } from './url-obfuscator';
 
 /** 点播代理地址（采用混淆查询串形式，规避明文暴露与 EdgeOne 网关 URL 归一化破坏） */
 export const PROXY_BASE = '/api/proxy?q=';
-/** 直播流代理地址（查询串形式） */
-export const LIVE_STREAM_BASE = '/api/live/stream?url=';
 
-/** URI 已是本站代理地址（新旧两种形式：/api/proxy/…、/api/proxy?url=…、/api/proxy?q=…、/api/live/stream/…、/api/live/stream?url=…）时不再二次改写 */
+/** URI 已是本站代理地址（/api/proxy/…、/api/proxy?url=…、/api/proxy?q=…）时不再二次改写 */
 export function isProxiedUri(uri: string): boolean {
-  return uri.startsWith('/api/proxy') || uri.startsWith('/api/live/stream');
+  return uri.startsWith('/api/proxy');
 }
 
 /**

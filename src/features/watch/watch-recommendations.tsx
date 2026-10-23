@@ -30,7 +30,7 @@ export function WatchRecommendations({
   }, [videoTitle]);
 
   const recommendQuery = useQuery({
-    queryKey: ['watch-tmdb-recommendations', recommendCategory, recPage, videoTitle],
+    queryKey: ['watch-feed-recommendations', recommendCategory, recPage, videoTitle],
     queryFn: async ({ signal }) => {
       try {
         const sp = new URLSearchParams({
@@ -38,7 +38,7 @@ export function WatchRecommendations({
           page: String(recPage + 1),
           sort: 'recommend',
         });
-        const res = await fetch(`/api/tmdb?${sp.toString()}`, { signal });
+        const res = await fetch(`/api/media/feed?${sp.toString()}`, { signal });
         if (res.ok) {
           const data = await res.json();
           const items: TmdbMediaItem[] = Array.isArray(data.items) ? data.items : [];

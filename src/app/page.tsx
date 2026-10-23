@@ -21,6 +21,7 @@ import { EmptyState } from '@/components/states';
 import { SiteFooter } from '@/components/site-footer';
 import {
   fetchDoubanCollectionItems,
+  syncRecentUpdates,
   type MediaItem,
 } from '@/lib/media-library-service';
 
@@ -74,6 +75,18 @@ function HomeContent() {
   const heroBillboardItems = useMemo(() => {
     return (trendingHeroQuery.data?.items ?? []).slice(0, 6);
   }, [trendingHeroQuery.data]);
+
+  // 主力播放采集源实时集数与状态静默对齐服务 (RemarksSyncer)
+  const masterSource = selectedSources[0];
+  const remarksQuery = useQuery({
+    queryKey: ['home-cms-remarks', masterSource?.key],
+    queryFn: ({ signal }) =>
+      masterSource
+        ? syncRecentUpdates(masterSource, signal)
+        : Promise.resolve({ remarksMap: new Map<string, string>(), recentList: [] }),
+    staleTime: 10 * 60_000,
+    enabled: Boolean(masterSource && !urlQuery),
+  });
 
   // 播放前强制校验登录并直通多源测速播放页
   const handlePlayMedia = (item: MediaItem) => {
@@ -215,6 +228,8 @@ function HomeContent() {
           {/* 1. Hero 巨幕大轮播 */}
           <HeroBillboardBanner
             items={heroBillboardItems}
+            isLoading={trendingHeroQuery.isLoading}
+            cmsRemarksMap={remarksQuery.data?.remarksMap}
             onPlay={handlePlayMedia}
             onDetail={handlePlayMedia}
           />
@@ -222,7 +237,10 @@ function HomeContent() {
           {/* 2. 左图右榜双栏楼层（无 LibreTV 冗余搜索框/轮播轨） */}
           <div className="-mt-8 sm:-mt-12 relative z-20 space-y-2">
             <Suspense fallback={null}>
-              <RecommendSection onPick={handlePickByTitle} />
+              <RecommendSection
+                onPick={handlePickByTitle}
+                cmsRemarksMap={remarksQuery.data?.remarksMap}
+              />
             </Suspense>
           </div>
         </main>

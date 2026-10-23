@@ -1,6 +1,6 @@
 /**
  * 影视资料库门面服务 (MediaLibraryService)
- * 1. 全球 4K 榜单与分类推荐 (/api/tmdb)
+ * 1. 全球 4K 榜单与分类推荐 (/api/media/feed)
  * 2. 主力采集源「最近更新」静默对齐服务 (RecentUpdatesSyncer)
  * 3. 集数角标智能推导算法 (resolveEpisodeBadge)
  */
@@ -26,6 +26,8 @@ export interface MediaItem {
   isRecent?: boolean;
   hotRank?: number;
   hotScore?: string;
+  isTv?: boolean;
+  category?: string;
 }
 
 /** 归一化片名，用于跨系统精确匹配对齐 */
@@ -38,12 +40,13 @@ export function normalizeTitleForMatch(title: string): string {
 /**
  * 提取海报卡片上的更新集数/状态角标 (核心算法)
  * 优先级 1: 命中主力采集源实时更新备注（如 "更新至18集"、"全40集"、"HD国语"）
- * 优先级 2: TMDB 接口返回的 episodes_info
- * 优先级 3: 从 card_subtitle 或 info 中正则提取集数
- * 优先级 4: 电影提取年份作为兜底标签（如 "2024 · 正片"），无年份返回 "热播"
+ * 优先级 2: 从 episodes_info 或 remarks 中智能识别明确集数与完结状态
+ * 优先级 3: 从 card_subtitle / info / overview 中正则提取集数
+ * 优先级 4: 剧集/连续剧/动漫按年份推导连载或完结（"连载更新中" / "全集完结"）
+ * 优先级 5: 电影提取年份作为兜底标签（如 "2024 · 正片"），无年份返回 "热播"
  */
 export function resolveEpisodeBadge(
-  mediaItem: Partial<MediaItem>,
+  mediaItem: Partial<MediaItem> & { isTv?: boolean; category?: string },
   cmsRemarksMap: Map<string, string> = new Map()
 ): string {
   const title = mediaItem.title || '';
@@ -57,20 +60,53 @@ export function resolveEpisodeBadge(
     }
   }
 
-  // 优先级 2：原生 episodes_info
-  if (mediaItem.episodes_info && mediaItem.episodes_info.trim() !== '') {
+  // 优先级 2：原生 episodes_info 或 remarks（若含集数或完结特征）
+  const candidates = [mediaItem.episodes_info, mediaItem.remarks];
+  for (const raw of candidates) {
+    if (!raw) continue;
+    const trimmed = raw.trim();
+    if (!trimmed || trimmed === '0' || trimmed === 'null') continue;
+    if (
+      /(?:更新至|连载至|全|第)\s*\d+\s*集|\d+\s*集全|完结|连载|更新中/.test(trimmed) &&
+      !trimmed.includes('★')
+    ) {
+      return trimmed.replace(/\s+/g, '');
+    }
+  }
+
+  // 优先级 3：从 card_subtitle / info / overview 中正则提取集数
+  const textContent = `${mediaItem.card_subtitle || ''} ${mediaItem.info || ''} ${mediaItem.overview || ''}`;
+  const epMatch = textContent.match(/(?:更新至|连载至|全|共)\s*第?\s*(\d+)\s*集|\d+\s*集全/i);
+  if (epMatch) {
+    const matchStr = epMatch[0].replace(/\s+/g, '');
+    return matchStr.startsWith('共') ? `全${epMatch[1]}集` : matchStr;
+  }
+
+  // 如果 episodes_info 存在且不是通用标签（如排除“精选剧集”、“院线电影”），仍然允许直接展示
+  if (
+    mediaItem.episodes_info &&
+    mediaItem.episodes_info.trim() &&
+    !['精选剧集', '院线电影', '剧情', '4K 臻彩', '4K'].includes(mediaItem.episodes_info.trim())
+  ) {
     return mediaItem.episodes_info.trim();
   }
 
-  // 优先级 3：从 card_subtitle 或 info 中正则提取集数
-  const subtitle = mediaItem.card_subtitle || mediaItem.info || '';
-  const epMatch = subtitle.match(/(更新至\s*\d+\s*集|全\s*\d+\s*集|\d+\s*集全|连载至\s*\d+\s*集)/i);
-  if (epMatch) {
-    return epMatch[1].replace(/\s+/g, '');
+  // 优先级 4：判断剧集/动漫/综艺，按年份推导连载或完结
+  const isTv =
+    Boolean(mediaItem.isTv) ||
+    mediaItem.category === 'tv' ||
+    Boolean(mediaItem.typeName?.includes('剧')) ||
+    Boolean(mediaItem.typeName?.includes('动漫')) ||
+    Boolean(mediaItem.typeName?.includes('综艺'));
+
+  if (isTv) {
+    const currentYear = new Date().getFullYear();
+    const numYear = mediaItem.year ? parseInt(mediaItem.year, 10) : currentYear;
+    return numYear >= currentYear - 1 ? '连载更新中' : '全集完结';
   }
 
-  // 优先级 4：年份兜底或热播
-  const yearMatch = subtitle.match(/\b(19\d{2}|20\d{2})\b/);
+  // 优先级 5：电影提取年份作为兜底标签（如 "2024 · 正片"），无年份返回 "热播"
+  const yearMatch = textContent.match(/\b(19\d{2}|20\d{2})\b/);
   if (yearMatch) {
     return `${yearMatch[1]} · 正片`;
   }
@@ -148,7 +184,7 @@ export async function syncRecentUpdates(
   return { remarksMap, recentList };
 }
 
-/** 获取首页榜单与分类推荐（100% 接入 TMDB 官方 /api/tmdb 接口） */
+/** 获取首页榜单与分类推荐（统一请求资料流 /api/media/feed 接口） */
 export async function fetchDoubanCollectionItems(
   collectionId: string,
   start = 0,
@@ -181,7 +217,7 @@ export async function fetchDoubanCollectionItems(
   });
 
   try {
-    const res = await fetch(`/api/tmdb?${queryParams.toString()}`, { signal });
+    const res = await fetch(`/api/media/feed?${queryParams.toString()}`, { signal });
     if (!res.ok) {
       throw new Error(`TMDB 影视数据获取失败: ${res.status}`);
     }

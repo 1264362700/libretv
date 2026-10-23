@@ -6,7 +6,6 @@ import { SectionTitle, SelectRow, ToggleRow } from '@/components/settings-shared
 import { loadCacheSettings, saveCacheSettings, getCacheSummary, clearVideoCache, type CacheSummary } from '@/lib/video-cache';
 
 import { useAppStore } from '@/lib/store';
-import type { RecommendSourceValue } from '@/lib/env-recommend-source';
 import { useToast } from '@/components/toast';
 
 export function PlaybackPanel() {
@@ -148,18 +147,6 @@ export function HomePanel() {
   const store = useAppStore();
   const { toast } = useToast();
 
-  const labelMap: Record<RecommendSourceValue, string> = {
-    'douban': '豆瓣精选大厅',
-    'short-drama': '热门微短剧专区',
-    'iqiyi-hot': '爱奇艺官方热播榜',
-    '360-hot': '360 影视热播榜',
-    'baidu-top': '百度实时热榜',
-    'douban-top250': '豆瓣 Top250',
-    'hot-list': '豆瓣影视周榜',
-    'maoyan': '猫眼大盘票房榜',
-    'bangumi': 'Bangumi 新番',
-  };
-
   return (
     <section>
       <SectionTitle title="首页与内容过滤" />
@@ -172,35 +159,6 @@ export function HomePanel() {
             store.updateSettings({ yellowFilter: v });
             toast(v ? '已开启成人内容过滤' : '已关闭成人内容过滤', 'info');
           }}
-        />
-        <ToggleRow
-          label="首页推荐"
-          description="在首页展示推荐内容"
-          checked={store.doubanEnabled}
-          onChange={(v) => {
-            store.updateSettings({ doubanEnabled: v });
-            toast(v ? '已开启首页推荐展示' : '已关闭首页推荐展示', 'info');
-          }}
-        />
-        <SelectRow
-          label="推荐数据源"
-          value={store.recommendSource}
-          onChange={(v) => {
-            const next = v as RecommendSourceValue;
-            store.updateSettings({ recommendSource: next, doubanEnabled: true });
-            toast(`已切换推荐源为「${labelMap[next] || next}」，首页已实时生效`, 'success');
-          }}
-          options={[
-            { value: 'douban', label: '豆瓣精选大厅', hint: '多维分类与深度筛选' },
-            { value: 'short-drama', label: '竖屏短内容专区', hint: '微短剧 / AI 漫剧 / 电影解说 · 共 9万+ 条' },
-            { value: 'iqiyi-hot', label: '爱奇艺官方热播榜', hint: '电视剧/电影/综艺/动漫全端热播' },
-            { value: '360-hot', label: '360 影视热播榜', hint: '全网热播电视剧/电影/综艺/动漫' },
-            { value: 'baidu-top', label: '百度实时热榜', hint: '极速直连 · 亿级搜索风云榜' },
-            { value: 'douban-top250', label: '豆瓣 Top250', hint: '影史高分经典神作（支持换一批）' },
-            { value: 'hot-list', label: '豆瓣影视周榜', hint: '每周口碑电影与华语/海外剧集榜' },
-            { value: 'maoyan', label: '猫眼大盘票房榜', hint: '院线热映与实时票房大盘' },
-            { value: 'bangumi', label: 'Bangumi 新番', hint: '每日新番放送连载日程（免 key）' },
-          ]}
         />
       </div>
     </section>

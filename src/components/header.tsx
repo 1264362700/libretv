@@ -101,7 +101,7 @@ function HeaderShell({ isHeroOverlay }: { isHeroOverlay: boolean }) {
           <div className="flex items-center gap-3 lg:gap-8 min-w-0">
             <button
               type="button"
-              className="lg:hidden p-1.5 -ml-1 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 active:scale-90 transition-all touch-manipulation cursor-pointer"
+              className="lg:hidden p-1.5 -ml-1 rounded-lg text-muted hover:text-content hover:bg-hover active:scale-90 transition-all touch-manipulation cursor-pointer"
               onClick={() => setMobileNavOpen(true)}
               aria-label="打开侧边导航"
               title="打开侧边导航"
@@ -119,10 +119,10 @@ function HeaderShell({ isHeroOverlay }: { isHeroOverlay: boolean }) {
                 <span className="text-black font-black text-xl tracking-tighter">N</span>
               </div>
               <div className="flex flex-col">
-                <span className="text-xl font-bold tracking-tight text-white group-hover:text-amber-400 transition-colors leading-none">
-                  Nova<span className="text-amber-400 font-black">TV</span>
+                <span className="text-xl font-bold tracking-tight text-content group-hover:text-amber-500 dark:group-hover:text-amber-400 transition-colors leading-none">
+                  Nova<span className="text-amber-500 dark:text-amber-400 font-black">TV</span>
                 </span>
-                <span className="text-[10px] text-slate-400 tracking-widest font-mono uppercase mt-0.5">
+                <span className="text-[10px] text-muted tracking-widest font-mono uppercase mt-0.5">
                   Cinema Ultra
                 </span>
               </div>
@@ -140,14 +140,14 @@ function HeaderShell({ isHeroOverlay }: { isHeroOverlay: boolean }) {
             <button
               type="button"
               onClick={() => setSpotlightOpen(true)}
-              className="flex items-center gap-2.5 px-3.5 py-1.5 rounded-xl bg-slate-900/80 hover:bg-slate-800/90 text-slate-400 hover:text-slate-200 border border-white/10 text-xs transition-all duration-200 group cursor-pointer"
+              className="flex items-center gap-2.5 px-3.5 py-1.5 rounded-xl bg-chip/70 hover:bg-hover text-muted hover:text-content border border-line text-xs transition-all duration-200 group cursor-pointer"
               title="全局搜索 (⌘K / Ctrl+K)"
               aria-label="全局搜索 (⌘K)"
             >
-              <Icon name="search" className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform shrink-0" />
+              <Icon name="search" className="w-4 h-4 text-amber-500 dark:text-amber-400 group-hover:scale-110 transition-transform shrink-0" />
               <span className="hidden sm:inline font-normal">搜索片名、演员、导演...</span>
               <span className="sm:hidden font-normal">搜索</span>
-              <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-mono bg-white/10 text-slate-300 rounded border border-white/10">
+              <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-mono bg-surface border border-line text-muted rounded">
                 ⌘K
               </kbd>
             </button>
@@ -160,7 +160,7 @@ function HeaderShell({ isHeroOverlay }: { isHeroOverlay: boolean }) {
                 title={t('nav.history', '观看历史')}
                 aria-label={t('nav.history', '观看历史')}
                 onClick={() => setHistoryOpen(true)}
-                className="p-2 rounded-xl text-slate-300 hover:text-amber-400 hover:bg-white/5 transition-colors border border-transparent hover:border-white/5 cursor-pointer"
+                className="p-2 rounded-xl text-muted hover:text-amber-500 dark:hover:text-amber-400 hover:bg-hover transition-colors border border-transparent hover:border-line cursor-pointer"
               >
                 <Icon name="clock" className="w-4 h-4" />
               </button>
@@ -169,7 +169,7 @@ function HeaderShell({ isHeroOverlay }: { isHeroOverlay: boolean }) {
                 title={t('nav.settings', '播放源与设置')}
                 aria-label={t('nav.settings', '播放源与设置')}
                 onClick={() => setSettingsOpen(true)}
-                className="p-2 rounded-xl text-slate-300 hover:text-amber-400 hover:bg-white/5 transition-colors border border-transparent hover:border-white/5 cursor-pointer"
+                className="p-2 rounded-xl text-muted hover:text-amber-500 dark:hover:text-amber-400 hover:bg-hover transition-colors border border-transparent hover:border-line cursor-pointer"
               >
                 <Icon name="gear" className="w-4 h-4" />
               </button>
@@ -179,7 +179,7 @@ function HeaderShell({ isHeroOverlay }: { isHeroOverlay: boolean }) {
             {isAdmin && (
               <button
                 type="button"
-                className="hidden md:inline-flex px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:bg-amber-500/25 active:scale-95 transition-all items-center gap-1 shrink-0 cursor-pointer"
+                className="hidden md:inline-flex px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30 hover:bg-amber-500/25 active:scale-95 transition-all items-center gap-1 shrink-0 cursor-pointer"
                 onClick={openAdminModal}
                 title="打开管理员后台（邀请码、用户与全局源）"
               >
@@ -190,9 +190,9 @@ function HeaderShell({ isHeroOverlay }: { isHeroOverlay: boolean }) {
 
             {/* 用户登录态与退出 */}
             {verified ? (
-              <div className="hidden md:flex items-center gap-1.5 pl-1.5 border-l border-white/10">
+              <div className="hidden md:flex items-center gap-1.5 pl-1.5 border-l border-line">
                 <span
-                  className="text-xs text-slate-300 max-w-[4.5rem] truncate hidden sm:inline font-medium"
+                  className="text-xs text-muted max-w-[4.5rem] truncate hidden sm:inline font-medium"
                   title={`当前账号: ${user?.username}`}
                 >
                   {user?.username}
@@ -273,8 +273,8 @@ function DesktopChannelNav() {
             className={cn(
               'px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-1.5 whitespace-nowrap',
               isActive
-                ? 'text-white bg-white/10 shadow-sm'
-                : 'text-slate-300 hover:text-white hover:bg-white/5'
+                ? 'bg-amber-400 text-slate-950 font-bold shadow-glow-gold'
+                : 'text-muted hover:text-content hover:bg-hover'
             )}
           >
             {t(`nav.${ch.id}`, ch.label)}

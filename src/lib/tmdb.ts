@@ -254,8 +254,24 @@ export function mapTmdbItem(
   const area = overrideArea || item.origin_country?.[0] || undefined;
   const cardSubtitle = [year, area, ...genreNames].filter(Boolean).join(' · ') || categoryName;
 
+  // 智能推导集数/更新状态
+  let episodeInfo: string;
+  if (isTv) {
+    const overviewEp = item.overview?.match(/(?:共|全|更新至|连载至)\s*第?\s*(\d+)\s*集/);
+    if (overviewEp) {
+      const matchStr = overviewEp[0].replace(/\s+/g, '');
+      episodeInfo = matchStr.startsWith('共') ? `全${overviewEp[1]}集` : matchStr;
+    } else {
+      const currentYear = new Date().getFullYear();
+      const numYear = year ? parseInt(year, 10) : currentYear;
+      episodeInfo = numYear >= currentYear - 1 ? '连载更新中' : '全集完结';
+    }
+  } else {
+    episodeInfo = rating ? `★ ${rating}` : '正片';
+  }
+
   return {
-    id: `tmdb_${item.id}`,
+    id: `m_${item.id}`,
     title,
     cover,
     backdrop,
@@ -268,7 +284,7 @@ export function mapTmdbItem(
     card_subtitle: cardSubtitle,
     overview: item.overview || undefined,
     remarks: rating ? `★ ${rating}` : year ? `${year} · 4K` : '4K 臻彩',
-    episodes_info: categoryName,
+    episodes_info: episodeInfo,
     hotRank: rankIndex !== undefined ? rankIndex + 1 : undefined,
     hotScore: rankIndex !== undefined ? `${(158 - rankIndex * 6.2).toFixed(1)}万` : undefined,
   };

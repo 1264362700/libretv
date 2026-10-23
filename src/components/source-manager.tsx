@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { Drawer } from './drawer';
 import { type IconName } from './icon';
-import { LiveSourceManager } from './live-source-manager';
 import { TabRow } from '@/features/source-manager/tab-row';
 import { VodSourcesPanel } from '@/features/source-manager/panel-vod';
 import { PlaybackPanel, ImagePanel, HomePanel } from '@/features/source-manager/panel-prefs';
@@ -18,7 +17,7 @@ import { ConfigIoPanel } from '@/features/source-manager/panel-io';
  */
 
 type PrimaryTab = 'sources' | 'prefs' | 'data';
-type SecondaryTab = 'vod' | 'live' | 'subs' | 'playback' | 'image' | 'home' | 'io';
+type SecondaryTab = 'vod' | 'subs' | 'playback' | 'image' | 'home' | 'io';
 
 const PRIMARY_TABS: { id: PrimaryTab; label: string; icon: IconName }[] = [
   { id: 'sources', label: '源管理', icon: 'link' },
@@ -29,7 +28,6 @@ const PRIMARY_TABS: { id: PrimaryTab; label: string; icon: IconName }[] = [
 const SECONDARY_TABS: Record<PrimaryTab, { id: SecondaryTab; label: string }[]> = {
   sources: [
     { id: 'vod', label: '点播源' },
-    { id: 'live', label: '直播源' },
     { id: 'subs', label: '数据源订阅' },
   ],
   prefs: [
@@ -108,7 +106,6 @@ export function SourceManagerDrawer({ open, onClose }: { open: boolean; onClose:
       }
     >
       {current === 'vod' && <VodSourcesPanel />}
-      {current === 'live' && <LiveSourceManager />}
       {current === 'playback' && <PlaybackPanel />}
       {current === 'image' && <ImagePanel />}
       {current === 'home' && <HomePanel />}

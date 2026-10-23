@@ -103,11 +103,10 @@ export function isChannelType(value: string): value is ChannelType {
   return CHANNELS.some((c) => c.id === value);
 }
 
-/** 顶栏导航项（首页/直播不是片库频道，固定追加） */
+/** 顶栏导航项（首页不是片库频道，固定追加） */
 export const HEADER_NAV = [
   { id: 'home', label: '首页', href: '/' },
   ...CHANNELS.map((c) => ({ id: c.id as string, label: c.navLabel, href: channelHref(c.id) })),
-  { id: 'live', label: '直播', href: '/live' },
 ];
 
 /** 抽屉大菜单项（含「全能片库」入口） */
@@ -121,11 +120,9 @@ export const DRAWER_NAV = [
     desc: c.lobbyDesc,
   })),
   { id: 'catalog', label: '全能片库', icon: '🎞️', href: '/catalog', desc: '四维条件自由探索' },
-  { id: 'live', label: '电视直播', icon: '📡', href: '/live', desc: '央视卫视高清在线' },
 ];
 
 /** 快捷搜索弹窗的频道入口 */
 export const QUICK_CHANNELS = [
   ...CHANNELS.map((c) => ({ label: c.navLabel, icon: c.quickIcon ?? c.icon, href: channelHref(c.id) })),
-  { label: '电视直播', icon: '📡', href: '/live' },
 ];

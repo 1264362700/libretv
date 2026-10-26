@@ -20,6 +20,7 @@ import { useAuth } from '@/components/auth';
 import { EmptyState } from '@/components/states';
 import { SiteFooter } from '@/components/site-footer';
 import { syncRecentUpdates, type MediaItem } from '@/lib/media-library-service';
+import { HOME_TRENDING_QUERY_KEY } from '@/lib/media-feed';
 
 const RESULT_PAGE_SIZE = 60;
 
@@ -69,7 +70,7 @@ function HomeContent() {
 
   // 全球 4K 趋势大片（供首屏 HeroBillboard 巨幕轮播使用）
   const trendingHeroQuery = useQuery({
-    queryKey: ['home-trending-shared'],
+    queryKey: HOME_TRENDING_QUERY_KEY,
     queryFn: ({ signal }) => fetchTmdbClient({ type: 'trending', page: 1 }, signal),
     staleTime: 30 * 60_000,
     enabled: !urlQuery,

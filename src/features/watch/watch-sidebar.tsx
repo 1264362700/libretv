@@ -204,6 +204,7 @@ export function WatchSidebar({
                 index={realIndex}
                 active={realIndex === currentIndex}
                 onClick={() => goEpisode(realIndex)}
+                staggerDelay={realIndex * 30}
               />
             ))}
           </div>

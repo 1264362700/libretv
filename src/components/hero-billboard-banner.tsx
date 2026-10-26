@@ -15,7 +15,7 @@ export interface HeroBillboardBannerProps {
   onDetail?: (item: MediaItem) => void;
 }
 
-function BannerImage({ backdrop, cover, title }: { backdrop?: string; cover?: string; title: string }) {
+function BannerImage({ backdrop, cover, title, isActive }: { backdrop?: string; cover?: string; title: string; isActive: boolean }) {
   const imageProxyMode = useAppStore((s) => s.imageProxyMode);
   const customImageProxy = useAppStore((s) => s.customImageProxy);
   const url = backdrop || cover || '';
@@ -28,7 +28,7 @@ function BannerImage({ backdrop, cover, title }: { backdrop?: string; cover?: st
       customProxy={customImageProxy}
       alt={title}
       loading="eager"
-      className="w-full h-full object-cover object-center transform transition-transform duration-[8000ms] ease-out scale-105"
+      className={`w-full h-full object-cover object-center ${isActive ? 'animate-ken-burns' : ''}`}
     />
   );
 }
@@ -82,7 +82,7 @@ export function HeroBillboardBanner({
             }`}
             style={{ transitionProperty: 'opacity, transform' }}
           >
-            <BannerImage backdrop={slide.backdrop} cover={slide.cover} title={slide.title} />
+            <BannerImage backdrop={slide.backdrop} cover={slide.cover} title={slide.title} isActive={isActive} />
             {/* High-Contrast Cinematic Gradient Vignettes */}
             <div className="absolute inset-0 bg-gradient-to-t from-page via-page/65 to-transparent" />
             <div className="absolute inset-0 bg-gradient-to-r from-page via-page/75 to-transparent w-full md:w-3/4" />

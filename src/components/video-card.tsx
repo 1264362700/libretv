@@ -91,7 +91,7 @@ export function AggregatedCard({
 
   return (
     <div
-      className="group relative flex flex-col rounded-xl overflow-hidden cursor-pointer bg-surface border border-line/60 hover:border-accent/60 hover:shadow-xl hover:-translate-y-1 active:scale-95 transition-all duration-300 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:border-accent focus-visible:-translate-y-1 select-none touch-manipulation"
+      className="group relative flex flex-col rounded-xl overflow-hidden cursor-pointer bg-surface border border-line/60 hover:border-accent/60 hover:shadow-xl hover:-translate-y-1 active:scale-95 transition-all duration-300 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:border-accent focus-visible:-translate-y-1 select-none touch-manipulation animate-stagger-up"
       role="button"
       tabIndex={0}
       onClick={activate}
@@ -202,7 +202,7 @@ export function VideoCard({ item, onClick }: { item: SearchResultItem; onClick: 
 
   return (
     <div
-      className="group relative flex flex-col rounded-xl overflow-hidden cursor-pointer bg-surface border border-line/60 hover:border-accent/60 hover:shadow-xl hover:-translate-y-1 active:scale-95 transition-all duration-300 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:border-accent focus-visible:-translate-y-1 select-none touch-manipulation"
+      className="group relative flex flex-col rounded-xl overflow-hidden cursor-pointer bg-surface border border-line/60 hover:border-accent/60 hover:shadow-xl hover:-translate-y-1 active:scale-95 transition-all duration-300 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:border-accent focus-visible:-translate-y-1 select-none touch-manipulation animate-stagger-up"
       role="button"
       tabIndex={0}
       onClick={onClick}
@@ -325,7 +325,7 @@ export function DoubanCard({
 
   return (
     <div
-      className="group relative flex flex-col cursor-pointer select-none touch-manipulation"
+      className="group relative flex flex-col cursor-pointer select-none touch-manipulation animate-stagger-up"
       role="button"
       tabIndex={0}
       onClick={onClick}

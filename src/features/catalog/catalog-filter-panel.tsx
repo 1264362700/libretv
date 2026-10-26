@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useTranslation } from '@/lib/i18n';
 import { MobileFilterSheet } from '@/components/mobile-filter-sheet';
+import { Reveal } from '@/components/reveal';
 import { SORTS, YEARS } from './catalog-config';
 import type { CatalogFilterChanges } from './use-catalog-query';
 
@@ -94,43 +95,46 @@ export function TabletFilterPanel({
       </div>
 
       {/* 地区流式药丸：自动换行 flex-wrap */}
-      <div>
-        <div className="flex items-center justify-between mb-1.5">
-          <span className="text-xs font-semibold text-faint">地区:</span>
-          {activeRegion !== '全部' && (
-            <span className="text-[11px] text-accent font-medium">已选: {activeRegion}</span>
-          )}
+      <Reveal>
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-xs font-semibold text-faint">地区:</span>
+            {activeRegion !== '全部' && (
+              <span className="text-[11px] text-accent font-medium">已选: {activeRegion}</span>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {regions.map((r) => {
+              const isSelected = activeRegion === r;
+              return (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => onUpdateFilters({ region: r })}
+                  className={cn(
+                    'px-3 py-1.5 text-xs rounded-xl font-medium transition-all active:scale-95 touch-manipulation cursor-pointer',
+                    isSelected
+                      ? 'bg-accent text-on-accent font-semibold shadow-xs'
+                      : 'bg-surface hover:bg-hover text-muted hover:text-content border border-line/50'
+                  )}
+                >
+                  {r}
+                </button>
+              );
+            })}
+          </div>
         </div>
-        <div className="flex flex-wrap gap-1.5">
-          {regions.map((r) => {
-            const isSelected = activeRegion === r;
-            return (
-              <button
-                key={r}
-                type="button"
-                onClick={() => onUpdateFilters({ region: r })}
-                className={cn(
-                  'px-3 py-1.5 text-xs rounded-xl font-medium transition-all active:scale-95 touch-manipulation cursor-pointer',
-                  isSelected
-                    ? 'bg-accent text-on-accent font-semibold shadow-xs'
-                    : 'bg-surface hover:bg-hover text-muted hover:text-content border border-line/50'
-                )}
-              >
-                {r}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      </Reveal>
 
       {/* 类型题材流式药丸：自动换行 */}
-      <div>
-        <div className="flex items-center justify-between mb-1.5">
-          <span className="text-xs font-semibold text-faint">类型题材:</span>
-          {activeGenre !== '全部' && (
-            <span className="text-[11px] text-accent font-medium">已选: {activeGenre}</span>
-          )}
-        </div>
+      <Reveal delay={80}>
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-xs font-semibold text-faint">类型题材:</span>
+            {activeGenre !== '全部' && (
+              <span className="text-[11px] text-accent font-medium">已选: {activeGenre}</span>
+            )}
+          </div>
         <div className="flex flex-wrap gap-1.5">
           {(expanded ? genres : genres.slice(0, 10)).map((g) => {
             const isSelected = activeGenre === g;
@@ -160,10 +164,12 @@ export function TabletFilterPanel({
             </button>
           )}
         </div>
-      </div>
+        </div>
+      </Reveal>
 
       {/* 上映年份流式药丸 */}
       {(expanded || activeYear !== '全部') && (
+        <Reveal delay={160}>
         <div className="pt-2 border-t border-line/40">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-xs font-semibold text-faint">上映年份:</span>
@@ -192,6 +198,7 @@ export function TabletFilterPanel({
             })}
           </div>
         </div>
+        </Reveal>
       )}
     </div>
   );

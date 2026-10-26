@@ -3,6 +3,9 @@
 import { useEffect, useState } from 'react';
 import { buildImageCandidates, cn } from '@/lib/utils';
 
+/** 所有候选地址均失败时的抖动状态 */
+const FAILED_SHAKE_CLASS = 'animate-shake-warn';
+
 interface SmartImageProps {
   /** 原始图片地址（未经代理加工，降级链由本组件按加载方式生成） */
   url?: string;
@@ -34,20 +37,39 @@ export function SmartImage({
   const candidates = buildImageCandidates(url, mode, customProxy);
   const [idx, setIdx] = useState(0);
   const [loaded, setLoaded] = useState(false);
+  const [allFailed, setAllFailed] = useState(false);
 
   // 地址或加载方式变化时重置降级进度与加载过渡态
   useEffect(() => {
     setIdx(0);
     setLoaded(false);
+    setAllFailed(false);
   }, [url, mode, customProxy]);
 
   useEffect(() => {
-    if (idx >= candidates.length) onExhausted?.();
-    // 候选数组随 url/mode 变化，length 是充分的稳定信号
+    if (idx >= candidates.length) {
+      setAllFailed(true);
+      onExhausted?.();
+    }
   }, [idx, candidates.length, onExhausted]);
 
   const src = candidates[idx];
   if (!src) return null;
+
+  // 全部候选失败后触发一次抖动动画，然后停止渲染
+  if (allFailed) {
+    return (
+      <div
+        className={cn(
+          'w-full h-full flex items-center justify-center bg-slate-800/70',
+          FAILED_SHAKE_CLASS,
+          className
+        )}
+        aria-label={`封面加载失败: ${alt}`}
+      />
+    );
+  }
+
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img

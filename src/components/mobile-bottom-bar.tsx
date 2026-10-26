@@ -44,11 +44,11 @@ export function MobileBottomBar() {
       <Link
         href="/"
         className={cn(
-          'flex flex-1 flex-col items-center justify-center py-0.5 rounded-xl text-[10px] font-medium transition-all active:scale-90 touch-manipulation',
+          'flex flex-1 flex-col items-center justify-center py-0.5 rounded-xl text-[10px] font-medium transition-all touch-manipulation',
           isHome ? 'text-accent font-semibold' : 'text-muted hover:text-content'
         )}
       >
-        <svg className="w-5 h-5 mb-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={isHome ? '2.2' : '1.8'} strokeLinecap="round" strokeLinejoin="round">
+        <svg className="w-5 h-5 mb-0.5 group-hover:scale-110 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={isHome ? '2.2' : '1.8'} strokeLinecap="round" strokeLinejoin="round">
           <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
           <polyline points="9 22 9 12 15 12 15 22" />
         </svg>
@@ -59,11 +59,11 @@ export function MobileBottomBar() {
       <Link
         href="/catalog"
         className={cn(
-          'flex flex-1 flex-col items-center justify-center py-0.5 rounded-xl text-[10px] font-medium transition-all active:scale-90 touch-manipulation',
+          'flex flex-1 flex-col items-center justify-center py-0.5 rounded-xl text-[10px] font-medium transition-all touch-manipulation',
           isCatalog ? 'text-accent font-semibold' : 'text-muted hover:text-content'
         )}
       >
-        <svg className="w-5 h-5 mb-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={isCatalog ? '2.2' : '1.8'} strokeLinecap="round" strokeLinejoin="round">
+        <svg className="w-5 h-5 mb-0.5 group-hover:scale-110 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={isCatalog ? '2.2' : '1.8'} strokeLinecap="round" strokeLinejoin="round">
           <rect width="18" height="18" x="3" y="3" rx="2" />
           <path d="M7 3v18" />
           <path d="M3 7.5h4" />
@@ -80,9 +80,9 @@ export function MobileBottomBar() {
       <button
         type="button"
         onClick={requestShowHistory}
-        className="flex flex-1 flex-col items-center justify-center py-0.5 rounded-xl text-[10px] font-medium text-muted hover:text-content transition-all active:scale-90 touch-manipulation cursor-pointer"
+        className="flex flex-1 flex-col items-center justify-center py-0.5 rounded-xl text-[10px] font-medium text-muted hover:text-content transition-all touch-manipulation cursor-pointer"
       >
-        <svg className="w-5 h-5 mb-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <svg className="w-5 h-5 mb-0.5 group-hover:scale-110 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="10" />
           <polyline points="12 6 12 12 16 14" />
         </svg>

@@ -40,7 +40,7 @@ export function SkipPills({
     <>
       {/* 片头跳过与一键打点记忆浮层药丸 */}
       {showSkipOpening && !error && (
-        <div className="absolute bottom-12 left-3 sm:bottom-14 sm:left-4 z-20 flex items-center gap-1.5 animate-fade-in pointer-events-auto">
+        <div className="absolute bottom-12 left-3 sm:bottom-14 sm:left-4 z-20 flex items-center gap-1.5 animate-slide-in-right pointer-events-auto">
           <button
             type="button"
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/80 hover:bg-black/95 text-white border border-white/20 text-xs sm:text-sm font-medium backdrop-blur shadow-lg transition-all active:scale-95 cursor-pointer"
@@ -62,7 +62,7 @@ export function SkipPills({
 
       {/* 片尾跳过浮层药丸 */}
       {showSkipEnding && !error && (
-        <div className="absolute bottom-12 left-3 sm:bottom-14 sm:left-4 z-20 flex items-center animate-fade-in pointer-events-auto">
+        <div className="absolute bottom-12 left-3 sm:bottom-14 sm:left-4 z-20 flex items-center animate-slide-in-right pointer-events-auto">
           <button
             type="button"
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/80 hover:bg-black/95 text-white border border-white/20 text-xs sm:text-sm font-medium backdrop-blur shadow-lg transition-all active:scale-95"
@@ -76,7 +76,7 @@ export function SkipPills({
 
       {/* 自动跳过片头后的撤销条 */}
       {undoIntro && !error && (
-        <div className="absolute bottom-12 left-3 sm:bottom-14 sm:left-4 z-20 flex items-center gap-2 bg-black/85 text-white text-xs px-3 py-1.5 rounded-full border border-white/20 backdrop-blur shadow-md animate-fade-in pointer-events-auto">
+        <div className="absolute bottom-12 left-3 sm:bottom-14 sm:left-4 z-20 flex items-center gap-2 bg-black/85 text-white text-xs px-3 py-1.5 rounded-full border border-white/20 backdrop-blur shadow-md animate-slide-in-right pointer-events-auto">
           <span>已跳过片头 ({formatTime(skipConfig.headEnd)})</span>
           <button
             type="button"

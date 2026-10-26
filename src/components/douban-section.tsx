@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import type { TmdbMediaItem } from '@/lib/tmdb';
 import { resolveEpisodeBadge } from '@/lib/media-library-service';
-import { buildMediaFeedParams } from '@/lib/media-feed';
+import { buildMediaFeedParams, HOME_TRENDING_QUERY_KEY } from '@/lib/media-feed';
 import { DoubanCard } from './video-card';
 
 interface TmdbApiResponse {
@@ -15,7 +15,7 @@ interface TmdbApiResponse {
   page: number;
 }
 
-async function fetchTmdbClient(
+export async function fetchTmdbClient(
   params: {
     type: string;
     area?: string;
@@ -135,7 +135,7 @@ export function RecommendSection({
 
   // Floor 1 右侧：热播飙升榜 TOP 10 (Trending)
   const top10MovieQuery = useQuery({
-    queryKey: ['novatv-top10-trending'],
+    queryKey: HOME_TRENDING_QUERY_KEY,
     queryFn: ({ signal }) => fetchTmdbClient({ type: 'trending', page: 1 }, signal),
     staleTime: 10 * 60_000,
   });

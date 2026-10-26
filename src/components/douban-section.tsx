@@ -382,6 +382,7 @@ function NovaTop10Ranking({
               <img
                 src={top1.backdrop || top1.cover}
                 alt={top1.title}
+                loading="lazy"
                 referrerPolicy="no-referrer"
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
               />
@@ -463,6 +464,7 @@ function NovaTop10Ranking({
                       <img
                         src={item.cover}
                         alt={item.title}
+                        loading="lazy"
                         referrerPolicy="no-referrer"
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                       />

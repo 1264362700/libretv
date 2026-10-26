@@ -7,7 +7,7 @@
 
 import type { SourceConfig } from './types';
 import { buildObfuscatedProxyUrl } from './url-obfuscator';
-import { buildMediaFeedParams } from './media-feed';
+import { buildMediaFeedParams, fetchMediaFeedJson } from './media-feed';
 
 export interface MediaItem {
   id: string;
@@ -215,12 +215,10 @@ export async function fetchDoubanCollectionItems(
   const queryParams = buildMediaFeedParams({ type, sort, page });
 
   try {
-    const res = await fetch(`/api/media/feed?${queryParams.toString()}`, { signal });
-    if (!res.ok) {
-      throw new Error(`TMDB 影视数据获取失败: ${res.status}`);
-    }
-
-    const json = await res.json();
+    // 共享并发同 URL 请求，但保留调用方各自的 React Query key 和展示语义。
+    const json = await fetchMediaFeedJson<Record<string, unknown>>(
+      `/api/media/feed?${queryParams.toString()}`
+    );
     const rawItems = Array.isArray(json?.items) ? json.items : [];
 
     const typeName =

@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Header } from '@/components/header';
 import { HeroBillboardBanner } from '@/components/hero-billboard-banner';
-import { RecommendSection } from '@/components/douban-section';
+import { RecommendSection, fetchTmdbClient } from '@/components/douban-section';
 import { AggregatedCard, aggregateResults } from '@/components/video-card';
 import {
   useAppStore,
@@ -19,11 +19,7 @@ import { validateSourceUrl, buildWatchUrl } from '@/lib/utils';
 import { useAuth } from '@/components/auth';
 import { EmptyState } from '@/components/states';
 import { SiteFooter } from '@/components/site-footer';
-import {
-  fetchDoubanCollectionItems,
-  syncRecentUpdates,
-  type MediaItem,
-} from '@/lib/media-library-service';
+import { syncRecentUpdates, type MediaItem } from '@/lib/media-library-service';
 
 const RESULT_PAGE_SIZE = 60;
 
@@ -73,8 +69,8 @@ function HomeContent() {
 
   // 全球 4K 趋势大片（供首屏 HeroBillboard 巨幕轮播使用）
   const trendingHeroQuery = useQuery({
-    queryKey: ['home-trending-hero'],
-    queryFn: ({ signal }) => fetchDoubanCollectionItems('trending', 0, 8, signal),
+    queryKey: ['home-trending-shared'],
+    queryFn: ({ signal }) => fetchTmdbClient({ type: 'trending', page: 1 }, signal),
     staleTime: 30 * 60_000,
     enabled: !urlQuery,
   });

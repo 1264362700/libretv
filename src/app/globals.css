@@ -461,43 +461,84 @@ html[data-theme-style="eclipse"][data-theme-transition="to-light"]::view-transit
   top: 0;
   z-index: 50;
   border-radius: 0;
-  border-left: none;
-  border-right: none;
-  border-top: none;
-  border-bottom: none;
-  overflow: visible;
+  isolation: isolate;
+  overflow: hidden;
   transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* 色调渐变层（::before） */
+.liquid-glass-header::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.12) 0%,
+    rgba(255, 255, 255, 0.03) 40%,
+    rgba(255, 255, 255, 0.06) 100%
+  );
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+.dark .liquid-glass-header::before {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.08) 0%,
+    rgba(255, 255, 255, 0.02) 40%,
+    rgba(255, 255, 255, 0.04) 100%
+  );
+}
+
+/* Lensing 透镜折射层（::after） */
+.liquid-glass-header::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.25),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.06),
+    inset 1px 0 1px rgba(255, 255, 255, 0.15),
+    inset -1px 0 1px rgba(0, 0, 0, 0.04);
+}
+.dark .liquid-glass-header::after {
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.2),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.25),
+    inset 1px 0 1px rgba(255, 255, 255, 0.12),
+    inset -1px 0 1px rgba(0, 0, 0, 0.2);
 }
 
 /* 未滚动时：轻量透明 */
 .liquid-glass-header.compact {
-  background: rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.50);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
   border-bottom: 1px solid rgba(15, 23, 42, 0.06);
-  box-shadow: none;
 }
 .dark .liquid-glass-header.compact {
-  background: rgba(11, 15, 25, 0.50);
+  background: rgba(11, 15, 25, 0.45);
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 }
 
 /* 滚动后：增强分离感 + 更大模糊 */
 .liquid-glass-header.scrolled {
-  background: rgba(255, 255, 255, 0.80);
+  background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(48px) saturate(220%);
   -webkit-backdrop-filter: blur(48px) saturate(220%);
   border-bottom: 1px solid rgba(15, 23, 42, 0.10);
   box-shadow:
-    0 4px 24px -8px rgba(15, 23, 42, 0.12),
-    0 1px 0 0 rgba(255, 255, 255, 0.4) inset;
+    0 4px 24px -8px rgba(15, 23, 42, 0.15),
+    0 1px 0 0 rgba(255, 255, 255, 0.5) inset;
 }
 .dark .liquid-glass-header.scrolled {
-  background: rgba(11, 15, 25, 0.78);
+  background: rgba(11, 15, 25, 0.82);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow:
     0 4px 24px -8px rgba(0, 0, 0, 0.5),
-    0 1px 0 0 rgba(255, 255, 255, 0.1) inset;
+    0 1px 0 0 rgba(255, 255, 255, 0.12) inset;
 }
 
 /* --- Lensing 滚动跟随高光（放大镜效果） --- */

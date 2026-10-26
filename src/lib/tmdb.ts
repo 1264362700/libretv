@@ -174,7 +174,7 @@ export function getTmdbApiKey(): string {
 }
 
 /** 底层 TMDB JSON 请求：优先原生 fetch，超时或代理受阻时自动回退至系统 curl */
-async function requestTmdbJson(
+async function requestTmdbJsonUncoalesced(
   endpoint: string,
   params: Record<string, string> = {}
 ): Promise<{
@@ -229,6 +229,41 @@ async function requestTmdbJson(
   }
 
   throw new Error(`TMDB 接口请求失败: ${endpoint}`);
+}
+
+// 合并同一进程内同时发生的相同 TMDB 请求，避免首页 Hero 与热榜重复击穿上游。
+type TmdbResponse = {
+  results?: TmdbRawItem[];
+  total_pages?: number;
+  total_results?: number;
+};
+
+const inFlightTmdbRequests = new Map<string, Promise<TmdbResponse>>();
+
+async function requestTmdbJson(
+  endpoint: string,
+  params: Record<string, string> = {}
+): Promise<TmdbResponse> {
+  const apiKey = getTmdbApiKey();
+  if (!apiKey) throw new Error('未配置 TMDB_API_KEY 环境变量');
+
+  const query = new URLSearchParams({ api_key: apiKey, language: 'zh-CN', ...params });
+  const cacheKey = `tmdb:v1:${endpoint}:${query.toString()}`;
+  const cached = getCache<TmdbResponse>(cacheKey);
+  if (cached) return cached;
+
+  const pending = inFlightTmdbRequests.get(cacheKey);
+  if (pending) return pending;
+
+  const request = requestTmdbJsonUncoalesced(endpoint, params);
+  inFlightTmdbRequests.set(cacheKey, request);
+  try {
+    return await request;
+  } finally {
+    if (inFlightTmdbRequests.get(cacheKey) === request) {
+      inFlightTmdbRequests.delete(cacheKey);
+    }
+  }
 }
 
 export function mapTmdbItem(

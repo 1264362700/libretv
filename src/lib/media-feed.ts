@@ -21,3 +21,28 @@ export function buildMediaFeedParams(opts: {
   if (opts.query) sp.set('q', opts.query);
   return sp;
 }
+
+
+/**
+ * 同一页面可能有多个展示区请求完全相同的资料流（例如首页巨幕与热播榜）。
+ * 只合并并发中的同 URL 网络请求，不合并 React Query key，也不改变各展示区的数据语义。
+ * 请求完成后立即清理，后续刷新仍由浏览器/CDN 的 HTTP 缓存策略决定。
+ */
+const inFlightMediaFeeds = new Map<string, Promise<unknown>>();
+
+export function fetchMediaFeedJson<T>(url: string): Promise<T> {
+  const existing = inFlightMediaFeeds.get(url);
+  if (existing) return existing as Promise<T>;
+
+  const request = fetch(url)
+    .then(async (response) => {
+      if (!response.ok) throw new Error(`资料库请求失败 (${response.status})`);
+      return response.json() as Promise<T>;
+    })
+    .finally(() => {
+      if (inFlightMediaFeeds.get(url) === request) inFlightMediaFeeds.delete(url);
+    });
+
+  inFlightMediaFeeds.set(url, request);
+  return request;
+}

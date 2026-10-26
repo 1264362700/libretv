@@ -35,7 +35,7 @@ describe('tmdb: 环境变量与实体映射', () => {
     expect(mapped.id).toBe('m_693134');
     expect(mapped.title).toBe('沙丘2');
     expect(mapped.cover).toBe('https://image.tmdb.org/t/p/w500/dune2_poster.jpg');
-    expect(mapped.backdrop).toBe('https://image.tmdb.org/t/p/original/dune2_backdrop_4k.jpg');
+    expect(mapped.backdrop).toBe('https://image.tmdb.org/t/p/w1280/dune2_backdrop_4k.jpg');
     expect(mapped.rating).toBe('8.4');
     expect(mapped.year).toBe('2024');
     expect(mapped.episodes_info).toBe('★ 8.4');

@@ -7,7 +7,6 @@ import { SiteFooter } from '@/components/site-footer';
 import { DoubanCard, AggregatedCard } from '@/components/video-card';
 import { useAuth } from '@/components/auth';
 import { buildWatchUrl, cn } from '@/lib/utils';
-import { triggerTopProgress } from '@/components/top-progress-bar';
 import { CatalogFilterSection } from '@/features/catalog/catalog-filter-panel';
 import { CatalogSkeleton, CatalogPagination } from '@/features/catalog/catalog-skeleton';
 import { CHANNEL_HOT_KEYWORDS } from '@/features/catalog/catalog-config';
@@ -35,8 +34,6 @@ function CatalogContent() {
   const filters = useCatalogFilters();
   const {
     currentChannel,
-    currentSource,
-    rawCmsTypeId,
     currentRegion,
     currentGenre,
     currentYear,
@@ -46,10 +43,8 @@ function CatalogContent() {
     catalogKeyword,
     filterInput,
     setFilterInput,
-    availableCmsSources,
-    activeCmsSource,
+    selectedSources,
     activeChannelConfig,
-    activeSourceMeta,
     hasActiveFilters,
     activeFilterCount,
     updateFilters,
@@ -64,7 +59,6 @@ function CatalogContent() {
     items,
     total,
     totalPages,
-    cmsSubCategories,
   } = useCatalogData(filters);
 
   useEffect(() => {
@@ -84,12 +78,8 @@ function CatalogContent() {
       if (parts.length >= 3) {
         targetSourceKey = parts[1];
         targetVodId = parts.slice(2).join('_');
-        if (targetSourceKey === activeCmsSource?.key) {
-          targetSourceUrl = activeCmsSource.url;
-        } else {
-          const matchedSrc = availableCmsSources.find((s) => s.key === targetSourceKey);
-          if (matchedSrc) targetSourceUrl = matchedSrc.url;
-        }
+        const matchedSrc = selectedSources.find((s) => s.key === targetSourceKey);
+        if (matchedSrc) targetSourceUrl = matchedSrc.url;
       }
     }
 
@@ -243,63 +233,6 @@ function CatalogContent() {
           </div>
         )}
 
-        {/* 细分子类下钻栏 */}
-        {!urlQuery && cmsSubCategories.length > 0 && (
-          <div className="flex items-center gap-1.5 sm:gap-2 bg-chip/40 border border-line/50 rounded-2xl p-2.5 sm:p-3 overflow-x-auto no-scrollbar">
-            <span className="text-xs font-bold text-faint shrink-0 px-1">细分子类:</span>
-            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-              <button
-                type="button"
-                onClick={() => {
-                  triggerTopProgress();
-                  updateFilters({ cmsTypeId: '' });
-                }}
-                className={cn(
-                  'px-3 py-1 rounded-xl text-xs font-medium transition-all shrink-0 active:scale-95 cursor-pointer',
-                  !rawCmsTypeId
-                    ? 'bg-accent text-on-accent font-semibold shadow-xs'
-                    : 'text-muted hover:text-content bg-surface/60 hover:bg-surface border border-line/40'
-                )}
-              >
-                全部
-              </button>
-              {cmsSubCategories.map((sub) => {
-                const isSelected = rawCmsTypeId === String(sub.id);
-                return (
-                  <button
-                    key={sub.id}
-                    type="button"
-                    onClick={() => {
-                      triggerTopProgress();
-                      updateFilters({ cmsTypeId: String(sub.id) });
-                    }}
-                    className={cn(
-                      'px-3 py-1 rounded-xl text-xs font-medium transition-all shrink-0 active:scale-95 cursor-pointer',
-                      isSelected
-                        ? 'bg-accent text-on-accent font-semibold shadow-xs'
-                        : 'text-muted hover:text-content bg-surface/60 hover:bg-surface border border-line/40'
-                    )}
-                  >
-                    {sub.name}
-                  </button>
-                );
-              })}
-            </div>
-            {rawCmsTypeId && (
-              <button
-                type="button"
-                onClick={() => {
-                  triggerTopProgress();
-                  updateFilters({ cmsTypeId: '' });
-                }}
-                className="text-xs text-accent hover:underline shrink-0 ml-auto hidden sm:inline cursor-pointer"
-              >
-                重置为全部分类 ✕
-              </button>
-            )}
-          </div>
-        )}
-
         {/* 全网统一单源多维筛选器面板 */}
         {!urlQuery && (
           <CatalogFilterSection
@@ -345,12 +278,7 @@ function CatalogContent() {
               '正在加载片单…'
             ) : items.length > 0 ? (
               <>
-                当前【{activeSourceMeta.label}】
-                {currentSource === 'cms' && rawCmsTypeId && cmsSubCategories.length > 0 && (
-                  <span className="text-accent font-semibold ml-1">
-                    · {cmsSubCategories.find((c) => String(c.id) === rawCmsTypeId)?.name || ''}
-                  </span>
-                )}
+                当前【全球影视资料库】
                 共展示 <span className="text-content font-bold">{items.length}</span> 部精选影片
                 {`（第 ${currentPage}/${totalPages} 页${total > 0 ? `，共约 ${total.toLocaleString()} 部` : ''}）`}
               </>

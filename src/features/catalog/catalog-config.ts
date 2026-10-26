@@ -1,47 +1,12 @@
 import type { ChannelType } from '@/lib/channels';
-import type { SourceConfig } from '@/lib/types';
 
 /**
- * 片库页静态配置：全频道统一使用全球官方影视资料库。
+ * 片库页静态配置：全频道统一使用全球官方影视资料库（TMDB）。
+ *
+ * 历史上这里还预留过 CMS 采集源切换（CatalogSourceId 'tmdb'|'cms'、
+ * CHANNEL_SOURCES、CHANNEL_PREFERRED_CMS_HOSTS、FALLBACK_SEED_SOURCES），
+ * 因产品只保留 TMDB 单一来源，相关配置与数据链路已整体移除。
  */
-
-export type CatalogSourceId = 'tmdb' | 'cms';
-
-export interface CatalogSourceMeta {
-  id: CatalogSourceId;
-  label: string;
-  icon: string;
-  badge: string;
-  subTitle: string;
-}
-
-export const CATALOG_SOURCES: CatalogSourceMeta[] = [
-  {
-    id: 'tmdb',
-    label: '全球影视资料库',
-    icon: '🎬',
-    badge: '超清 4K · 多维探索',
-    subTitle: '官方 4K 影视资料库 · 支持类型 / 地区 / 年份 / 评分四维筛选',
-  },
-];
-
-export const CHANNEL_SOURCES: Record<ChannelType, CatalogSourceId[]> = {
-  movie: ['tmdb'],
-  tv: ['tmdb'],
-  anime: ['tmdb'],
-  variety: ['tmdb'],
-  documentary: ['tmdb'],
-};
-
-export const CHANNEL_PREFERRED_CMS_HOSTS: Partial<Record<ChannelType, string[]>> = {};
-
-export const FALLBACK_SEED_SOURCES: SourceConfig[] = [
-  { key: 'curated_ffzy', name: '非凡资源 (极速秒播)', url: 'https://cj.ffzyapi.com/api.php/provide/vod' },
-  { key: 'curated_lzzy', name: '量子资源 (蓝光秒开)', url: 'https://cj.lziapi.com/api.php/provide/vod' },
-  { key: 'curated_snzy', name: '索尼资源 (高清秒播)', url: 'https://suoniapi.com/api.php/provide/vod' },
-  { key: 'curated_gszy', name: '光速资源 (超低延迟)', url: 'https://api.guangsuapi.com/api.php/provide/vod' },
-  { key: 'curated_jyzy', name: '金鹰资源 (院线热映)', url: 'https://jyzyapi.com/api.php/provide/vod' },
-];
 
 export const CHANNEL_HOT_KEYWORDS: Record<ChannelType, string[]> = {
   movie: ['沙丘2', '奥本海默', '死侍与金刚狼', '异形：夺命舰', '头脑特工队2', '周处除三害', '星际穿越'],

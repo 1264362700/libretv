@@ -10,20 +10,10 @@ import { isShortDramaTitle } from '@/lib/short-drama';
 import { useAppStore, resolveSource, isInDisabledSubscription, isSourceDisabled } from '@/lib/store';
 import type { SourceSearchOutcome, DoubanItem } from '@/lib/types';
 import { CHANNELS, type ChannelType } from '@/lib/channels';
-import {
-  CATALOG_SOURCES,
-  CHANNEL_PREFERRED_CMS_HOSTS,
-  CHANNEL_SOURCES,
-  FALLBACK_SEED_SOURCES,
-  PAGE_SIZE,
-  type CatalogSourceId,
-} from './catalog-config';
+import { PAGE_SIZE } from './catalog-config';
 
 export interface CatalogFilterChanges {
   type?: string;
-  source?: string;
-  cmsSource?: string;
-  cmsTypeId?: string;
   region?: string;
   genre?: string;
   year?: string;
@@ -45,14 +35,6 @@ export function useCatalogFilters() {
   const currentChannel: ChannelType = CHANNELS.some((c) => c.id === rawType)
     ? (rawType as ChannelType)
     : 'movie';
-
-  const rawSource = searchParams.get('source') as CatalogSourceId | null;
-  const availableSources = CHANNEL_SOURCES[currentChannel] || ['tmdb'];
-  const currentSource: CatalogSourceId =
-    rawSource && availableSources.includes(rawSource) ? rawSource : availableSources[0];
-
-  const rawCmsSourceKey = searchParams.get('cmsSource');
-  const rawCmsTypeId = searchParams.get('cmsTypeId') || '';
 
   const currentRegion = searchParams.get('region') || '全部';
   const currentGenre = searchParams.get('genre') || '全部';
@@ -93,55 +75,14 @@ export function useCatalogFilters() {
       .filter((s) => !isInDisabledSubscription({ subscriptions }, s.key));
   }, [customAPIs, envSources, selectedKeys, sourceHealth, subscriptions]);
 
-  const availableCmsSources = useMemo(() => {
-    if (selectedSources.length > 0) return selectedSources;
-    return FALLBACK_SEED_SOURCES;
-  }, [selectedSources]);
-
-  const activeCmsSource = useMemo(() => {
-    if (rawCmsSourceKey) {
-      const found = availableCmsSources.find((s) => s.key === rawCmsSourceKey);
-      if (found) return found;
-    }
-    const preferredHosts = CHANNEL_PREFERRED_CMS_HOSTS[currentChannel];
-    if (preferredHosts) {
-      for (const host of preferredHosts) {
-        const found = availableCmsSources.find((s) => (s.url || '').includes(host));
-        if (found) return found;
-      }
-    }
-    return availableCmsSources[0];
-  }, [availableCmsSources, rawCmsSourceKey, currentChannel]);
-
   const updateFilters = (changes: CatalogFilterChanges) => {
     const sp = new URLSearchParams(searchParams.toString());
     if (changes.type !== undefined) {
       sp.set('type', changes.type);
       sp.delete('region');
       sp.delete('genre');
-      sp.delete('cmsTypeId');
       sp.delete('q');
       sp.delete('wd');
-      sp.set('page', '1');
-      const validSources = CHANNEL_SOURCES[changes.type as ChannelType] || ['tmdb'];
-      if (!validSources.includes(currentSource)) {
-        sp.set('source', validSources[0]);
-      }
-    }
-    if (changes.source !== undefined) {
-      sp.set('source', changes.source);
-      sp.delete('cmsTypeId');
-      sp.set('page', '1');
-      sp.delete('q');
-    }
-    if (changes.cmsSource !== undefined) {
-      sp.set('cmsSource', changes.cmsSource);
-      sp.delete('cmsTypeId');
-      sp.set('page', '1');
-    }
-    if (changes.cmsTypeId !== undefined) {
-      if (!changes.cmsTypeId) sp.delete('cmsTypeId');
-      else sp.set('cmsTypeId', changes.cmsTypeId);
       sp.set('page', '1');
     }
     if (changes.region !== undefined) {
@@ -201,15 +142,8 @@ export function useCatalogFilters() {
     (currentGenre !== '全部' ? 1 : 0) +
     (currentYear !== '全部' ? 1 : 0);
 
-  const activeSourceMeta = useMemo(
-    () => CATALOG_SOURCES.find((s) => s.id === currentSource) || CATALOG_SOURCES[0],
-    [currentSource]
-  );
-
   return {
     currentChannel,
-    currentSource,
-    rawCmsTypeId,
     currentRegion,
     currentGenre,
     currentYear,
@@ -222,10 +156,7 @@ export function useCatalogFilters() {
     selectedKeys,
     yellowFilter,
     selectedSources,
-    availableCmsSources,
-    activeCmsSource,
     activeChannelConfig,
-    activeSourceMeta,
     hasActiveFilters,
     activeFilterCount,
     updateFilters,
@@ -241,9 +172,6 @@ export function useCatalogFilters() {
 export function useCatalogData(filters: ReturnType<typeof useCatalogFilters>) {
   const {
     currentChannel,
-    currentSource,
-    activeCmsSource,
-    rawCmsTypeId,
     currentRegion,
     currentGenre,
     currentYear,
@@ -285,9 +213,6 @@ export function useCatalogData(filters: ReturnType<typeof useCatalogFilters>) {
     queryKey: [
       'tmdb-catalog',
       currentChannel,
-      currentSource,
-      activeCmsSource?.key,
-      rawCmsTypeId,
       currentRegion,
       currentGenre,
       currentYear,
@@ -296,33 +221,7 @@ export function useCatalogData(filters: ReturnType<typeof useCatalogFilters>) {
       catalogKeyword,
     ],
     queryFn: async ({ signal }) => {
-      if (currentSource === 'cms' && activeCmsSource) {
-        const q = new URLSearchParams({
-          url: activeCmsSource.url,
-          type: currentChannel,
-          pg: String(currentPage),
-          pagesize: String(PAGE_SIZE),
-          filterAdult: yellowFilter ? '1' : '0',
-        });
-        if (activeCmsSource.key) q.set('sourceKey', activeCmsSource.key);
-        if (rawCmsTypeId) q.set('typeId', rawCmsTypeId);
-        if (catalogKeyword) q.set('wd', catalogKeyword);
-        if (currentSort) q.set('sort', currentSort);
-        if (currentYear && currentYear !== '全部') q.set('year', currentYear);
-        if (currentRegion && currentRegion !== '全部') q.set('area', currentRegion);
-
-        try {
-          const res = await fetch(`/api/catalog/cms?${q.toString()}`, { signal });
-          if (res.ok) {
-            return await res.json();
-          }
-        } catch {
-          // ignore
-        }
-        return { items: [], total: 0, pagecount: 1, subCategories: [] };
-      }
-
-      // 默认统一走官方全维资料库流式接口 (/api/media/feed)
+      // 片库浏览统一走官方全维资料库流式接口 (/api/media/feed)
       const q = new URLSearchParams({
         type: currentChannel,
         page: String(currentPage),
@@ -357,11 +256,6 @@ export function useCatalogData(filters: ReturnType<typeof useCatalogFilters>) {
     1,
     Math.min(500, catalogQuery.data?.pagecount ?? Math.ceil(total / PAGE_SIZE))
   );
-  const cmsSubCategories = (catalogQuery.data?.subCategories || []) as Array<{
-    id: string | number;
-    name: string;
-  }>;
-
   return {
     isVodSearching,
     searchGroups,
@@ -369,6 +263,5 @@ export function useCatalogData(filters: ReturnType<typeof useCatalogFilters>) {
     items,
     total,
     totalPages,
-    cmsSubCategories,
   };
 }

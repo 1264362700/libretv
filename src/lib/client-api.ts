@@ -461,41 +461,6 @@ export const api = {
     return request<DoubanResponse>(`/api/hot-list?${sp.toString()}`, { signal });
   },
 
-  /** 采集站原生全量分类片库：直连 TVBox/影视仓标准点播源，500+页真分页与细分子类下钻 */
-  cmsCatalog: (
-    params: {
-      url: string;
-      type: string;
-      typeId?: number;
-      keyword?: string;
-      page?: number;
-      pageSize?: number;
-      sourceKey?: string;
-      filterAdult?: boolean;
-    },
-    signal?: AbortSignal
-  ) => {
-    const sp = new URLSearchParams({
-      url: params.url,
-      type: params.type,
-      pg: String(params.page || 1),
-      pagesize: String(params.pageSize || 24),
-    });
-    if (params.typeId !== undefined) sp.set('typeId', String(params.typeId));
-    if (params.keyword) sp.set('wd', params.keyword);
-    if (params.sourceKey) sp.set('sourceKey', params.sourceKey);
-    if (params.filterAdult) sp.set('filterAdult', '1');
-    return request<{
-      items: DoubanItem[];
-      total: number;
-      pagecount: number;
-      page: number;
-      pageSize: number;
-      subCategories?: Array<{ id: number; name: string }>;
-      warning?: string;
-    }>(`/api/catalog/cms?${sp.toString()}`, { signal });
-  },
-
   /** 换源：按标题跨源搜索并取详情，附带接口耗时（测速）；支持 signal 以便关闭弹窗时中止在途请求 */
   detailSpeed: async (id: string, source: SourceConfig, signal?: AbortSignal) => {
     const start = performance.now();

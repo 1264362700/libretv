@@ -38,7 +38,7 @@ export function MobileBottomBar() {
   return (
     <nav
       aria-label="移动端专属底部金刚导航栏"
-      className="fixed bottom-0 inset-x-0 z-40 bg-surface/92 backdrop-blur-lg border-t border-line/70 px-2 pt-1.5 pb-[max(0.4rem,env(safe-area-inset-bottom,0px))] md:hidden flex items-center justify-around shadow-lg select-none"
+      className="liquid-glass-bar bg-surface/90 backdrop-blur-lg border-t border-line/70 px-2 pt-1.5 pb-[max(0.4rem,env(safe-area-inset-bottom,0px))] md:hidden flex items-center justify-around shadow-lg select-none"
     >
       {/* 首页 */}
       <Link

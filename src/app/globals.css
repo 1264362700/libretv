@@ -359,6 +359,224 @@ html[data-theme-style="eclipse"][data-theme-transition="to-light"]::view-transit
   animation: cl-logo-flow 1.6s linear infinite;
 }
 
+/* ==========================================================================
+   iOS 26 Liquid Glass — 多层折射玻璃效果
+   基于 WWDC25 "Meet Liquid Glass" 设计原则的 Web 模拟
+   核心：Lensing（透镜折射）+ Specular Highlight（镜面高光）+ Adaptive Opacity
+   ========================================================================== */
+
+/* --- Layer 1: 模糊基底层（最底层，backdrop-filter） --- */
+.liquid-glass {
+  position: relative;
+  isolation: isolate;
+  border-radius: 20px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(32px) saturate(200%);
+  -webkit-backdrop-filter: blur(32px) saturate(200%);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+.dark .liquid-glass {
+  background: rgba(11, 15, 25, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* --- Layer 2: 色调渐变层（中间层，模拟玻璃的着色） --- */
+.liquid-glass::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.18) 0%,
+    rgba(255, 255, 255, 0.04) 40%,
+    rgba(255, 255, 255, 0.08) 100%
+  );
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+.dark .liquid-glass::before {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.10) 0%,
+    rgba(255, 255, 255, 0.02) 40%,
+    rgba(255, 255, 255, 0.06) 100%
+  );
+}
+
+/* --- Layer 3: Lensing 透镜折射层（核心：边缘光线弯曲） --- */
+.liquid-glass::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  pointer-events: none;
+  /* 内阴影模拟透镜边缘的光线弯曲 */
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.35),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.08),
+    inset 1px 0 1px rgba(255, 255, 255, 0.2),
+    inset -1px 0 1px rgba(0, 0, 0, 0.06);
+}
+.dark .liquid-glass::after {
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.25),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.3),
+    inset 1px 0 1px rgba(255, 255, 255, 0.15),
+    inset -1px 0 1px rgba(0, 0, 0, 0.25);
+}
+
+/* --- Layer 4: Specular Highlight 镜面高光层 --- */
+.liquid-glass-specular {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.35) 0%,
+    transparent 30%,
+    transparent 70%,
+    rgba(255, 255, 255, 0.15) 100%
+  );
+  mix-blend-mode: screen;
+}
+.dark .liquid-glass-specular {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.15) 0%,
+    transparent 30%,
+    transparent 70%,
+    rgba(255, 255, 255, 0.08) 100%
+  );
+}
+
+/* --- Header 专用：横向液态玻璃条 --- */
+.liquid-glass-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  border-bottom: none;
+  overflow: visible;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* 未滚动时：轻量透明 */
+.liquid-glass-header.compact {
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+  box-shadow: none;
+}
+.dark .liquid-glass-header.compact {
+  background: rgba(11, 15, 25, 0.50);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+/* 滚动后：增强分离感 + 更大模糊 */
+.liquid-glass-header.scrolled {
+  background: rgba(255, 255, 255, 0.80);
+  backdrop-filter: blur(48px) saturate(220%);
+  -webkit-backdrop-filter: blur(48px) saturate(220%);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.10);
+  box-shadow:
+    0 4px 24px -8px rgba(15, 23, 42, 0.12),
+    0 1px 0 0 rgba(255, 255, 255, 0.4) inset;
+}
+.dark .liquid-glass-header.scrolled {
+  background: rgba(11, 15, 25, 0.78);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 4px 24px -8px rgba(0, 0, 0, 0.5),
+    0 1px 0 0 rgba(255, 255, 255, 0.1) inset;
+}
+
+/* --- Lensing 滚动跟随高光（放大镜效果） --- */
+.liquid-glass-lens {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  border-radius: inherit;
+  overflow: hidden;
+  /* 径向渐变模拟透镜折射区域 */
+  background: radial-gradient(
+    ellipse 300px 80px at var(--lens-x, 50%) var(--lens-y, 50%),
+    rgba(255, 255, 255, 0.12) 0%,
+    rgba(255, 255, 255, 0.04) 40%,
+    transparent 70%
+  );
+  mix-blend-mode: screen;
+  transition: opacity 0.3s ease;
+}
+.dark .liquid-glass-lens {
+  background: radial-gradient(
+    ellipse 300px 80px at var(--lens-x, 50%) var(--lens-y, 50%),
+    rgba(255, 255, 255, 0.08) 0%,
+    rgba(255, 255, 255, 0.02) 40%,
+    transparent 70%
+  );
+}
+
+/* 滚动时隐藏透镜高光（避免性能问题） */
+.liquid-glass-header.scrolled .liquid-glass-lens {
+  opacity: 0;
+}
+
+/* --- 底部导航栏液态玻璃 --- */
+.liquid-glass-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 40;
+  border-radius: 24px 24px 0 0;
+  margin: 0 8px 8px;
+  max-width: 480px;
+  left: 50%;
+  transform: translateX(-50%);
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* --- 移动端底部导航内嵌容器 --- */
+.liquid-glass-bar-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 8px 4px;
+  padding-bottom: max(8px, env(safe-area-inset-bottom, 0px));
+}
+
+/* --- 降级：不支持 backdrop-filter --- */
+@supports not (backdrop-filter: blur(1px)) {
+  .liquid-glass,
+  .liquid-glass-header.compact,
+  .liquid-glass-header.scrolled,
+  .liquid-glass-bar {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: rgba(255, 255, 255, 0.95) !important;
+  }
+  .dark .liquid-glass,
+  .dark .liquid-glass-header.compact,
+  .dark .liquid-glass-header.scrolled,
+  .dark .liquid-glass-bar {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: rgba(11, 15, 25, 0.95) !important;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

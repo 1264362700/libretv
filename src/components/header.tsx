@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { ThemeToggle } from './theme';
 import { LanguageToggle } from './language-toggle';
@@ -51,10 +51,20 @@ function HeaderShell({ isHeroOverlay }: { isHeroOverlay: boolean }) {
 
   const { verified, user, isAdmin, openAdminModal, logout } = useAuth();
   const { t } = useTranslation();
+  const headerRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     const handleScroll = () => {
-      setScrolled(window.scrollY > 20);
+      const y = window.scrollY;
+      setScrolled(y > 20);
+      // 透镜高光跟随滚动位置移动（放大镜效果）
+      const header = headerRef.current;
+      if (header && y <= 20) {
+        const progress = Math.min(y / 20, 1);
+        const lensX = 15 + progress * 70; // 15% → 85% 水平移动
+        header.style.setProperty('--lens-x', `${lensX}%`);
+        header.style.setProperty('--lens-y', '50%');
+      }
     };
     handleScroll();
     window.addEventListener('scroll', handleScroll, { passive: true });
@@ -87,14 +97,23 @@ function HeaderShell({ isHeroOverlay }: { isHeroOverlay: boolean }) {
   return (
     <>
       <header
+        ref={headerRef}
         className={cn(
-          'left-0 right-0 z-50 transition-all duration-300',
+          'liquid-glass-header left-0 right-0 z-50',
           isHeroOverlay ? 'fixed top-0' : 'sticky top-0',
-          !isHeroOverlay || scrolled
-            ? 'glass-nav py-3 shadow-lg'
-            : 'bg-gradient-to-b from-[#0B0F19]/90 to-transparent py-4'
+          (!isHeroOverlay || scrolled) && 'scrolled',
+          (!isHeroOverlay || !scrolled) && 'compact',
+          'py-2.5 sm:py-3'
         )}
       >
+        {/* Lensing 滚动跟随高光层（放大镜效果） */}
+        {isHeroOverlay && !scrolled && (
+          <div className="liquid-glass-lens" style={{ borderRadius: '0' }} />
+        )}
+        {/* Specular 镜面高光层 */}
+        {(!isHeroOverlay || scrolled) && (
+          <div className="liquid-glass-specular" style={{ borderRadius: '0', top: '0', bottom: '0' }} />
+        )}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3">
           {/* 左侧：移动端汉堡菜单 + NovaTV Cinema Ultra 品牌 Logo + 频道导航 */}
           <div className="flex items-center gap-3 lg:gap-8 min-w-0">

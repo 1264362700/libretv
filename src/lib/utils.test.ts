@@ -6,6 +6,9 @@ describe('buildImageUrl', () => {
     expect(buildImageUrl('https://img3.doubanio.com/a.jpg', 'proxy', '')).toBe(
       'https://images.weserv.nl/?url=' + encodeURIComponent('https://img3.doubanio.com/a.jpg')
     );
+    expect(buildImageUrl('https://image.tmdb.org/t/p/w500/test.jpg', 'proxy', '')).toBe(
+      'https://images.weserv.nl/?url=' + encodeURIComponent('https://image.tmdb.org/t/p/w500/test.jpg')
+    );
   });
 
   it('direct 与 custom 模式', () => {
@@ -50,6 +53,20 @@ describe('buildImageCandidates', () => {
   it('proxy 模式非豆瓣图：直连', () => {
     expect(buildImageCandidates('https://bdstatic.com/x.jpg', 'proxy', '')).toEqual([
       'https://bdstatic.com/x.jpg',
+    ]);
+  });
+
+  it('TMDB 图：无论 direct 还是 proxy 模式，公共 Edge CDN 均优先加速并以直连兜底', () => {
+    const TMDB = 'https://image.tmdb.org/t/p/w500/sample.jpg';
+    const TMDB_WESERV = `https://images.weserv.nl/?url=${encodeURIComponent(TMDB)}`;
+
+    expect(buildImageCandidates(TMDB, 'direct', '')).toEqual([
+      TMDB_WESERV,
+      TMDB,
+    ]);
+    expect(buildImageCandidates(TMDB, 'proxy', '')).toEqual([
+      TMDB_WESERV,
+      TMDB,
     ]);
   });
 

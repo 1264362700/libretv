@@ -41,7 +41,7 @@ export function buildImageUrl(
   if (!url) return undefined;
   if (mode === 'proxy') {
     // 采用全球公共免费图片 CDN 节点（不经过本站服务器，零算力开销）
-    if (url.includes('doubanio.com')) {
+    if (url.includes('doubanio.com') || url.includes('image.tmdb.org')) {
       return `https://images.weserv.nl/?url=${encodeURIComponent(url)}`;
     }
     return url;
@@ -73,6 +73,16 @@ export function buildImageCandidates(
       return [...new Set([built, url, weserv])];
     }
     return [...new Set([url, weserv])];
+  }
+
+  // TMDB 官方图床在国内无 CDN 节点且丢包严重（单图耗时超 10s 并占满浏览器连接池）
+  // 无论 direct 还是 proxy 模式，公共 Edge CDN 均优先加速，直连作为备选容灾
+  if (url.includes('image.tmdb.org')) {
+    const weserv = `https://images.weserv.nl/?url=${encodeURIComponent(url)}`;
+    if (mode === 'proxy') {
+      return [...new Set([built, weserv, url])];
+    }
+    return [...new Set([weserv, url])];
   }
 
   // 采集站与第三方图床：直接原站直连（带 no-referrer 绝不被拦截），不走任何反代

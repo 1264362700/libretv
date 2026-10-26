@@ -6,6 +6,7 @@
  */
 
 import type { SourceConfig } from './types';
+import type { TmdbMediaItem } from './tmdb';
 import { buildObfuscatedProxyUrl } from './url-obfuscator';
 import { buildMediaFeedParams } from './media-feed';
 
@@ -120,6 +121,7 @@ export function resolveEpisodeBadge(
 
 /**
  * 主采集源「最近更新」静默对齐服务 (RecentUpdatesSyncer)
+ * 采用极简轻量目录接口 ?ac=list（体积仅数 KB，从源头杜绝 ?ac=videolist 携带海量剧集详情阻塞首屏网络）
  */
 export async function syncRecentUpdates(
   masterSource: SourceConfig,
@@ -133,11 +135,11 @@ export async function syncRecentUpdates(
   if (!masterSource?.url) return { remarksMap, recentList };
 
   const baseUrl = masterSource.url.replace(/\/+$/, '');
-  const pages = [1, 2];
+  const pages = [1];
 
   const fetchPage = async (page: number) => {
     try {
-      const targetUrl = `${baseUrl}?ac=videolist&pg=${page}`;
+      const targetUrl = `${baseUrl}?ac=list&pg=${page}`;
       const proxyUrl = buildObfuscatedProxyUrl(targetUrl);
       const res = await fetch(proxyUrl, { signal, headers: { Accept: 'application/json' } });
       if (!res.ok) return [];
@@ -183,6 +185,34 @@ export async function syncRecentUpdates(
   }
 
   return { remarksMap, recentList };
+}
+
+/** 统一客户端向 /api/media/feed 请求数据（提供给首页巨幕轮播与热播榜共享 React Query 缓存） */
+export async function fetchTmdbClient(
+  params: {
+    type: string;
+    area?: string;
+    genre?: string;
+    year?: string;
+    sort?: string;
+    page?: number;
+  },
+  signal?: AbortSignal
+): Promise<{ items: TmdbMediaItem[]; total: number; totalPages?: number; page?: number }> {
+  const sp = buildMediaFeedParams({
+    type: params.type,
+    page: params.page || 1,
+    sort: params.sort || 'recommend',
+    area: params.area,
+    genre: params.genre,
+    year: params.year,
+  });
+
+  const res = await fetch(`/api/media/feed?${sp.toString()}`, { signal });
+  if (!res.ok) {
+    throw new Error(`资料库请求失败 (${res.status})`);
+  }
+  return res.json();
 }
 
 /** 获取首页榜单与分类推荐（统一请求资料流 /api/media/feed 接口） */

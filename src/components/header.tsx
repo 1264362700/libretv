@@ -236,6 +236,7 @@ function HeaderShell({ isHeroOverlay }: { isHeroOverlay: boolean }) {
             ) : (
               <Link
                 href="/login"
+                prefetch={false}
                 className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 text-slate-950 font-bold text-[11px] sm:text-xs shadow-glow-gold hover:brightness-110 active:scale-95 transition-all shrink-0 truncate max-w-[80px] sm:max-w-none"
               >
                 <span className="sm:hidden">{t('nav.login', '登录')}</span>
@@ -391,6 +392,7 @@ function MobileNavDrawer({
               <Link
                 key={item.id}
                 href={item.href}
+                prefetch={false}
                 onClick={onClose}
                 className={cn(
                   'flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-all active:scale-95 touch-manipulation',
@@ -456,6 +458,7 @@ function MobileNavDrawer({
           </div>
           <Link
             href="/about"
+            prefetch={false}
             onClick={onClose}
             className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs text-muted hover:text-content hover:bg-hover transition-all active:scale-95"
           >
@@ -484,6 +487,7 @@ function MobileNavDrawer({
           ) : (
             <Link
               href="/login"
+              prefetch={false}
               onClick={onClose}
               className="w-full py-2 text-xs rounded-xl font-bold bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 flex items-center justify-center cursor-pointer"
             >

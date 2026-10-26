@@ -3,6 +3,8 @@ import {
   normalizeTitleForMatch,
   resolveEpisodeBadge,
   fetchDoubanCollectionItems,
+  fetchTmdbClient,
+  syncRecentUpdates,
 } from './media-library-service';
 
 describe('media-library-service: normalizeTitleForMatch', () => {
@@ -125,6 +127,59 @@ describe('media-library-service: fetchDoubanCollectionItems', () => {
     expect(res.items[0].cover).toBe('https://image.tmdb.org/t/p/w500/dune2.jpg');
     expect(res.items[0].title).toBe('沙丘2');
     expect(res.items[0].typeName).toBe('电影');
+
+    vi.unstubAllGlobals();
+  });
+
+  it('fetchTmdbClient 与 /api/media/feed 正确对接', async () => {
+    let capturedUrl = '';
+    vi.stubGlobal('fetch', (url: string | URL | Request) => {
+      capturedUrl = String(url);
+      return Promise.resolve(
+        new Response(JSON.stringify({ items: [{ id: '1', title: '热播' }], total: 1 }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      );
+    });
+
+    const res = await fetchTmdbClient({ type: 'trending', page: 1 });
+    expect(capturedUrl).toContain('/api/media/feed?type=trending&page=1&sort=recommend');
+    expect(res.items).toHaveLength(1);
+    vi.unstubAllGlobals();
+  });
+});
+
+describe('media-library-service: syncRecentUpdates', () => {
+  it('使用轻量 ?ac=list 接口拉取最新集数并构造 remarksMap', async () => {
+    let capturedUrl = '';
+    vi.stubGlobal('fetch', (url: string | URL | Request) => {
+      capturedUrl = String(url);
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            code: 1,
+            list: [
+              { vod_id: 101, vod_name: '魔道重生的女武神', vod_remarks: '第222集' },
+              { vod_id: 102, vod_name: '庆余年 第二季', vod_remarks: '全36集' },
+            ],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      );
+    });
+
+    const res = await syncRecentUpdates({
+      key: 'test_src',
+      name: '测试源',
+      url: 'https://zy.example.com/api.php/provide/vod/',
+    });
+
+    const decodedTargetUrl = Buffer.from(capturedUrl.split('q=')[1] || '', 'base64').toString('utf-8');
+    expect(decodedTargetUrl).toContain('ac=list&pg=1');
+    expect(res.remarksMap.get('魔道重生的女武神')).toBe('第222集');
+    expect(res.remarksMap.get('庆余年第二季')).toBe('全36集');
+    expect(res.recentList).toHaveLength(2);
 
     vi.unstubAllGlobals();
   });

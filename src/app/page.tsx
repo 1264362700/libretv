@@ -20,7 +20,7 @@ import { useAuth } from '@/components/auth';
 import { EmptyState } from '@/components/states';
 import { SiteFooter } from '@/components/site-footer';
 import {
-  fetchDoubanCollectionItems,
+  fetchTmdbClient,
   syncRecentUpdates,
   type MediaItem,
 } from '@/lib/media-library-service';
@@ -51,9 +51,9 @@ function HomeContent() {
   const [streamedOutcomes, setStreamedOutcomes] = useState<SourceSearchOutcome[]>([]);
   const [remarksSyncEnabled, setRemarksSyncEnabled] = useState(false);
 
-  // 主采集源备注同步不是首屏展示的必要条件，延后启动，避免与首屏资料流请求抢占连接。
+  // 主采集源备注同步不是首屏展示的必要条件，延后至首屏完全呈现后启动，避免与首屏资料流请求抢占连接。
   useEffect(() => {
-    const timer = window.setTimeout(() => setRemarksSyncEnabled(true), 1200);
+    const timer = window.setTimeout(() => setRemarksSyncEnabled(true), 3000);
     return () => window.clearTimeout(timer);
   }, []);
 
@@ -71,11 +71,11 @@ function HomeContent() {
       .filter((s) => !isInDisabledSubscription({ subscriptions }, s.key));
   }, [customAPIs, envSources, selectedKeys, sourceHealth, subscriptions]);
 
-  // 全球 4K 趋势大片（供首屏 HeroBillboard 巨幕轮播使用）
+  // 全球 4K 趋势大片（供首屏 HeroBillboard 巨幕轮播使用，与右侧热播飙升榜共享 QueryKey 与单次网络请求）
   const trendingHeroQuery = useQuery({
-    queryKey: ['home-trending-hero'],
-    queryFn: ({ signal }) => fetchDoubanCollectionItems('trending', 0, 8, signal),
-    staleTime: 30 * 60_000,
+    queryKey: ['novatv-top10-trending'],
+    queryFn: ({ signal }) => fetchTmdbClient({ type: 'trending', page: 1 }, signal),
+    staleTime: 10 * 60_000,
     enabled: !urlQuery,
   });
 

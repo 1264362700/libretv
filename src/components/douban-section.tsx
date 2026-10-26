@@ -4,43 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import type { TmdbMediaItem } from '@/lib/tmdb';
-import { resolveEpisodeBadge } from '@/lib/media-library-service';
-import { buildMediaFeedParams } from '@/lib/media-feed';
+import { resolveEpisodeBadge, fetchTmdbClient } from '@/lib/media-library-service';
 import { DoubanCard } from './video-card';
-
-interface TmdbApiResponse {
-  items: TmdbMediaItem[];
-  total: number;
-  totalPages: number;
-  page: number;
-}
-
-async function fetchTmdbClient(
-  params: {
-    type: string;
-    area?: string;
-    genre?: string;
-    year?: string;
-    sort?: string;
-    page?: number;
-  },
-  signal?: AbortSignal
-): Promise<TmdbApiResponse> {
-  const sp = buildMediaFeedParams({
-    type: params.type,
-    page: params.page || 1,
-    sort: params.sort || 'recommend',
-    area: params.area,
-    genre: params.genre,
-    year: params.year,
-  });
-
-  const res = await fetch(`/api/media/feed?${sp.toString()}`, { signal });
-  if (!res.ok) {
-    throw new Error(`资料库请求失败 (${res.status})`);
-  }
-  return res.json();
-}
 
 const MOVIE_CATEGORIES: {
   label: string;

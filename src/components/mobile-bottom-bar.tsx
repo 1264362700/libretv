@@ -77,6 +77,7 @@ export function MobileBottomBar() {
       {/* 首页 */}
       <Link
         href="/"
+        prefetch={false}
         data-tab-id="home"
         aria-current={isHome ? 'page' : undefined}
         className={cn(
@@ -94,6 +95,7 @@ export function MobileBottomBar() {
       {/* 片库 */}
       <Link
         href="/catalog"
+        prefetch={false}
         data-tab-id="catalog"
         aria-current={isCatalog ? 'page' : undefined}
         className={cn(
@@ -117,6 +119,7 @@ export function MobileBottomBar() {
       {/* 观看历史 */}
       <Link
         href="/history"
+        prefetch={false}
         data-tab-id="history"
         aria-current={isHistory ? 'page' : undefined}
         className={cn(
@@ -135,6 +138,7 @@ export function MobileBottomBar() {
       {isAdmin || verified ? (
         <Link
           href="/settings"
+          prefetch={false}
           data-tab-id="settings"
           aria-current={isSettings ? 'page' : undefined}
           className={cn(
@@ -152,6 +156,7 @@ export function MobileBottomBar() {
       ) : (
         <Link
           href="/login"
+          prefetch={false}
           data-tab-id="login"
           aria-current={isLogin ? 'page' : undefined}
           className={cn(

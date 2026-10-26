@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { buildImageCandidates, cn } from '@/lib/utils';
 
 /** 所有候选地址均失败时的抖动状态 */
@@ -19,11 +19,9 @@ interface SmartImageProps {
 }
 
 /**
- * 带降级链与平滑淡入过渡的封面图组件：direct 模式按 buildImageCandidates 的顺序加载，
- * onError 逐级回退（豆瓣图：直连 → 公共镜像 → 内置代理）；
- * 加载完成时执行 opacity-0 → opacity-100 电影感平滑淡入；
- * 全部失败后触发 onExhausted 并停止渲染，由调用方展示占位图。
- * referrerPolicy=no-referrer：不向图床暴露来源页，规避部分站点的 Referer 校验。
+ * 带视口延迟、降级链与平滑淡入过渡的封面图组件。
+ * lazy 图片进入视口附近 200px 才设置 src，避免浏览器原生 lazy-load
+ * 在长首页提前并发下载大量首屏外海报；eager 图片（如 Hero 当前背景）立即加载。
  */
 export function SmartImage({
   url,
@@ -35,6 +33,8 @@ export function SmartImage({
   onExhausted,
 }: SmartImageProps) {
   const candidates = buildImageCandidates(url, mode, customProxy);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [shouldLoad, setShouldLoad] = useState(loading === 'eager');
   const [idx, setIdx] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [allFailed, setAllFailed] = useState(false);
@@ -44,54 +44,83 @@ export function SmartImage({
     setIdx(0);
     setLoaded(false);
     setAllFailed(false);
-  }, [url, mode, customProxy]);
+    setShouldLoad(loading === 'eager');
+  }, [url, mode, customProxy, loading]);
+
+  // 明确控制 lazy 图片的启动距离，避免仅依赖浏览器实现各异的原生 lazy 阈值。
+  useEffect(() => {
+    if (loading === 'eager') {
+      setShouldLoad(true);
+      return;
+    }
+
+    const target = containerRef.current;
+    if (!target) return;
+
+    if (typeof IntersectionObserver === 'undefined') {
+      setShouldLoad(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setShouldLoad(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '200px 0px' }
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [loading, url, mode, customProxy]);
 
   useEffect(() => {
-    if (idx >= candidates.length) {
+    if (shouldLoad && idx >= candidates.length) {
       setAllFailed(true);
       onExhausted?.();
     }
-  }, [idx, candidates.length, onExhausted]);
+  }, [shouldLoad, idx, candidates.length, onExhausted]);
 
   const src = candidates[idx];
-  if (!src) return null;
-
-  // 全部候选失败后触发一次抖动动画，然后停止渲染
-  if (allFailed) {
-    return (
-      <div
-        className={cn(
-          'w-full h-full flex items-center justify-center bg-slate-800/70',
-          FAILED_SHAKE_CLASS,
-          className
-        )}
-        aria-label={`封面加载失败: ${alt}`}
-      />
-    );
-  }
 
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      ref={(el) => {
-        if (el?.complete && el.naturalWidth > 0 && !loaded) {
-          setLoaded(true);
-        }
-      }}
-      src={src}
-      alt={alt}
-      className={cn(
-        'transition-opacity duration-300 ease-out',
-        loaded ? 'opacity-100' : 'opacity-0',
-        className
+    <div ref={containerRef} className="w-full h-full">
+      {!shouldLoad || !src ? (
+        <div className={cn('w-full h-full bg-slate-800/20', className)} aria-hidden="true" />
+      ) : allFailed ? (
+        <div
+          className={cn(
+            'w-full h-full flex items-center justify-center bg-slate-800/70',
+            FAILED_SHAKE_CLASS,
+            className
+          )}
+          aria-label={`封面加载失败: ${alt}`}
+        />
+      ) : (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          ref={(el) => {
+            if (el?.complete && el.naturalWidth > 0 && !loaded) {
+              setLoaded(true);
+            }
+          }}
+          src={src}
+          alt={alt}
+          className={cn(
+            'transition-opacity duration-300 ease-out',
+            loaded ? 'opacity-100' : 'opacity-0',
+            className
+          )}
+          loading={loading}
+          referrerPolicy="no-referrer"
+          onLoad={() => setLoaded(true)}
+          onError={() => {
+            setLoaded(false);
+            setIdx((i) => i + 1);
+          }}
+        />
       )}
-      loading={loading}
-      referrerPolicy="no-referrer"
-      onLoad={() => setLoaded(true)}
-      onError={() => {
-        setLoaded(false);
-        setIdx((i) => i + 1);
-      }}
-    />
+    </div>
   );
 }

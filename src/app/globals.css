@@ -533,14 +533,14 @@ html[data-theme-style="eclipse"][data-theme-transition="to-light"]::view-transit
 }
 
 /* Liquid Glass elastic tab selection */
-/* Keep responsive visibility authoritative: this component rule sets display:flex outside Tailwind layers. */
-@media (min-width: 1280px) {
-  .lg-bar.lg-tabbar { display: none; }
-}
-
 .lg-bar.lg-tabbar{left:50%;right:auto;bottom:max(8px,env(safe-area-inset-bottom,0px));width:min(460px,calc(100vw - 24px));max-width:460px;margin:0;padding:7px;border-radius:25px;display:flex;gap:3px;background:rgba(245,247,251,.76);backdrop-filter:blur(30px) saturate(185%);-webkit-backdrop-filter:blur(30px) saturate(185%);box-shadow:0 12px 36px rgba(15,23,42,.16);transform:translateX(-50%)}
 .dark .lg-bar.lg-tabbar{background:rgba(18,23,34,.76);border-color:rgba(255,255,255,.14)}
-.lg-tabbar .lg-tab-indicator{position:absolute;z-index:1;top:6px;bottom:6px;left:7px;width:0;border-radius:19px;pointer-events:none;opacity:0;background:linear-gradient(145deg,rgba(255,255,255,.86),rgba(255,255,255,.42));border:1px solid rgba(255,255,255,.78);box-shadow:0 3px 10px rgba(30,41,59,.1);transition:left 480ms cubic-bezier(.2,1.35,.35,1),width 420ms cubic-bezier(.2,1.2,.35,1);will-change:left,width,transform}
+.lg-tabbar .lg-tab-indicator{position:absolute;z-index:1;top:6px;bottom:6px;left:7px;width:0;border-radius:19px;pointer-events:none;opacity:0;background:linear-gradient(145deg,rgba(255,255,255,.86),rgba(255,255,255,.42));border:1px solid rgba(255,255,255,.78);box-shadow:0 3px 10px rgba(30,41,59,.1);transition:transform 480ms cubic-bezier(.2,1.35,.35,1),opacity 180ms ease;transform-origin:center;will-change:transform,left,width}
 .dark .lg-tabbar .lg-tab-indicator{background:linear-gradient(145deg,rgba(255,255,255,.22),rgba(255,255,255,.075));border-color:rgba(255,255,255,.22)}
 .lg-tabbar .lg-tab-item{position:relative;z-index:2;flex:1;min-width:0;min-height:52px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:2px;padding:4px 2px;border-radius:19px;color:rgb(var(--c-muted));font-size:10px;line-height:1.2;text-decoration:none;touch-action:manipulation;transition:color 180ms ease,transform 240ms cubic-bezier(.2,1.4,.4,1)}
 .lg-tabbar .lg-tab-item[aria-current=page]{color:rgb(var(--c-content));font-weight:700}.lg-tabbar .lg-tab-item:active{transform:scale(.91)}.lg-tabbar .lg-tab-item svg{width:21px;height:21px;flex:none}
+
+/* Keep this after the base tab-bar rule: same specificity, later source order wins. */
+@media (min-width: 1280px) {
+  .lg-bar.lg-tabbar { display: none; }
+}

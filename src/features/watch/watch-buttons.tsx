@@ -8,7 +8,17 @@ import { cn } from '@/lib/utils';
 
 /** 播放页的多个小型按钮组件（从 app/watch/page.tsx 抽出） */
 
-export function EpisodeButton({ index, active, onClick }: { index: number; active: boolean; onClick: () => void }) {
+export function EpisodeButton({
+  index,
+  active,
+  onClick,
+  staggerDelay = 0,
+}: {
+  index: number;
+  active: boolean;
+  onClick: () => void;
+  staggerDelay?: number;
+}) {
   const ref = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -20,9 +30,10 @@ export function EpisodeButton({ index, active, onClick }: { index: number; activ
       ref={ref}
       type="button"
       className={cn(
-        'btn btn-sm !px-1 h-9 font-medium text-xs rounded-lg transition-all focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none',
+        'btn btn-sm !px-1 h-9 font-medium text-xs rounded-lg transition-all focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none animate-stagger-up',
         active ? 'episode-active font-bold shadow-sm' : 'btn-ghost bg-surface hover:bg-hover'
       )}
+      style={{ animationDelay: `${staggerDelay}ms` }}
       onClick={onClick}
     >
       {index + 1}

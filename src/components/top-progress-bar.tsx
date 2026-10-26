@@ -90,13 +90,15 @@ export function TopProgressBar() {
       aria-hidden="true"
     >
       <div
-        className="h-full bg-gradient-to-r from-accent via-cyan-400 to-purple-400 shadow-[0_0_10px_rgba(56,189,248,0.7)] transition-all ease-out duration-200"
+        className="h-full bg-gradient-to-r from-accent via-cyan-400 to-purple-400 shadow-[0_0_10px_rgba(56,189,248,0.7)] transition-all ease-out duration-200 relative overflow-hidden"
         style={{
           width: `${progress}%`,
           opacity: progress === 100 ? 0 : 1,
           transitionProperty: 'width, opacity',
         }}
-      />
+      >
+        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/60 to-transparent animate-progress-shine" />
+      </div>
     </div>
   );
 }

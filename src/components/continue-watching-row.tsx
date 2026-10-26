@@ -318,12 +318,14 @@ function ContinueHistoryCard({
           )}
         </div>
 
-        {/* 底部播放进度条 */}
-        <div className="absolute inset-x-0 bottom-0 h-1 bg-white/20 z-10">
+        {/* 底部播放进度条 + 流光 */}
+        <div className="absolute inset-x-0 bottom-0 h-1 bg-white/20 z-10 overflow-hidden">
           <div
-            className="h-full bg-accent transition-all"
+            className="h-full bg-accent transition-all relative overflow-hidden"
             style={{ width: `${percent || 12}%` }}
-          />
+          >
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent animate-shimmer" />
+          </div>
         </div>
       </div>
 

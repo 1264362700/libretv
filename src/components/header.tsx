@@ -139,14 +139,14 @@ function HeaderShell({ isHeroOverlay }: { isHeroOverlay: boolean }) {
             <button
               type="button"
               onClick={() => setSpotlightOpen(true)}
-              className="flex items-center gap-2.5 px-3.5 py-1.5 rounded-xl bg-chip/70 hover:bg-hover text-muted hover:text-content border border-line text-xs transition-all duration-200 group cursor-pointer"
+              className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-chip/70 hover:bg-hover text-muted hover:text-content border border-line text-xs transition-all duration-200 group cursor-pointer min-w-0"
               title="全局搜索 (⌘K / Ctrl+K)"
               aria-label="全局搜索 (⌘K)"
             >
               <Icon name="search" className="w-4 h-4 text-amber-500 dark:text-amber-400 group-hover:scale-110 transition-transform shrink-0" />
-              <span className="hidden sm:inline font-normal">搜索片名、演员、导演...</span>
-              <span className="sm:hidden font-normal">搜索</span>
-              <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-mono bg-surface border border-line text-muted rounded">
+              <span className="hidden sm:inline font-normal truncate min-w-0 max-w-[120px]">{t('nav.searchPlaceholder', '搜索片名、演员、导演...')}</span>
+              <span className="sm:hidden font-normal shrink-0">搜索</span>
+              <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-mono bg-surface border border-line text-muted rounded shrink-0">
                 ⌘K
               </kbd>
             </button>
@@ -208,7 +208,7 @@ function HeaderShell({ isHeroOverlay }: { isHeroOverlay: boolean }) {
             ) : (
               <Link
                 href="/login"
-                className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 text-slate-950 font-bold text-xs shadow-glow-gold hover:brightness-110 active:scale-95 transition-all shrink-0"
+                className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 text-slate-950 font-bold text-[11px] sm:text-xs shadow-glow-gold hover:brightness-110 active:scale-95 transition-all shrink-0 truncate max-w-[80px] sm:max-w-none"
               >
                 <span className="sm:hidden">{t('nav.login', '登录')}</span>
                 <span className="hidden sm:inline">{t('nav.loginOrRegister', '登录 / 注册')}</span>
@@ -270,7 +270,7 @@ function DesktopChannelNav() {
             href={ch.href}
             prefetch={false}
             className={cn(
-              'px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-1.5 whitespace-nowrap',
+              'px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-1.5 whitespace-nowrap shrink-0',
               isActive
                 ? 'bg-amber-400 text-slate-950 font-bold shadow-glow-gold'
                 : 'text-muted hover:text-content hover:bg-hover'

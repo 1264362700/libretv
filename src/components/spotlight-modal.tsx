@@ -466,11 +466,12 @@ export function SpotlightModal({ open, onClose }: SpotlightModalProps) {
                     <div
                       key={item.text}
                       className={cn(
-                        'group inline-flex items-center gap-1.5 pl-3 pr-2 py-1.5 rounded-xl border text-xs font-medium transition-all cursor-pointer select-none',
+                        'group inline-flex items-center gap-1.5 pl-3 pr-2 py-1.5 rounded-xl border text-xs font-medium transition-all cursor-pointer select-none animate-slide-in-left',
                         activeIndex === idx
                           ? 'bg-accent text-white border-accent shadow-sm'
                           : 'bg-surface hover:bg-hover border-line text-content hover:border-accent/40'
                       )}
+                      style={{ animationDelay: `${idx * 40}ms` }}
                       onClick={() => submitSearch(item.text)}
                     >
                       <span className="truncate max-w-[180px]">{item.text}</span>

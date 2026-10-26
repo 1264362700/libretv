@@ -1,18 +1,28 @@
 'use client';
 
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { ThemeToggle } from './theme';
 import { LanguageToggle } from './language-toggle';
 import { useAuth } from './auth';
 import { Drawer } from './drawer';
-import { SourceManagerDrawer } from './source-manager';
-import { HistoryPanel } from './history-panel';
+const SourceManagerDrawer = dynamic(
+  () => import('./source-manager').then((module) => module.SourceManagerDrawer),
+  { ssr: false }
+);
+const HistoryPanel = dynamic(
+  () => import('./history-panel').then((module) => module.HistoryPanel),
+  { ssr: false }
+);
 import { requestShowDownloadManager } from './download-manager';
 import { SHOW_HISTORY_EVENT, SHOW_SETTINGS_EVENT } from './mobile-bottom-bar';
 import { Icon } from './icon';
-import { SpotlightModal } from './spotlight-modal';
+const SpotlightModal = dynamic(
+  () => import('./spotlight-modal').then((module) => module.SpotlightModal),
+  { ssr: false }
+);
 import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { DRAWER_NAV, HEADER_NAV } from '@/lib/channels';
@@ -241,8 +251,8 @@ function HeaderShell({ isHeroOverlay }: { isHeroOverlay: boolean }) {
         </Suspense>
       </header>
 
-      <SourceManagerDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} />
-      <HistoryPanel open={historyOpen} onClose={() => setHistoryOpen(false)} />
+      {settingsOpen && <SourceManagerDrawer open onClose={() => setSettingsOpen(false)} />}
+      {historyOpen && <HistoryPanel open onClose={() => setHistoryOpen(false)} />}
       <Suspense fallback={null}>
         <MobileNavDrawer
           open={mobileNavOpen}
@@ -251,7 +261,7 @@ function HeaderShell({ isHeroOverlay }: { isHeroOverlay: boolean }) {
           onOpenSettings={() => setSettingsOpen(true)}
         />
       </Suspense>
-      <SpotlightModal open={spotlightOpen} onClose={() => setSpotlightOpen(false)} />
+      {spotlightOpen && <SpotlightModal open onClose={() => setSpotlightOpen(false)} />}
     </>
   );
 }

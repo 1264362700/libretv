@@ -6,18 +6,19 @@ import { useAuth } from './auth';
 import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 
+/** 桌面端 Header 按钮触发抽屉（移动端底栏已改为 Link 导航） */
 export const SHOW_HISTORY_EVENT = 'libretv:show-history';
 export const SHOW_SETTINGS_EVENT = 'libretv:show-settings';
 
 export function requestShowHistory(): void {
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent(SHOW_HISTORY_EVENT));
+  if (typeof window !== 'undefined' && window.location) {
+    window.location.href = '/history';
   }
 }
 
 export function requestShowSettings(): void {
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent(SHOW_SETTINGS_EVENT));
+  if (typeof window !== 'undefined' && window.location) {
+    window.location.href = '/settings';
   }
 }
 
@@ -33,6 +34,8 @@ export function MobileBottomBar() {
 
   const isHome = pathname === '/';
   const isCatalog = pathname.startsWith('/catalog');
+  const isHistory = pathname.startsWith('/history');
+  const isSettings = pathname.startsWith('/settings');
   const isLogin = pathname.startsWith('/login');
 
   return (
@@ -48,7 +51,7 @@ export function MobileBottomBar() {
           isHome ? 'text-accent font-semibold' : 'text-muted hover:text-content'
         )}
       >
-        <svg className="w-5 h-5 mb-0.5 group-hover:scale-110 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={isHome ? '2.2' : '1.8'} strokeLinecap="round" strokeLinejoin="round">
+        <svg className="w-5 h-5 mb-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={isHome ? '2.2' : '1.8'} strokeLinecap="round" strokeLinejoin="round">
           <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
           <polyline points="9 22 9 12 15 12 15 22" />
         </svg>
@@ -63,7 +66,7 @@ export function MobileBottomBar() {
           isCatalog ? 'text-accent font-semibold' : 'text-muted hover:text-content'
         )}
       >
-        <svg className="w-5 h-5 mb-0.5 group-hover:scale-110 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={isCatalog ? '2.2' : '1.8'} strokeLinecap="round" strokeLinejoin="round">
+        <svg className="w-5 h-5 mb-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={isCatalog ? '2.2' : '1.8'} strokeLinecap="round" strokeLinejoin="round">
           <rect width="18" height="18" x="3" y="3" rx="2" />
           <path d="M7 3v18" />
           <path d="M3 7.5h4" />
@@ -77,44 +80,36 @@ export function MobileBottomBar() {
       </Link>
 
       {/* 观看历史 */}
-      <button
-        type="button"
-        onClick={requestShowHistory}
-        className="flex flex-1 flex-col items-center justify-center py-0.5 rounded-xl text-[10px] font-medium text-muted hover:text-content transition-all touch-manipulation cursor-pointer"
+      <Link
+        href="/history"
+        className={cn(
+          'flex flex-1 flex-col items-center justify-center py-0.5 rounded-xl text-[10px] font-medium transition-all touch-manipulation',
+          isHistory ? 'text-accent font-semibold' : 'text-muted hover:text-content'
+        )}
       >
-        <svg className="w-5 h-5 mb-0.5 group-hover:scale-110 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <svg className="w-5 h-5 mb-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={isHistory ? '2.2' : '1.8'} strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="10" />
           <polyline points="12 6 12 12 16 14" />
         </svg>
         <span>{t('nav.history', '历史')}</span>
-      </button>
+      </Link>
 
-      {/* 管理员专属：源管理 */}
-      {isAdmin ? (
-        <button
-          type="button"
-          onClick={requestShowSettings}
-          className="flex flex-1 flex-col items-center justify-center py-0.5 rounded-xl text-[10px] font-medium text-muted hover:text-content transition-all active:scale-90 touch-manipulation cursor-pointer"
-          title="源管理 (管理员专属)"
+      {/* 管理员：源管理 / 普通用户：设置 */}
+      {isAdmin || verified ? (
+        <Link
+          href="/settings"
+          className={cn(
+            'flex flex-1 flex-col items-center justify-center py-0.5 rounded-xl text-[10px] font-medium transition-all active:scale-90 touch-manipulation',
+            isSettings ? 'text-accent font-semibold' : 'text-muted hover:text-content'
+          )}
+          title={isAdmin ? '源管理 (管理员专属)' : '设置'}
         >
-          <svg className="w-5 h-5 mb-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <svg className="w-5 h-5 mb-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={isSettings ? '2.2' : '1.8'} strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="3" />
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
           </svg>
-          <span>{t('nav.sourceManager', '源管理')}</span>
-        </button>
-      ) : verified ? (
-        <button
-          type="button"
-          onClick={requestShowSettings}
-          className="flex flex-1 flex-col items-center justify-center py-0.5 rounded-xl text-[10px] font-medium text-muted hover:text-content transition-all active:scale-90 touch-manipulation cursor-pointer"
-        >
-          <svg className="w-5 h-5 mb-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="3" />
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-          </svg>
-          <span>{t('nav.settings', '设置')}</span>
-        </button>
+          <span>{isAdmin ? t('nav.sourceManager', '源管理') : t('nav.settings', '设置')}</span>
+        </Link>
       ) : (
         <Link
           href="/login"

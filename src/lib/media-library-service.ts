@@ -7,6 +7,7 @@
 
 import type { SourceConfig } from './types';
 import { buildObfuscatedProxyUrl } from './url-obfuscator';
+import { buildMediaFeedParams } from './media-feed';
 
 export interface MediaItem {
   id: string;
@@ -210,11 +211,8 @@ export async function fetchDoubanCollectionItems(
   }
 
   const page = Math.max(1, Math.floor(start / Math.max(1, count)) + 1);
-  const queryParams = new URLSearchParams({
-    type,
-    sort,
-    page: String(page),
-  });
+  // 与首页推荐区/片库页统一参数顺序，避免同一接口因 query 顺序不同而错过浏览器/CDN 缓存。
+  const queryParams = buildMediaFeedParams({ type, sort, page });
 
   try {
     const res = await fetch(`/api/media/feed?${queryParams.toString()}`, { signal });

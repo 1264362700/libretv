@@ -31,10 +31,6 @@ export function MobileBottomBar() {
   const indicatorRef = useRef<HTMLSpanElement>(null);
 
   // 播放页隐藏底栏，确保全屏或手机横屏/竖屏观看时沉浸无遮挡
-  if (pathname.startsWith('/watch')) {
-    return null;
-  }
-
   const isHome = pathname === '/';
   const isCatalog = pathname.startsWith('/catalog');
   const isHistory = pathname.startsWith('/history');
@@ -67,6 +63,8 @@ export function MobileBottomBar() {
     indicator.dataset.ready = 'true';
   }, [activeId]);
 
+  if (pathname.startsWith('/watch')) return null;
+
   return (
     <nav
       aria-label="移动端专属底部金刚导航栏"
@@ -96,7 +94,7 @@ export function MobileBottomBar() {
         data-tab-id="catalog"
         aria-current={isCatalog ? 'page' : undefined}
         className={cn(
-          'flex flex-1 flex-col items-center justify-center py-0.5 rounded-xl text-[10px] font-medium transition-all touch-manipulation',
+          'lg-tab-item',
           isCatalog ? 'text-accent font-semibold' : 'text-muted hover:text-content'
         )}
       >
@@ -134,6 +132,8 @@ export function MobileBottomBar() {
       {isAdmin || verified ? (
         <Link
           href="/settings"
+          data-tab-id="settings"
+          aria-current={isSettings ? 'page' : undefined}
           className={cn(
             'lg-tab-item',
             isSettings ? 'text-accent font-semibold' : 'text-muted hover:text-content'
@@ -149,8 +149,10 @@ export function MobileBottomBar() {
       ) : (
         <Link
           href="/login"
+          data-tab-id="login"
+          aria-current={isLogin ? 'page' : undefined}
           className={cn(
-            'flex flex-1 flex-col items-center justify-center py-0.5 rounded-xl text-[10px] font-medium transition-all active:scale-90 touch-manipulation',
+            'lg-tab-item',
             isLogin ? 'text-accent font-semibold' : 'text-muted hover:text-content'
           )}
         >

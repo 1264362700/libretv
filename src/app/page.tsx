@@ -49,6 +49,13 @@ function HomeContent() {
   const subscriptions = useAppStore((s) => s.subscriptions);
 
   const [streamedOutcomes, setStreamedOutcomes] = useState<SourceSearchOutcome[]>([]);
+  const [remarksSyncEnabled, setRemarksSyncEnabled] = useState(false);
+
+  // 主采集源备注同步不是首屏展示的必要条件，延后启动，避免与首屏资料流请求抢占连接。
+  useEffect(() => {
+    const timer = window.setTimeout(() => setRemarksSyncEnabled(true), 1200);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   // 收集当前可用播放采集源（供全网搜索与点击秒播使用）
   const selectedSources = useMemo(() => {
@@ -85,7 +92,7 @@ function HomeContent() {
         ? syncRecentUpdates(masterSource, signal)
         : Promise.resolve({ remarksMap: new Map<string, string>(), recentList: [] }),
     staleTime: 10 * 60_000,
-    enabled: Boolean(masterSource && !urlQuery),
+    enabled: Boolean(masterSource && !urlQuery && remarksSyncEnabled),
   });
 
   // 播放前强制校验登录并直通多源测速播放页

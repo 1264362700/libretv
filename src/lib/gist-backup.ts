@@ -144,12 +144,12 @@ async function resolveOrCreateGistId(token: string, initialData?: unknown): Prom
 
       if (existing) {
         resolvedGistId = existing.id;
-        console.log(`[Gist Backup] 发现既有容灾备份 Gist: ${existing.id}`);
+        console.debug(`[Gist Backup] 发现既有容灾备份 Gist: ${existing.id}`);
         return existing.id;
       }
     }
 
-    console.log('[Gist Backup] 正在 GitHub 自动创建专属私有容灾 Gist...');
+    console.debug('[Gist Backup] 正在 GitHub 自动创建专属私有容灾 Gist...');
     const createRes = await fetch('https://api.github.com/gists', {
       method: 'POST',
       headers: {
@@ -170,7 +170,7 @@ async function resolveOrCreateGistId(token: string, initialData?: unknown): Prom
     if (createRes.ok) {
       const created = (await createRes.json()) as { id: string };
       resolvedGistId = created.id;
-      console.log(`[Gist Backup] 专属私有容灾 Gist 创建成功: ${created.id}`);
+      console.debug(`[Gist Backup] 专属私有容灾 Gist 创建成功: ${created.id}`);
       return created.id;
     } else {
       const errText = await createRes.text();
@@ -267,7 +267,7 @@ export async function exportNeonToGist(fallbackLocalStore?: AuthDataStore): Prom
     resolvedGistId = gistId;
 
     const gistUrl = `https://gist.github.com/${gistId}`;
-    console.log(`[Gist Backup] 成功导出全量冷备至 GitHub Gist (${gistUrl})，包含 ${stats.usersCount} 个用户, ${stats.invitesCount} 个邀请码, ${stats.sourcesCount} 个全局源`);
+    console.debug(`[Gist Backup] 成功导出全量冷备至 GitHub Gist (${gistUrl})，包含 ${stats.usersCount} 个用户, ${stats.invitesCount} 个邀请码, ${stats.sourcesCount} 个全局源`);
 
     return {
       success: true,
@@ -361,7 +361,7 @@ export async function restoreGistToNeon(): Promise<{
       backupState.lastStatus = 'success';
       backupState.lastError = null;
 
-      console.log(`[Gist Backup] 容灾恢复成功！恢复了 ${restoreResult.stats.users} 个用户, ${restoreResult.stats.invites} 个邀请码, ${restoreResult.stats.sources} 个全站源, ${restoreResult.stats.userConfigs} 个用户源配置`);
+      console.debug(`[Gist Backup] 容灾恢复成功！恢复了 ${restoreResult.stats.users} 个用户, ${restoreResult.stats.invites} 个邀请码, ${restoreResult.stats.sources} 个全站源, ${restoreResult.stats.userConfigs} 个用户源配置`);
 
       return {
         success: true,

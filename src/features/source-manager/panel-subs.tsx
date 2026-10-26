@@ -11,6 +11,7 @@ import { Spinner } from '@/components/states';
 import { allLiveSources, isSourceDisabled, keyBelongsToSubscription, resolveSource, subKeyPrefix, useAppStore } from '@/lib/store';
 import type { SourceConfig } from '@/lib/types';
 import { useToast } from '@/components/toast';
+import { useTranslation } from '@/lib/i18n';
 import { formatRelativeTime, hostnameOf, validateSourceUrl, cn } from '@/lib/utils';
 
 import { copyToClipboard } from '@/lib/clipboard';
@@ -22,6 +23,7 @@ import { describeParseStats } from '@/lib/tvbox-parser';
 export function SourceSubscriptions() {
   const store = useAppStore();
   const { toast } = useToast();
+  const { t } = useTranslation();
   const [subUrl, setSubUrl] = useState('');
   // 每个订阅独立的同步状态，允许多个订阅并行同步（此前单值状态会串台）
   const [syncing, setSyncing] = useState<Set<string>>(new Set());
@@ -33,11 +35,11 @@ export function SourceSubscriptions() {
       const { vodCount, liveCount, stats } = await syncSourceSubscription(url);
       // 如实说明跳过/截断情况，避免用户疑惑「配置里站点很多，为何只导入了个位数」
       const detail = describeParseStats(stats, { includeSamples: false });
-      const formatLabel = stats?.format === 'tvbox' ? '（TVBOX 配置）' : '';
-      toast(`已同步 ${vodCount} 个点播源、${liveCount} 个直播源${formatLabel}${detail ? `；${detail}` : ''}`, 'success');
+      const formatLabel = stats?.format === 'tvbox' ? t('admin.tvboxConfig') : '';
+      toast(t('admin.panelSyncedDetail', { vod: vodCount, live: liveCount, formatLabel, detail: detail ? `；${detail}` : '' }), 'success');
       setSubUrl('');
     } catch (err) {
-      toast(err instanceof Error ? err.message : '订阅同步失败', 'error');
+      toast(err instanceof Error ? err.message : t('admin.syncFailed'), 'error');
     } finally {
       setSyncing((prev) => {
         const next = new Set(prev);
@@ -50,7 +52,7 @@ export function SourceSubscriptions() {
   const addAndSync = () => {
     const url = subUrl.trim();
     if (!validateSourceUrl(url)) {
-      toast('订阅地址需以 http:// 或 https:// 开头', 'warning');
+      toast(t('admin.subUrlInvalid'), 'warning');
       return;
     }
     void sync(url);
@@ -93,7 +95,7 @@ export function SourceSubscriptions() {
       .map(({ name, url, epg }) => ({ name: name || hostnameOf(url), url, epg }));
 
     if (sources.length === 0 && liveSources.length === 0) {
-      toast('没有已勾选启用的源可发布', 'warning');
+      toast(t('admin.noSourcesToPublish'), 'warning');
       return;
     }
 
@@ -103,7 +105,7 @@ export function SourceSubscriptions() {
       setPublished(result);
       toast(`已发布 ${result.sources} 个点播源、${result.liveSources} 个直播源到 ${result.provider}`, 'success');
     } catch (err) {
-      toast(err instanceof Error ? err.message : '发布失败', 'error');
+      toast(err instanceof Error ? err.message : t('admin.publishFailed'), 'error');
     } finally {
       setPublishing(false);
     }
@@ -112,7 +114,7 @@ export function SourceSubscriptions() {
   const copyPublished = () => {
     if (!published) return;
     copyToClipboard(published.url).then((ok) =>
-      ok ? toast('订阅链接已复制', 'success') : toast('复制失败，请手动选中复制', 'warning'),
+      ok ? toast(t('admin.subLinkCopied'), 'success') : toast(t('admin.copyFailed'), 'warning'),
     );
   };
 
@@ -160,7 +162,7 @@ export function SourceSubscriptions() {
   return (
     <section>
       <SectionTitle
-        title="数据源订阅 / 分享"
+        title={t('admin.panelSubscriptions')}
         extra={
           <div className="flex items-center gap-1.5 shrink-0">
             <button
@@ -177,9 +179,9 @@ export function SourceSubscriptions() {
               className="btn-ghost btn-sm"
               onClick={() => void publish()}
               disabled={publishing}
-              title="把当前已勾选启用的源上传到公开粘贴板，生成可直接订阅的链接"
+              title={t('admin.panelShareDesc')}
             >
-              {publishing ? '发布中…' : '发布为链接'}
+              {publishing ? t('admin.publishing') : t('admin.copyLink')}
             </button>
           </div>
         }
@@ -193,11 +195,11 @@ export function SourceSubscriptions() {
               readOnly
               value={published.url}
               className="input flex-1 min-w-0 !py-1.5 text-xs"
-              aria-label="已发布的订阅地址"
+              aria-label={t('admin.panelPublishedUrl')}
               onFocus={(e) => e.currentTarget.select()}
             />
             <button className="btn-ghost btn-sm shrink-0" onClick={copyPublished}>
-              复制
+              {t('admin.panelCopy')}
             </button>
             <button
               className="btn-ghost btn-sm shrink-0"
@@ -210,7 +212,7 @@ export function SourceSubscriptions() {
             </button>
           </div>
           <p className="mt-1.5 text-[11px] text-faint leading-relaxed">
-            已发布到 {published.provider}（{published.sources} 个点播源、{published.liveSources} 个直播源）。
+            {t('admin.panelPublished', { provider: published.provider, vod: published.sources, live: published.liveSources })}。
             链接内容公开可读，粘贴板也可能随时清理——长期使用建议自行托管。
           </p>
         </div>
@@ -219,7 +221,7 @@ export function SourceSubscriptions() {
       <div className="flex gap-2 mb-2">
         <input
           className="input flex-1 min-w-0"
-          placeholder="订阅地址（LibreTV 源列表或 TVBOX 配置的 JSON URL）"
+          placeholder={t('admin.panelSubUrl')}
           value={subUrl}
           onChange={(e) => setSubUrl(e.target.value)}
           onKeyDown={(e) => {
@@ -231,7 +233,7 @@ export function SourceSubscriptions() {
           disabled={!subUrl.trim() || syncing.size > 0}
           onClick={addAndSync}
         >
-          {syncing.size > 0 ? '同步中…' : '订阅'}
+          {syncing.size > 0 ? t('admin.syncing') : t('admin.sub')}
         </button>
       </div>
       {store.subscriptions.length === 0 ? (
@@ -262,8 +264,8 @@ export function SourceSubscriptions() {
                       {sub.lastSync && ` · 同步于 ${formatRelativeTime(sub.lastSync)}`}
                     </div>
                     <div className="mt-1 flex items-center gap-1 flex-wrap">
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent/10 text-accent">点播 {vodCount}</span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent/10 text-accent">直播 {liveCount}</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent/10 text-accent">{t('admin.panelVod', { count: vodCount })}</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent/10 text-accent">{t('admin.panelLive', { count: liveCount })}</span>
                       {sub.enabled === false && (
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-warning/15 text-warning">已停用</span>
                       )}
@@ -276,7 +278,7 @@ export function SourceSubscriptions() {
                         </span>
                       ) : sub.lastStatus === 'ok' && sub.lastCounts ? (
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-success/15 text-success">
-                          上次导入 {sub.lastCounts.vod} 点播 / {sub.lastCounts.live} 直播
+                          {t('admin.panelLastImport', { vod: sub.lastCounts.vod, live: sub.lastCounts.live })}
                         </span>
                       ) : null}
                     </div>
@@ -287,19 +289,19 @@ export function SourceSubscriptions() {
                   <Switch
                     checked={sub.enabled !== false}
                     onChange={(v) => store.setSubscriptionEnabled(sub.url, v)}
-                    label={sub.enabled === false ? '启用该订阅' : '停用该订阅'}
+                    label={sub.enabled === false ? t('admin.enableSub') : t('admin.disableSub')}
                     title={
                       sub.enabled === false
-                        ? '当前已停用（其源不参与搜索），点击启用'
-                        : '停用后该订阅下的源暂不参与搜索；已导入的数据与各源勾选状态都保留'
+                        ? t('admin.subCurrentOff')
+                        : t('admin.subStopped')
                     }
                   />
                   <button
                     className="rounded-md p-2 shrink-0 text-muted transition-colors hover:bg-hover hover:text-accent disabled:opacity-40"
                     disabled={isSyncing}
                     onClick={() => sync(sub.url)}
-                    aria-label="重新同步"
-                    title="重新同步（以远端列表为准，整体替换该订阅名下的点播源与直播源）"
+                    aria-label={t('admin.panelResync')}
+                    title={t('admin.panelResyncDesc')}
                   >
                     {isSyncing ? (
                       <Spinner size="sm" />
@@ -310,8 +312,8 @@ export function SourceSubscriptions() {
                   <button
                     className="rounded-md p-2 shrink-0 text-muted transition-colors hover:bg-hover hover:text-danger"
                     onClick={() => setPendingDelete(sub.url)}
-                    aria-label="删除订阅"
-                    title="删除订阅及其导入的点播源与直播源（保留收藏的频道）"
+                    aria-label={t('admin.panelDeleteSub')}
+                    title={t('admin.panelDeleteSubDesc')}
                   >
                     <Icon name="trash" className="w-4 h-4" />
                   </button>
@@ -326,7 +328,7 @@ export function SourceSubscriptions() {
       <ConfirmDialog
         open={pendingDelete !== null}
         danger
-        title="删除该订阅？"
+        title={t('admin.panelDeleteConfirm')}
         message={
           pendingDelete
             ? (() => {
@@ -335,18 +337,18 @@ export function SourceSubscriptions() {
                 if (impact.vod > 0) parts.push(`${impact.vod} 个点播源`);
                 if (impact.live > 0) parts.push(`${impact.live} 个直播源`);
                 return parts.length > 0
-                  ? `将同时删除该订阅导入的 ${parts.join(' 与 ')}；你收藏的频道会保留。`
-                  : '该订阅当前未导入任何源，删除后不影响其他数据。';
+                  ? t('admin.subDeleteConfirm', { parts: parts.join(' 与 ') })
+                  : t('admin.subNoSources');
               })()
             : undefined
         }
-        confirmLabel="删除订阅"
+        confirmLabel={t('admin.panelDeleteSub')}
         onCancel={() => setPendingDelete(null)}
         onConfirm={() => {
           const url = pendingDelete;
           if (url) useAppStore.getState().removeSubscription(url);
           setPendingDelete(null);
-          toast('订阅已删除', 'success');
+          toast(t('admin.subDeleted'), 'success');
         }}
       />
     </section>

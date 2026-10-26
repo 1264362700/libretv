@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, type ReactNode } from 'react';
+import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 
 /**
@@ -13,8 +14,8 @@ export function ConfirmDialog({
   open,
   title,
   message,
-  confirmLabel = '确认',
-  cancelLabel = '取消',
+  confirmLabel,
+  cancelLabel,
   danger = false,
   onConfirm,
   onCancel,
@@ -29,6 +30,9 @@ export function ConfirmDialog({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const { t } = useTranslation();
+  const confirmLabelText = confirmLabel ?? t('dialog.confirm');
+  const cancelLabelText = cancelLabel ?? t('dialog.cancel');
   const confirmRef = useRef<HTMLButtonElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
 
@@ -73,7 +77,7 @@ export function ConfirmDialog({
         {message && <div className="text-sm text-muted leading-relaxed">{message}</div>}
         <div className="flex gap-2 justify-end mt-5">
           <button ref={cancelRef} className="btn-ghost text-sm" onClick={onCancel}>
-            {cancelLabel}
+            {cancelLabelText}
           </button>
           <button
             ref={confirmRef}
@@ -83,7 +87,7 @@ export function ConfirmDialog({
             )}
             onClick={onConfirm}
           >
-            {confirmLabel}
+            {confirmLabelText}
           </button>
         </div>
       </div>

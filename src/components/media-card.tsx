@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
+import { useMemo } from 'react';
 import type { MediaItem } from '@/lib/media-library-service';
-import { resolveEpisodeBadge } from '@/lib/media-library-service';
-import { db, favoriteIdOf, toggleFavorite } from '@/lib/db';
 import { useToast } from './toast';
+import { SmartImage } from './smart-image';
+import { usePosterCardData } from './use-poster-card-data';
+import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 
 export interface MediaCardProps {
@@ -22,7 +22,7 @@ export interface MediaCardProps {
  * 1. 2:3 黄金比例海报
  * 2. 顶部左右角标：[⭐ 8.9 金标] 与 [年份/类型]（毛玻璃半透明底色）
  * 3. 左下角：[🟢 更新至 18 集] 状态强提示呼吸灯胶囊
- * 4. 图片防裂图双保险：直连 -> weserv.nl 公共代理 -> 暗色 SVG 占位图
+ * 4. 图片加载统一走 SmartImage：直连优先，仅遇明确防盗链（403/418）时按配置降级代理
  * 5. hover 悬停时海报放大 1.05 倍并浮现「▶ 播放」图标
  */
 export function MediaCard({
@@ -32,41 +32,19 @@ export function MediaCard({
   className,
   showSubtitle = true,
 }: MediaCardProps) {
-  // 构建免代理高可用图片候选链，绝不向自身服务器发起图片代理
-  const candidates = useMemo(() => {
-    const raw = item.cover || '';
-    if (!raw) return [];
-    return [raw];
-  }, [item.cover]);
-
-  const [candidateIdx, setCandidateIdx] = useState(0);
   const { toast } = useToast();
-
-  const favEntry = useLiveQuery(
-    () => (item.title ? db.favorites.get(favoriteIdOf(item.title)) : undefined),
-    [item.title]
-  );
-  const isFavorited = Boolean(favEntry);
-
-  // 当封面变化时重置索引
-  useEffect(() => {
-    setCandidateIdx(0);
-  }, [item.cover]);
-
-  const currentSrc = candidates[candidateIdx] || '';
-  const isFailed = candidateIdx >= candidates.length || !currentSrc;
-
-  // 计算角标文本（优先级：采集源实时更新备注 > 豆瓣 episodes_info > 正则提取 > 年份）
-  const episodeBadge = useMemo(() => {
-    return resolveEpisodeBadge(item, cmsRemarksMap);
-  }, [item, cmsRemarksMap]);
-
-  // 格式化纯数字评分
-  const ratingText = useMemo(() => {
-    if (!item.rating) return null;
-    const r = parseFloat(String(item.rating));
-    return Number.isFinite(r) && r > 0 ? r.toFixed(1) : null;
-  }, [item.rating]);
+  const { t } = useTranslation();
+  const {
+    imageProxyMode,
+    customImageProxy,
+    setImgFailed,
+    showImg,
+    ratingText,
+    episodeBadge,
+    castLine,
+    isFavorited,
+    toggleFav,
+  } = usePosterCardData(item, cmsRemarksMap);
 
   // 顶部右侧标签（年份或类型）
   const topBadge = useMemo(() => {
@@ -76,13 +54,8 @@ export function MediaCard({
     return null;
   }, [item.year, item.typeName]);
 
-  // 副标题（演员名单或剧情标签）
-  const subtitleText = useMemo(() => {
-    if (item.actors && item.actors.length > 0) {
-      return item.actors.slice(0, 3).join(' / ');
-    }
-    return item.card_subtitle || item.remarks || '';
-  }, [item.actors, item.card_subtitle, item.remarks]);
+  // 副标题（演员阵容行，缺省回落到备注）
+  const subtitleText = castLine || item.remarks || '';
 
   return (
     <div
@@ -105,15 +78,15 @@ export function MediaCard({
     >
       {/* 2:3 黄金比例海报容器 */}
       <div className="relative aspect-[2/3] w-full overflow-hidden bg-chip">
-        {currentSrc && !isFailed ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={currentSrc}
+        {showImg ? (
+          <SmartImage
+            url={item.cover}
+            mode={imageProxyMode}
+            customProxy={customImageProxy}
             alt={item.title}
             loading="lazy"
-            referrerPolicy="no-referrer"
-            onError={() => setCandidateIdx((prev) => prev + 1)}
             className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
+            onExhausted={() => setImgFailed(true)}
           />
         ) : (
           <div className="w-full h-full flex flex-col items-center justify-center bg-slate-800/70 p-4 text-center">
@@ -179,14 +152,7 @@ export function MediaCard({
               type="button"
               onClick={async (e) => {
                 e.stopPropagation();
-                if (!item.title) return;
-                const added = await toggleFavorite({
-                  title: item.title,
-                  pic: item.cover,
-                  year: item.year,
-                  typeName: item.typeName,
-                  remarks: episodeBadge,
-                });
+                const added = await toggleFav();
                 toast(
                   added ? `已将「${item.title}」加入追剧单` : `已将「${item.title}」移出追剧单`,
                   added ? 'success' : 'info'
@@ -198,10 +164,10 @@ export function MediaCard({
                   ? 'bg-amber-500/85 text-slate-950 border-amber-300'
                   : 'bg-black/65 hover:bg-accent text-white border-white/20'
               )}
-              title={isFavorited ? '已在追剧单中，点击取消追剧' : '一键加入追剧单'}
+              title={isFavorited ? t('card.fav.remove') : t('card.fav.add')}
             >
               <span>{isFavorited ? '★' : '☆'}</span>
-              <span>{isFavorited ? '已追' : '追剧'}</span>
+              <span>{isFavorited ? t('card.fav.active') : t('card.fav.inactive')}</span>
             </button>
           </div>
 
@@ -213,7 +179,7 @@ export function MediaCard({
 
           <div className="space-y-0.5 text-left">
             <p className="text-[10px] text-white/90 line-clamp-2 leading-snug font-medium">
-              {item.card_subtitle || subtitleText || `${item.year || ''} ${item.typeName || '高清正片'}`.trim()}
+              {item.card_subtitle || subtitleText || `${item.year || ''} ${item.typeName || t('card.quality.default')}`.trim()}
             </p>
           </div>
         </div>

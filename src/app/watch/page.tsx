@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { useLiveQuery } from 'dexie-react-hooks';
+import { useTranslation } from '@/lib/i18n';
 import { api } from '@/lib/client-api';
 // 播放器（artplayer + hls.js）按需加载：拆出独立 chunk，不占首屏 First Load JS
 const PlayerShell = dynamic(() => import('@/components/player-shell').then((m) => m.PlayerShell), {
@@ -50,6 +51,7 @@ function WatchContent() {
   const store = useAppStore();
   const { verified, checked } = useAuth();
   const { toast } = useToast();
+  const { t } = useTranslation();
 
   const sourceKey = searchParams.get('source') || '';
   const vodId = searchParams.get('id') || '';
@@ -85,7 +87,7 @@ function WatchContent() {
 
   // 3. 衍生变量计算
   const episodes = useMemo(() => detailQuery.data?.episodes ?? [], [detailQuery.data]);
-  const videoTitle = titleParam || detailQuery.data?.videoInfo?.title || '未知视频';
+  const videoTitle = titleParam || detailQuery.data?.videoInfo?.title || t('watch.unknownTitle');
 
   const currentIndex = useMemo(() => {
     if (episodes.length > 0) return Math.min(Math.max(indexParam, 0), episodes.length - 1);
@@ -228,7 +230,7 @@ function WatchContent() {
   const episodeIntroQuery = useQuery({
     queryKey: ['episode-intro', videoTitle, currentIndex + 1, recommendCategory],
     queryFn: async ({ signal }) => {
-      if (!videoTitle || videoTitle === '未知视频') return null;
+      if (!videoTitle || videoTitle === t('watch.unknownTitle')) return null;
       const res = await fetch(
         `/api/media/episode-intro?title=${encodeURIComponent(videoTitle)}&episode=${currentIndex + 1}&type=${recommendCategory}`,
         { signal }
@@ -244,13 +246,13 @@ function WatchContent() {
         source?: string;
       };
     },
-    enabled: isTvOrAnime && Boolean(videoTitle && videoTitle !== '未知视频'),
+    enabled: isTvOrAnime && Boolean(videoTitle && videoTitle !== t('watch.unknownTitle')),
     staleTime: 60 * 60_000,
   });
 
   // 5. 交互回调与生命周期 Effects
   const favEntry = useLiveQuery(
-    () => (videoTitle && videoTitle !== '未知视频' ? db.favorites.get(favoriteIdOf(videoTitle)) : undefined),
+    () => (videoTitle && videoTitle !== t('watch.unknownTitle') ? db.favorites.get(favoriteIdOf(videoTitle)) : undefined),
     [videoTitle]
   );
   const isFavorited = Boolean(favEntry);
@@ -263,7 +265,7 @@ function WatchContent() {
   }, [isFavorited, episodes.length, videoTitle, videoInfo?.remarks]);
 
   const handleToggleFavorite = useCallback(async () => {
-    if (!videoTitle || videoTitle === '未知视频') return;
+    if (!videoTitle || videoTitle === t('watch.unknownTitle')) return;
     const added = await toggleFavorite({
       title: videoTitle,
       sourceKey,
@@ -351,7 +353,7 @@ function WatchContent() {
               title={isFavorited ? '已在追剧单中，点击取消追剧' : '加入追剧单，更新时首页红点提醒'}
             >
               <span>{isFavorited ? '★' : '☆'}</span>
-              <span className="hidden sm:inline">{isFavorited ? '已追剧' : '追剧'}</span>
+              <span className="hidden sm:inline">{isFavorited ? t('watch.favActive') : t('card.fav.inactive')}</span>
             </button>
             <button
               type="button"
@@ -440,13 +442,13 @@ function WatchContent() {
                     ) : (
                       <>
                         <p className="text-danger text-sm text-center">
-                          {detailQuery.isError ? '视频详情获取失败，当前线路暂不可用' : '当前线路暂无可用播放地址'}
+                          {detailQuery.isError ? t('watch.detailFailed') : t('watch.noPlayableUrl')}
                         </p>
                         {candidates.filter((c) => c.source.key !== sourceKey).length > 0 && (
                           <button
                             type="button"
                             className="btn-primary text-xs px-3.5 py-1.5"
-                            onClick={() => handleAutoFailover('当前线路无法播放')}
+                            onClick={() => handleAutoFailover(t('watch.sourceUnavailable'))}
                           >
                             立即切换至备用线路
                           </button>
@@ -500,7 +502,7 @@ function WatchContent() {
                   onClick={() => setTheaterMode((prev) => !prev)}
                   title="切换影院宽屏模式（收起/展开右侧选集栏）"
                 >
-                  {theaterMode ? '↔ 退出宽屏' : '↔ 影院宽屏'}
+                  {theaterMode ? t('watch.exitWidescreen') : t('watch.enterWidescreen')}
                 </button>
                 <label className="flex items-center gap-1.5 text-xs text-muted cursor-pointer select-none px-2 py-1 rounded-md bg-chip/40 hover:bg-chip transition-colors">
                   <input
@@ -525,10 +527,10 @@ function WatchContent() {
                   <span className="text-[11px] text-faint">
                     {isMatching || candidatesLoading
                       ? streamProgress
-                        ? `正在流式并发探测可用线路... 已检测 ${streamProgress.completed}/${streamProgress.total}，命中 ${streamProgress.matched} 条`
-                        : '正在流式并发探测可用线路...'
+                        ? `${t('watch.probingSources')} 已检测 ${streamProgress.completed}/${streamProgress.total}，命中 ${streamProgress.matched} 条`
+                        : t('watch.probingSources')
                       : speedTesting
-                        ? '线路匹配完成，正在测速比优...'
+                        ? t('watch.matchingSources')
                         : `共 ${candidates.length} 条高速线路`}
                   </span>
                 </div>
@@ -565,7 +567,7 @@ function WatchContent() {
                       )}
                       title={
                         isFailed
-                          ? '该线路刚刚发生播放故障，点击可重新尝试'
+                          ? t('watch.sourceJustFailed')
                           : `${c.source.name} · 服务质量 ${qos.grade}级 (${qos.label})`
                       }
                     >

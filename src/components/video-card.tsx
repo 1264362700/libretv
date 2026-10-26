@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { SearchResultItem } from '@/lib/types';
 import { useAppStore } from '@/lib/store';
-import { db, favoriteIdOf, toggleFavorite } from '@/lib/db';
-import { resolveEpisodeBadge } from '@/lib/media-library-service';
+import { useTranslation } from '@/lib/i18n';
 import { SmartImage } from './smart-image';
+import { usePosterCardData } from './use-poster-card-data';
 
 // —— 跨源同名聚合 ——
 
@@ -71,8 +71,10 @@ export function AggregatedCard({
   onOpen,
 }: {
   group: AggregatedGroup;
-  onOpen: (item: SearchResultItem, group: AggregatedGroup) => void;
+  /** 点击卡片直接起播；调用方通过闭包携带 group 上下文 */
+  onOpen: () => void;
 }) {
+  const { t } = useTranslation();
   const imageProxyMode = useAppStore((s) => s.imageProxyMode);
   const customImageProxy = useAppStore((s) => s.customImageProxy);
   const [imgFailed, setImgFailed] = useState(false);
@@ -84,7 +86,7 @@ export function AggregatedCard({
 
   const activate = () => {
     // 搜索页面点击直接起播：进入播放页由内核流式秒播，不弹窗
-    onOpen(primaryItem, group);
+    onOpen();
   };
 
   return (
@@ -179,7 +181,7 @@ export function AggregatedCard({
           {group.name}
         </h3>
         <div className="flex items-center justify-between text-[11px] text-muted">
-          <span className="truncate">{group.typeName || '全网精选'}</span>
+          <span className="truncate">{group.typeName || t('card.type.default')}</span>
           <span className="text-accent font-medium shrink-0 flex items-center gap-0.5">
             <span>秒播</span>
             <span>›</span>
@@ -192,6 +194,7 @@ export function AggregatedCard({
 
 /** 影片卡片：封面加载失败时逐级降级到占位图（未聚合的单一结果使用，采用 2:3 黄金比例海报竖卡） */
 export function VideoCard({ item, onClick }: { item: SearchResultItem; onClick: () => void }) {
+  const { t } = useTranslation();
   const imageProxyMode = useAppStore((s) => s.imageProxyMode);
   const customImageProxy = useAppStore((s) => s.customImageProxy);
   const [imgFailed, setImgFailed] = useState(false);
@@ -257,7 +260,7 @@ export function VideoCard({ item, onClick }: { item: SearchResultItem; onClick: 
           {item.name}
         </h3>
         <div className="flex items-center justify-between text-[11px] text-muted">
-          <span className="truncate">{item.typeName || '影视'}</span>
+          <span className="truncate">{item.typeName || t('card.typeName.default')}</span>
           <span className="text-accent font-medium shrink-0">播放 ›</span>
         </div>
       </div>
@@ -292,76 +295,32 @@ export function DoubanCard({
   cmsRemarksMap?: Map<string, string>;
   onClick: () => void;
 }) {
-  const imageProxyMode = useAppStore((s) => s.imageProxyMode);
-  const customImageProxy = useAppStore((s) => s.customImageProxy);
-  const [imgFailed, setImgFailed] = useState(false);
-  const [favorited, setFavorited] = useState(false);
+  const {
+    imageProxyMode,
+    customImageProxy,
+    showImg,
+    setImgFailed,
+    ratingText,
+    episodeBadge,
+    castLine,
+    isFavorited,
+    toggleFav,
+  } = usePosterCardData(item, cmsRemarksMap);
+  const { t } = useTranslation();
 
-  useEffect(() => setImgFailed(false), [item.cover]);
-
-  useEffect(() => {
-    let mounted = true;
-    if (item.title) {
-      db.favorites
-        .get(favoriteIdOf(item.title))
-        .then((entry) => {
-          if (mounted) setFavorited(Boolean(entry));
-        })
-        .catch(() => {});
-    }
-    return () => {
-      mounted = false;
-    };
-  }, [item.title]);
-
-  const numericRating = useMemo(() => {
-    if (item.rating === undefined || item.rating === null) return null;
-    const trimmed = String(item.rating).trim();
-    if (!trimmed) return null;
-    const num = parseFloat(trimmed);
-    if (!Number.isNaN(num) && num > 0 && num <= 10 && /^\d+(\.\d+)?$/.test(trimmed)) {
-      return num.toFixed(1);
-    }
-    return null;
-  }, [item.rating]);
-
-  const statusBadge = useMemo(() => {
-    return resolveEpisodeBadge(item, cmsRemarksMap);
-  }, [item, cmsRemarksMap]);
-
-  const castOrSubtitle = useMemo(() => {
-    if (item.actors && item.actors.length > 0) {
-      return `主演：${item.actors.slice(0, 3).join(' / ')}`;
-    }
-    if (item.card_subtitle) {
-      return item.card_subtitle;
-    }
-    return `${item.year || '2026'} · 4K 蓝光原画`;
-  }, [item.actors, item.card_subtitle, item.year]);
+  const statusBadge = episodeBadge;
+  const castOrSubtitle = castLine || `${item.year || '2026'} · ${t('hero.quality4k')}`;
 
   const plotSummary = useMemo(() => {
     if (item.overview && item.overview.trim()) {
       return item.overview.trim();
     }
-    return '全球高分臻选佳作，支持多源流式并发测速与蓝光秒播。';
-  }, [item.overview]);
+    return t('hero.tagline');
+  }, [item.overview, t]);
 
   const handleToggleFav = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!item.title) return;
-    try {
-      const added = await toggleFavorite({
-        title: item.title,
-        sourceKey: 'media',
-        vodId: item.id || item.title,
-        pic: item.cover,
-        year: item.year,
-        remarks: statusBadge,
-      });
-      setFavorited(added);
-    } catch {
-      // ignore
-    }
+    await toggleFav();
   };
 
   return (
@@ -378,7 +337,7 @@ export function DoubanCard({
       }}
     >
       <div className="block relative aspect-[2/3] w-full rounded-xl overflow-hidden bg-slate-800 border border-white/5 group-hover:border-amber-400/70 transition-all duration-300 shadow-md group-hover:shadow-glow-gold group-hover:-translate-y-1">
-        {item.cover && !imgFailed ? (
+        {showImg ? (
           <SmartImage
             url={item.cover}
             mode={imageProxyMode}
@@ -412,10 +371,10 @@ export function DoubanCard({
         </div>
 
         {/* 默认态左下角评分角标 */}
-        {numericRating && (
+        {ratingText && (
           <div className="absolute bottom-2 left-2 z-10 flex items-center gap-1 px-1.5 py-0.5 rounded bg-black/75 backdrop-blur-md text-amber-400 text-xs font-bold border border-amber-500/30 group-hover:opacity-0 transition-opacity">
             <span>★</span>
-            <span>{numericRating}</span>
+            <span>{ratingText}</span>
           </div>
         )}
 
@@ -424,8 +383,8 @@ export function DoubanCard({
           <div className="space-y-1.5 transform translate-y-2 group-hover:translate-y-0 transition-transform duration-300">
             <div className="flex items-center justify-between gap-1.5">
               <h4 className="text-xs sm:text-sm font-bold text-white truncate">{item.title}</h4>
-              {numericRating && (
-                <span className="text-xs font-bold text-amber-400 shrink-0">★ {numericRating}</span>
+              {ratingText && (
+                <span className="text-xs font-bold text-amber-400 shrink-0">★ {ratingText}</span>
               )}
             </div>
 
@@ -448,15 +407,15 @@ export function DoubanCard({
               <button
                 type="button"
                 onClick={handleToggleFav}
-                title={favorited ? '移出追剧单' : '一键追剧'}
+                title={isFavorited ? t('card.fav.remove') : t('card.fav.add')}
                 className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border transition-all cursor-pointer shrink-0 flex items-center gap-1 ${
-                  favorited
+                  isFavorited
                     ? 'bg-amber-500/25 border-amber-400 text-amber-300'
                     : 'bg-white/10 hover:bg-white/20 border-white/15 text-white'
                 }`}
               >
-                <span>{favorited ? '★' : '＋'}</span>
-                <span>{favorited ? '已追' : '追剧'}</span>
+                <span>{isFavorited ? '★' : '＋'}</span>
+                <span>{isFavorited ? t('card.fav.active') : t('card.fav.inactive')}</span>
               </button>
             </div>
           </div>

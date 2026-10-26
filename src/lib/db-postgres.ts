@@ -157,7 +157,7 @@ export async function initPostgresSchema(): Promise<boolean> {
 
     await client.query('COMMIT');
     globalThis.__libretv_schema_initialized__ = true;
-    console.log('[Neon PostgreSQL] 数据表结构幂等初始化/校验成功');
+    console.debug('[Neon PostgreSQL] 数据表结构幂等初始化/校验成功');
     return true;
   } catch (err) {
     await client.query('ROLLBACK');

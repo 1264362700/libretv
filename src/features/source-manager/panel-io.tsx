@@ -8,6 +8,7 @@ import { SectionTitle } from '@/components/settings-shared';
 import { useAppStore, type SourceSubscription } from '@/lib/store';
 import type { SourceConfig } from '@/lib/types';
 import { useToast } from '@/components/toast';
+import { useTranslation } from '@/lib/i18n';
 
 import { exportConfig, importConfig } from '@/lib/db';
 import { PERSIST_KEY } from '@/lib/persist-storage';
@@ -17,6 +18,7 @@ import { useUserSourcesSync } from '@/components/use-user-sources-sync';
 import { api } from '@/lib/client-api';
 
 export function ConfigIoPanel() {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const { verified, user, openLogin } = useAuth();
   const { syncing, lastSyncedAt, syncError, triggerManualSave } = useUserSourcesSync();
@@ -38,15 +40,15 @@ export function ConfigIoPanel() {
             selectedKeys: res.config.selectedKeys || [],
             subscriptions: (res.config.subscriptions || []) as SourceSubscription[],
           });
-          toast('已成功从 Neon 数据库拉取并覆盖本设备配置！', 'success');
+          toast(t('admin.synced'), 'success');
         } else {
-          toast('云端数据库中尚无个性化源记录', 'info');
+          toast(t('admin.noCloudSources'), 'info');
         }
       } else {
-        toast(res.error || '拉取失败', 'error');
+        toast(res.error || t('admin.pullFailed'), 'error');
       }
     } catch {
-      toast('网络拉取异常', 'error');
+      toast(t('admin.pullError'), 'error');
     } finally {
       setPullingCloud(false);
     }
@@ -66,18 +68,18 @@ export function ConfigIoPanel() {
       a.download = `LibreTV-Settings_${Date.now()}.json`;
       a.click();
       URL.revokeObjectURL(url);
-      toast('配置已导出', 'success');
+      toast(t('admin.configExported'), 'success');
     } catch {
-      toast('导出失败', 'error');
+      toast(t('admin.exportFailed2'), 'error');
     }
   };
 
   const pickImport = async (file: File) => {
     try {
-      const summary = summarizeConfig(await file.text());
+      const summary = summarizeConfig(await file.text(), t);
       setPending({ file, summary });
     } catch (err) {
-      toast(err instanceof Error ? err.message : '导入失败', 'error');
+      toast(err instanceof Error ? err.message : t('admin.configImportFailed'), 'error');
     }
   };
 
@@ -86,22 +88,22 @@ export function ConfigIoPanel() {
     try {
       await importConfig(await pending.file.text());
       setPending(null);
-      toast('配置导入成功，即将刷新页面', 'success');
+      toast(t('admin.configImported'), 'success');
       setTimeout(() => window.location.reload(), 1500);
     } catch (err) {
-      toast(err instanceof Error ? err.message : '导入失败', 'error');
+      toast(err instanceof Error ? err.message : t('admin.configImportFailed'), 'error');
     }
   };
 
   return (
     <section>
-      <SectionTitle title="配置导入导出" hint="导出/导入包含数据源、订阅与偏好设置的整机配置" />
+      <SectionTitle title={t('admin.panelConfigIo')} hint={t('admin.panelConfigIoDesc')} />
       <div className="flex gap-2">
         <button className="btn-ghost flex-1 text-xs" onClick={doExport}>
-          导出配置
+          {t('admin.panelExport')}
         </button>
         <label className="btn-ghost flex-1 text-xs cursor-pointer">
-          导入配置
+          {t('admin.panelImport')}
           <input
             type="file"
             accept=".json,application/json"
@@ -119,9 +121,9 @@ export function ConfigIoPanel() {
       <ConfirmDialog
         open={pending !== null}
         danger
-        title="导入配置并覆盖当前数据？"
-        message={pending ? `${pending.summary}。导入后将立即刷新页面，当前设备上的配置与观看历史会被覆盖。` : undefined}
-        confirmLabel="导入并覆盖"
+        title={t('admin.panelImportConfirm')}
+        message={pending ? t('admin.panelImportMessage', { summary: pending.summary }) : undefined}
+        confirmLabel={t('admin.panelImportOverwrite')}
         onCancel={() => setPending(null)}
         onConfirm={confirmImport}
       />
@@ -132,19 +134,19 @@ export function ConfigIoPanel() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
             <div className="flex items-center gap-1.5 font-semibold text-content">
               <span>☁️</span>
-              <span>Neon 数据库云端同步</span>
+              <span>{t('admin.panelCloudSync')}</span>
               <span className="text-[10px] px-1.5 py-0.5 rounded bg-success/15 text-success font-medium">
-                {syncing ? '正在同步...' : '自动双向同步已启用'}
+                {syncing ? t('admin.panelSyncing') : t('admin.subSyncEnabled')}
               </span>
             </div>
             {lastSyncedAt && (
               <span className="text-[11px] text-faint">
-                上次已同步: {new Date(lastSyncedAt).toLocaleTimeString()}
+                {t('admin.panelLastSync')}{new Date(lastSyncedAt).toLocaleTimeString()}
               </span>
             )}
           </div>
           <p className="text-[11px] text-faint leading-relaxed">
-            当前账号 [<strong>{user.username}</strong>] 的自定义源、订阅与勾选状态会自动防抖保存在主数据库，无论在手机、平板还是其他浏览器登录均无缝自动还原。
+            {t('admin.panelCloudDesc', { username: user.username })}<strong>{user.username}</strong>无论在手机、平板还是其他浏览器登录均无缝自动还原。
           </p>
           <div className="flex gap-2 pt-0.5">
             <button
@@ -153,10 +155,10 @@ export function ConfigIoPanel() {
               className="btn-secondary flex-1 py-1.5 text-xs active:scale-95 transition-all disabled:opacity-50"
               onClick={async () => {
                 const ok = await triggerManualSave();
-                if (ok) toast('已立即将当前配置同步推送到 Neon 数据库', 'success');
+                if (ok) toast(t('admin.pushed'), 'success');
               }}
             >
-              {syncing ? '同步中...' : '☁️ 立即同步至 Neon 数据库'}
+              {syncing ? t('admin.syncing') : t('admin.syncNeonBtn')}
             </button>
             <button
               type="button"
@@ -164,7 +166,7 @@ export function ConfigIoPanel() {
               className="btn-ghost flex-1 py-1.5 text-xs active:scale-95 transition-all disabled:opacity-50"
               onClick={handlePullFromCloud}
             >
-              {pullingCloud ? '拉取中...' : '🔄 从 Neon 数据库重新拉取'}
+              {pullingCloud ? t('admin.pulling') : t('admin.syncNeon')}
             </button>
           </div>
           {syncError && <p className="text-[11px] text-danger">⚠️ 同步提示: {syncError}</p>}
@@ -175,14 +177,14 @@ export function ConfigIoPanel() {
 }
 
 /** 解析配置文件概要（宽松，仅用于导入前预览） */
-function summarizeConfig(text: string): string {
+function summarizeConfig(text: string, t: (key: string, params?: Record<string, string | number>) => string): string {
   let cfg: { name?: string; data?: Record<string, unknown> };
   try {
     cfg = JSON.parse(text) as { name?: string; data?: Record<string, unknown> };
   } catch {
-    throw new Error('文件不是合法的 JSON');
+    throw new Error(t('admin.fileNotJson'));
   }
-  if (cfg.name !== 'LibreTV-Settings') throw new Error('不是 LibreTV 的配置文件');
+  if (cfg.name !== 'LibreTV-Settings') throw new Error(t('admin.notLibretvConfig'));
 
   const parts: string[] = [];
   const settingsRaw = cfg.data?.[PERSIST_KEY];
@@ -206,5 +208,5 @@ function summarizeConfig(text: string): string {
       /* 忽略 */
     }
   }
-  return parts.length > 0 ? `该文件包含 ${parts.join('、')}` : '该文件未包含可导入的数据';
+  return parts.length > 0 ? t('admin.fileContains', { parts: parts.join('、') }) : t('admin.fileNoData');
 }

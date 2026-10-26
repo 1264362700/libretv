@@ -399,7 +399,7 @@ export async function ensurePostgresLoaded(): Promise<void> {
       atomicWriteJsonSync(storeFile, inMemoryStore);
       saveUsersBackup(inMemoryStore);
       saveGlobalSourcesBackup(inMemoryStore);
-      console.log(`[Neon PostgreSQL] 成功加载主库数据（用户: ${Object.keys(inMemoryStore.users).length}, 全局源: ${Object.keys(inMemoryStore.globalSources).length}）`);
+      console.debug(`[Neon PostgreSQL] 成功加载主库数据（用户: ${Object.keys(inMemoryStore.users).length}, 全局源: ${Object.keys(inMemoryStore.globalSources).length}）`);
     } catch (err) {
       console.error('[Neon PostgreSQL] 主库加载异常，已平滑回退至本地存储:', err);
       loadStore();
@@ -489,7 +489,7 @@ function loadStore(): AuthDataStore {
       const prevContent = fs.readFileSync(prevStoreFile, 'utf-8');
       if (prevContent && prevContent.trim().length > 10) {
         loaded = JSON.parse(prevContent) as AuthDataStore;
-        console.log('[LibreTV] 成功从 auth-store.json.prev.json 世代快照还原数据');
+        console.debug('[LibreTV] 成功从 auth-store.json.prev.json 世代快照还原数据');
       }
     } catch (err) {
       console.warn('[LibreTV] auth-store.json.prev.json 解析异常:', err);

@@ -100,7 +100,7 @@ function CatalogContent() {
 
   return (
     <div className="min-h-screen flex flex-col bg-page text-content transition-colors duration-200">
-      <Header showSearch />
+      <Header />
 
       <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-5 space-y-4 pb-28 md:pb-8 overflow-x-hidden">
         {/* 频道大横幅与引导标语：沉浸式呈现当前频道 */}

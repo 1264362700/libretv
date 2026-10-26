@@ -11,6 +11,7 @@ import { useAppStore, resolveSource, isInDisabledSubscription, isSourceDisabled 
 import type { SourceSearchOutcome, DoubanItem } from '@/lib/types';
 import { CHANNELS, type ChannelType } from '@/lib/channels';
 import { PAGE_SIZE } from './catalog-config';
+import { buildMediaFeedParams } from '@/lib/media-feed';
 
 export interface CatalogFilterChanges {
   type?: string;
@@ -222,26 +223,25 @@ export function useCatalogData(filters: ReturnType<typeof useCatalogFilters>) {
     ],
     queryFn: async ({ signal }) => {
       // 片库浏览统一走官方全维资料库流式接口 (/api/media/feed)
-      const q = new URLSearchParams({
+      const q = buildMediaFeedParams({
         type: currentChannel,
-        page: String(currentPage),
+        page: currentPage,
         sort: currentSort,
+        area: currentRegion,
+        genre: currentGenre,
+        year: currentYear,
+        query: catalogKeyword,
       });
-      if (currentRegion && currentRegion !== '全部') q.set('area', currentRegion);
-      if (currentGenre && currentGenre !== '全部') q.set('genre', currentGenre);
-      if (currentYear && currentYear !== '全部') q.set('year', currentYear);
-      if (catalogKeyword) q.set('q', catalogKeyword);
 
       const res = await fetch(`/api/media/feed?${q.toString()}`, { signal });
       if (!res.ok) {
-        return { items: [], total: 0, pagecount: 1, subCategories: [] };
+        return { items: [], total: 0, pagecount: 1 };
       }
       const data = await res.json();
       return {
         items: Array.isArray(data.items) ? data.items : [],
         total: data.total || 0,
         pagecount: data.totalPages || 1,
-        subCategories: [],
       };
     },
     staleTime: 5 * 60_000,

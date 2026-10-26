@@ -3,6 +3,9 @@
 import { useEffect, useState } from 'react';
 import type { MediaItem } from '@/lib/media-library-service';
 import { resolveEpisodeBadge } from '@/lib/media-library-service';
+import { useAppStore } from '@/lib/store';
+import { useTranslation } from '@/lib/i18n';
+import { SmartImage } from './smart-image';
 
 export interface HeroBillboardBannerProps {
   items: MediaItem[];
@@ -13,23 +16,18 @@ export interface HeroBillboardBannerProps {
 }
 
 function BannerImage({ backdrop, cover, title }: { backdrop?: string; cover?: string; title: string }) {
-  const [src, setSrc] = useState(backdrop || cover || '');
-
-  useEffect(() => {
-    setSrc(backdrop || cover || '');
-  }, [backdrop, cover]);
-
-  if (!src) return null;
+  const imageProxyMode = useAppStore((s) => s.imageProxyMode);
+  const customImageProxy = useAppStore((s) => s.customImageProxy);
+  const url = backdrop || cover || '';
+  if (!url) return null;
 
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={src}
+    <SmartImage
+      url={url}
+      mode={imageProxyMode}
+      customProxy={customImageProxy}
       alt={title}
-      referrerPolicy="no-referrer"
-      onError={() => {
-        if (cover && src !== cover) setSrc(cover);
-      }}
+      loading="eager"
       className="w-full h-full object-cover object-center transform transition-transform duration-[8000ms] ease-out scale-105"
     />
   );
@@ -46,6 +44,7 @@ export function HeroBillboardBanner({
   onPlay,
   onDetail,
 }: HeroBillboardBannerProps) {
+  const { t } = useTranslation();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
 
@@ -100,12 +99,12 @@ export function HeroBillboardBanner({
             {/* Emerald Breathing Light */}
             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-950/85 border border-emerald-500/35 text-emerald-400 text-xs font-medium shadow-glow-emerald">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block" />
-              <span>{episodeBadge || '正在热映'}</span>
+              <span>{episodeBadge || t('hero.nowPlaying')}</span>
             </div>
 
             {/* Category Tag */}
             <span className="px-2.5 py-1 rounded-full bg-chip/80 border border-line text-content text-xs font-medium">
-              {current.typeName || '4K 蓝光原画'}
+              {current.typeName || t('hero.quality4k')}
             </span>
 
             {/* Year */}
@@ -143,7 +142,7 @@ export function HeroBillboardBanner({
           <p className="text-xs sm:text-sm text-muted line-clamp-2 leading-relaxed drop-shadow max-w-xl">
             {current.overview ||
               current.card_subtitle ||
-              '全球 4K 原画臻选大片，支持全网多点播采集源流式并发测速秒播。'}
+              t('hero.tagline')}
           </p>
 
           {/* 立即播放 / 详情 双按钮 */}

@@ -53,7 +53,7 @@ function HomeContent() {
 
   // 主采集源备注同步不是首屏展示的必要条件，延后启动，避免与首屏资料流请求抢占连接。
   useEffect(() => {
-    const timer = window.setTimeout(() => setRemarksSyncEnabled(true), 1200);
+    const timer = window.setTimeout(() => setRemarksSyncEnabled(true), 3000);
     return () => window.clearTimeout(timer);
   }, []);
 

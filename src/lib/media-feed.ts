@@ -21,3 +21,6 @@ export function buildMediaFeedParams(opts: {
   if (opts.query) sp.set('q', opts.query);
   return sp;
 }
+
+/** 首页趋势榜共享查询键：Hero 横幅与热播榜复用同一份 React Query 缓存。 */
+export const HOME_TRENDING_QUERY_KEY = ['home-trending-shared'] as const;

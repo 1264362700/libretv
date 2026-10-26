@@ -120,6 +120,7 @@ describe('media-library-service: fetchDoubanCollectionItems', () => {
     expect(capturedUrl).toContain('/api/media/feed');
     expect(capturedUrl).toContain('type=movie');
     expect(capturedUrl).toContain('sort=rank');
+    expect(capturedUrl).toContain('/api/media/feed?type=movie&page=1&sort=rank');
     expect(res.items).toHaveLength(1);
     expect(res.items[0].cover).toBe('https://image.tmdb.org/t/p/w500/dune2.jpg');
     expect(res.items[0].title).toBe('沙丘2');

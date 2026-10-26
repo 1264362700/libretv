@@ -52,11 +52,14 @@ export function MobileBottomBar() {
     indicator.style.left = `${left}px`;
     indicator.style.width = `${width}px`;
     if (typeof indicator.animate === 'function' && indicator.dataset.ready === 'true') {
+      const movingRight = left >= previousLeft;
+      indicator.style.transformOrigin = movingRight ? 'left center' : 'right center';
       indicator.animate([
         { transform: `translateX(${previousLeft - left}px) scaleX(${previousWidth / Math.max(width, 1)})` },
-        { transform: `translateX(${(left - previousLeft) * 0.12}px) scaleX(1.1)`, offset: 0.68 },
+        { transform: `translateX(${(left - previousLeft) * 0.08}px) scaleX(1.14)`, offset: 0.62 },
+        { transform: `translateX(${(left - previousLeft) * -0.025}px) scaleX(0.97)`, offset: 0.84 },
         { transform: 'translateX(0) scaleX(1)' }
-      ], { duration: 480, easing: 'cubic-bezier(.2,1.25,.35,1)' });
+      ], { duration: 560, easing: 'cubic-bezier(.18,.9,.25,1)', fill: 'both' });
     }
     indicator.dataset.left = String(left);
     indicator.dataset.width = String(width);

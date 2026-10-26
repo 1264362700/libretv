@@ -2,10 +2,14 @@
 
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { useQueryClient } from '@tanstack/react-query';
 import { api, onUnauthorized, STATUS_QUERY_KEY } from '@/lib/client-api';
 import { useToast } from './toast';
-import { AdminModal } from './admin-modal';
+const AdminModal = dynamic(
+  () => import('./admin-modal').then((module) => module.AdminModal),
+  { ssr: false }
+);
 
 export interface CurrentUser {
   username: string;
@@ -159,7 +163,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }}
     >
       {children}
-      {isAdmin && <AdminModal open={adminModalOpen} onClose={() => setAdminModalOpen(false)} />}
+      {isAdmin && adminModalOpen && (
+        <AdminModal open onClose={() => setAdminModalOpen(false)} />
+      )}
     </AuthContext.Provider>
   );
 }

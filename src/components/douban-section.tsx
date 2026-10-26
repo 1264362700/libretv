@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import type { TmdbMediaItem } from '@/lib/tmdb';
 import { resolveEpisodeBadge } from '@/lib/media-library-service';
-import { buildMediaFeedParams } from '@/lib/media-feed';
+import { buildMediaFeedParams, fetchMediaFeedJson } from '@/lib/media-feed';
 import { DoubanCard } from './video-card';
 
 interface TmdbApiResponse {
@@ -35,11 +35,8 @@ async function fetchTmdbClient(
     year: params.year,
   });
 
-  const res = await fetch(`/api/media/feed?${sp.toString()}`, { signal });
-  if (!res.ok) {
-    throw new Error(`资料库请求失败 (${res.status})`);
-  }
-  return res.json();
+  // 同 URL 的并发请求由共享门面合并；不影响各楼层独立的查询 key。
+  return fetchMediaFeedJson<TmdbApiResponse>(`/api/media/feed?${sp.toString()}`);
 }
 
 const MOVIE_CATEGORIES: {

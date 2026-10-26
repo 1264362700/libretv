@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from '@/lib/i18n';
 import { api } from '@/lib/client-api';
 import { useToast } from './toast';
 import { cn } from '@/lib/utils';
@@ -40,6 +41,7 @@ interface SourceItem {
 
 export function AdminModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { toast } = useToast();
+  const { t } = useTranslation();
   const [tab, setTab] = useState<'invites' | 'users' | 'sources' | 'persistence'>('invites');
 
   // 邀请码状态
@@ -110,18 +112,18 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
       const res = await api.admin.getInvites();
       if (res.success) setInvites(res.invites);
     } catch {
-      toast('获取邀请码失败', 'error');
+      toast(t('admin.getInvitesFailed'), 'error');
     }
-  }, [toast]);
+  }, [toast, t]);
 
   const fetchUsers = useCallback(async () => {
     try {
       const res = await api.admin.getUsers();
       if (res.success) setUsers(res.users);
     } catch {
-      toast('获取用户列表失败', 'error');
+      toast(t('admin.getUsersFailed'), 'error');
     }
-  }, [toast]);
+  }, [toast, t]);
 
   const fetchSources = useCallback(async () => {
     try {
@@ -131,9 +133,9 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
         if (res.backup) setSourcesBackup(res.backup);
       }
     } catch {
-      toast('获取源列表失败', 'error');
+      toast(t('admin.getSourcesFailed'), 'error');
     }
-  }, [toast]);
+  }, [toast, t]);
 
   const fetchStorageInfo = useCallback(async () => {
     try {
@@ -156,14 +158,14 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
       const res = await api.admin.testNeon();
       if (res.ok) {
         setNeonStatus({ configured: true, ok: true, latencyMs: res.latencyMs, tableCounts: res.tableCounts });
-        toast(`Neon 主库连接正常！响应延迟: ${res.latencyMs ?? 0}ms`, 'success');
+        toast(t('admin.neonOk', { latency: res.latencyMs ?? 0 }), 'success');
       } else {
         setNeonStatus({ configured: Boolean(storageDiagnostics?.database?.configured), ok: false, error: res.error });
-        toast(res.error || '主库连接探测失败', 'error');
+        toast(res.error || t('admin.probeFailed'), 'error');
       }
       fetchStorageInfo();
     } catch (e) {
-      toast(e instanceof Error ? e.message : '探测异常', 'error');
+      toast(e instanceof Error ? e.message : t('admin.probeError'), 'error');
     } finally {
       setTestingNeon(false);
     }
@@ -175,16 +177,16 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
       const res = await api.admin.pushToNeon();
       if (res.success) {
         toast(
-          `全量数据已成功推送写入 Neon 数据库！(用户: ${res.stats.users}, 邀请码: ${res.stats.invites}, 全局源: ${res.stats.sources}, 用户配置: ${res.stats.userConfigs})`,
+          t('admin.pushOk', { users: res.stats.users, invites: res.stats.invites, sources: res.stats.sources, userConfigs: res.stats.userConfigs }),
           'success'
         );
         fetchStorageInfo();
         handleTestNeon();
       } else {
-        toast(res.error || '推送 Neon 失败', 'error');
+        toast(res.error || t('admin.pushFailed'), 'error');
       }
     } catch (e) {
-      toast(e instanceof Error ? e.message : '推送 Neon 异常', 'error');
+      toast(e instanceof Error ? e.message : t('admin.pushError'), 'error');
     } finally {
       setPushingToNeon(false);
     }
@@ -197,35 +199,35 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
       if (res.success) {
         const stats = res.stats;
         toast(
-          `全量冷备已写入 GitHub Gist！包含 ${stats?.usersCount ?? 0} 用户, ${stats?.invitesCount ?? 0} 邀请码, ${stats?.sourcesCount ?? 0} 全站源`,
+          t('admin.gistBackupOk', { users: stats?.usersCount ?? 0, invites: stats?.invitesCount ?? 0, sources: stats?.sourcesCount ?? 0 }),
           'success'
         );
         fetchStorageInfo();
       } else {
-        toast(res.error || '导出冷备失败', 'error');
+        toast(res.error || t('admin.exportFailed'), 'error');
       }
     } catch (e) {
-      toast(e instanceof Error ? e.message : '导出冷备异常', 'error');
+      toast(e instanceof Error ? e.message : t('admin.exportError'), 'error');
     } finally {
       setExportingGist(false);
     }
   };
 
   const handleRestoreGistToNeon = async () => {
-    if (!window.confirm('⚠️ 容灾恢复将从 Gist 拉取备份覆盖/合并至 Neon 主库，确定执行吗？')) return;
+    if (!window.confirm(t('admin.restoreConfirm'))) return;
     setRestoringGist(true);
     try {
       const res = await api.admin.restoreFromGist();
       if (res.success) {
-        toast('容灾数据已成功还原至 Neon 主库！', 'success');
+        toast(t('admin.restoreSuccess'), 'success');
         fetchStorageInfo();
         fetchUsers();
         fetchSources();
       } else {
-        toast(res.error || '从 Gist 容灾还原失败', 'error');
+        toast(res.error || t('admin.restoreFailed3'), 'error');
       }
     } catch (e) {
-      toast(e instanceof Error ? e.message : '容灾恢复异常', 'error');
+      toast(e instanceof Error ? e.message : t('admin.restoreError'), 'error');
     } finally {
       setRestoringGist(false);
     }
@@ -242,24 +244,24 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
 
   const handleSaveToken = async () => {
     if (!customToken.trim()) {
-      toast('请输入 GitHub Classic Personal Access Token (ghp_...)', 'warning');
+      toast(t('admin.token.placeholder'), 'warning');
       return;
     }
     setSavingToken(true);
     try {
       const res = await api.admin.saveGithubToken(customToken.trim());
       if (res.success) {
-        toast('GitHub Token 已验证成功并保存，数据已同步至专属私有 Gist！', 'success');
+        toast(t('admin.token.saved'), 'success');
         setCustomToken('');
         setShowTokenInput(false);
         fetchStorageInfo();
         fetchUsers();
         fetchInvites();
       } else {
-        toast(res.error || 'Token 验证失败，请确保具有 gist 读写权限', 'error');
+        toast(res.error || t('admin.token.invalid'), 'error');
       }
     } catch {
-      toast('Token 保存异常，请检查网络', 'error');
+      toast(t('admin.token.saveFailed'), 'error');
     } finally {
       setSavingToken(false);
     }
@@ -267,7 +269,7 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
 
   const handleExportBackup = () => {
     window.open(api.admin.exportBackupUrl, '_blank');
-    toast('全量离线备份文件已开始下载', 'info');
+    toast(t('admin.downloadBackup'), 'info');
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -280,7 +282,7 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
       try {
         data = JSON.parse(text);
       } catch {
-        toast('备份文件损坏，无法解析为 JSON', 'error');
+        toast(t('admin.backupCorrupt'), 'error');
         setImportingBackup(false);
         if (fileInputRef.current) fileInputRef.current.value = '';
         return;
@@ -288,7 +290,7 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
       const res = await api.admin.importBackup(data);
       if (res.success) {
         toast(
-          `备份导入成功！已恢复 ${res.userCount ?? 0} 个用户，${res.inviteCount ?? 0} 个邀请码，${res.sourceCount ?? 0} 个全局源`,
+          t('admin.importOk', { users: res.userCount ?? 0, invites: res.inviteCount ?? 0, sources: res.sourceCount ?? 0 }),
           'success'
         );
         fetchStorageInfo();
@@ -296,10 +298,10 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
         fetchInvites();
         fetchSources();
       } else {
-        toast(res.error || '导入备份失败', 'error');
+        toast(res.error || t('admin.importFailed'), 'error');
       }
     } catch {
-      toast('读取备份文件失败', 'error');
+      toast(t('admin.readFailed'), 'error');
     } finally {
       setImportingBackup(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -312,11 +314,11 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
     try {
       const res = await api.admin.createInvites({ count: inviteCount, maxUses: inviteMaxUses });
       if (res.success) {
-        toast(`成功生成 ${res.codes.length} 个邀请码`, 'success');
+        toast(t('admin.genInvitesOk', { count: res.codes.length }), 'success');
         fetchInvites();
       }
     } catch {
-      toast('生成邀请码失败', 'error');
+      toast(t('admin.generateFailed'), 'error');
     } finally {
       setGenerating(false);
     }
@@ -327,11 +329,11 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
     try {
       const res = await api.admin.revokeInvite(code);
       if (res.success) {
-        toast('已作废该邀请码', 'info');
+        toast(t('admin.revokedInvite'), 'info');
         fetchInvites();
       }
     } catch {
-      toast('作废失败', 'error');
+      toast(t('admin.revokeFailed'), 'error');
     }
   };
 
@@ -344,15 +346,15 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
   const handleCopyInviteLink = async (code: string) => {
     const url = getInviteUrl(code);
     const ok = await copyToClipboard(url);
-    if (ok) toast('邀请直达链接已复制到剪贴板！', 'success');
+    if (ok) toast(t('admin.linkCopied'), 'success');
   };
 
   // 复制带链接的完整邀请口令
   const handleCopyInvite = async (code: string) => {
     const url = getInviteUrl(code);
-    const text = `您好，这是 cl 影视注册邀请直达链接：\n${url}\n（专属邀请码：${code}），点击直接进入注册！`;
+    const text = t('admin.inviteMessage', { url, code });
     const ok = await copyToClipboard(text);
-    if (ok) toast('邀请口令与链接已复制到剪贴板', 'success');
+    if (ok) toast(t('admin.inviteCopied'), 'success');
   };
 
   // 用户操作
@@ -360,24 +362,24 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
     try {
       if (user.status === 'active') {
         await api.admin.banUser(user.username);
-        toast(`已封禁用户 ${user.username}`, 'info');
+        toast(t('admin.userBanned', { username: user.username }), 'info');
       } else {
         await api.admin.unbanUser(user.username);
-        toast(`已解封用户 ${user.username}`, 'success');
+        toast(t('admin.userUnbanned', { username: user.username }), 'success');
       }
       fetchUsers();
     } catch {
-      toast('操作失败', 'error');
+      toast(t('admin.actionFailed'), 'error');
     }
   };
 
   const handleKickUser = async (username: string) => {
     try {
       await api.admin.kickUser(username);
-      toast(`已强制用户 ${username} 互踢下线`, 'success');
+      toast(t('admin.userKicked', { username }), 'success');
       fetchUsers();
     } catch {
-      toast('踢出失败', 'error');
+      toast(t('admin.kickFailed'), 'error');
     }
   };
 
@@ -386,44 +388,44 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
     try {
       const res = await api.admin.resetPassword(resettingUser, newPassword);
       if (res.success) {
-        toast(`已将 ${resettingUser} 的密码重置，该账号已被强制踢下线`, 'success');
+        toast(t('admin.userReset', { username: resettingUser }), 'success');
         setResettingUser(null);
         setNewPassword('');
         fetchUsers();
       } else {
-        toast(res.error || '重置失败', 'error');
+        toast(res.error || t('admin.resetFailed'), 'error');
       }
     } catch {
-      toast('重置失败', 'error');
+      toast(t('admin.resetFailed'), 'error');
     }
   };
 
   // 全局源添加
   const handleAddSource = async () => {
     if (!sourceName.trim() || !sourceUrl.trim()) {
-      toast('请完整填写名称与接口地址', 'warning');
+      toast(t('admin.addApiIncomplete'), 'warning');
       return;
     }
     try {
       const res = await api.admin.addSource({ name: sourceName, url: sourceUrl, type: sourceType });
       if (res.success) {
-        toast('全局源已成功发布，全员免配置同步生效', 'success');
+        toast(t('admin.globalPublished'), 'success');
         setSourceName('');
         setSourceUrl('');
         fetchSources();
       }
     } catch {
-      toast('添加失败', 'error');
+      toast(t('admin.addFailed'), 'error');
     }
   };
 
   const handleRemoveSource = async (key: string) => {
     try {
       await api.admin.removeSource(key);
-      toast('已移除该全局源', 'info');
+      toast(t('admin.globalRemoved'), 'info');
       fetchSources();
     } catch {
-      toast('删除失败', 'error');
+      toast(t('admin.deleteFailed'), 'error');
     }
   };
 
@@ -432,13 +434,13 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
     try {
       const res = await api.admin.backupSources();
       if (res.success) {
-        toast(`物理备份成功，共备份 ${res.count} 个源`, 'success');
+        toast(t('admin.sourceBackupOk', { count: res.count }), 'success');
         fetchSources();
       } else {
-        toast(res.error || '备份失败', 'error');
+        toast(res.error || t('admin.backupFailed'), 'error');
       }
     } catch {
-      toast('备份失败', 'error');
+      toast(t('admin.backupFailed'), 'error');
     } finally {
       setBackingUpSources(false);
     }
@@ -449,13 +451,13 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
     try {
       const res = await api.admin.restoreSources();
       if (res.success) {
-        toast(`智能合并恢复成功，当前共 ${res.count} 个有效源`, 'success');
+        toast(t('admin.mergeRestoreOk', { count: res.count }), 'success');
         fetchSources();
       } else {
-        toast(res.error || '合并恢复失败', 'error');
+        toast(res.error || t('admin.mergeFailed'), 'error');
       }
     } catch {
-      toast('合并恢复失败', 'error');
+      toast(t('admin.mergeFailed'), 'error');
     } finally {
       setRestoringSources(false);
     }
@@ -495,28 +497,28 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
             active={tab === 'invites'}
             onClick={() => setTab('invites')}
             icon="🎟️"
-            label="邀请码管理"
+            label={t('admin.tabInvites')}
             badge={invites.length > 0 ? invites.length : undefined}
           />
           <TabButton
             active={tab === 'users'}
             onClick={() => setTab('users')}
             icon="👥"
-            label="用户管理"
+            label={t('admin.tabUsers')}
             badge={users.length > 0 ? users.length : undefined}
           />
           <TabButton
             active={tab === 'sources'}
             onClick={() => setTab('sources')}
             icon="📡"
-            label="全局源管理"
+            label={t('admin.tabSources')}
             badge={sources.length > 0 ? sources.length : undefined}
           />
           <TabButton
             active={tab === 'persistence'}
             onClick={() => setTab('persistence')}
             icon="🛡️"
-            label="持久化与数据安全"
+            label={t('admin.tabPersistence')}
             badge={neonStatus?.ok ? 'Neon' : storageDiagnostics?.database?.configured ? 'Neon' : undefined}
             badgeColor={neonStatus?.ok ? 'bg-success/20 text-success font-bold' : undefined}
           />
@@ -560,7 +562,7 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
                   onClick={handleGenerateInvites}
                   disabled={generating}
                 >
-                  {generating ? '生成中...' : '+ 立即下发邀请码'}
+                  {generating ? t('admin.generating') : t('admin.addInvite')}
                 </button>
               </div>
 
@@ -593,9 +595,9 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
                         >
                           {inv.active
                             ? inv.useCount >= inv.maxUses
-                              ? '已用完'
-                              : `可用 (${inv.useCount}/${inv.maxUses})`
-                            : '已作废'}
+                              ? t('admin.usedUp')
+                              : t('admin.inviteAvailable', { used: inv.useCount, max: inv.maxUses })
+                            : t('admin.revoked')}
                         </span>
                       </div>
 
@@ -613,14 +615,14 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
                           <button
                             className="px-2 py-0.5 rounded bg-accent/15 hover:bg-accent/25 text-accent font-semibold text-[11px] active:scale-95"
                             onClick={() => handleCopyInviteLink(inv.code)}
-                            title="复制直达注册链接（包含邀请码）"
+                            title={t('admin.copyInviteLink')}
                           >
                             🔗 复制链接
                           </button>
                           <button
                             className="px-2 py-0.5 rounded bg-chip hover:bg-hover text-muted hover:text-content text-[11px] active:scale-95"
                             onClick={() => handleCopyInvite(inv.code)}
-                            title="复制带链接的邀请口令"
+                            title={t('admin.copyInviteCode')}
                           >
                             复制口令
                           </button>
@@ -649,7 +651,7 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
                 <div className="flex items-center gap-2 text-faint">
                   <span className="text-base">🛡️</span>
                   <span>
-                    当前超级管理员账号：<strong className="text-content font-mono font-bold text-accent">{storageDiagnostics?.superAdminUsername || 'admin'}</strong>。可在 Render 环境变量配置 <code className="text-accent">ADMIN_USERNAME</code> 随时自定义指定。
+                    {t('admin.superAdminHint')}<strong className="text-content font-mono font-bold text-accent">{storageDiagnostics?.superAdminUsername || 'admin'}</strong>{t('admin.superAdminEnvPrefix')}<code className="text-accent">ADMIN_USERNAME</code>{t('admin.superAdminEnvSuffix')}
                   </span>
                 </div>
                 {storageDiagnostics?.isDefaultPassword && (
@@ -683,7 +685,7 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
                               {u.isSuperAdmin && (
                                 <span
                                   className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 font-bold border border-amber-500/30 flex items-center gap-0.5"
-                                  title="超级管理员（享有系统最高权限，不可封禁）"
+                                  title={t('admin.superAdminTitle')}
                                 >
                                   <span>👑</span>
                                   <span>超级管理员</span>
@@ -700,7 +702,7 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
                                   : 'bg-chip text-muted'
                               )}
                             >
-                              {u.role === 'admin' ? '管理员' : '普通用户'}
+                              {u.role === 'admin' ? t('admin.roleAdmin') : t('admin.roleUser')}
                             </span>
                           </td>
                           <td className="p-3">
@@ -710,7 +712,7 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
                                 u.status === 'active' ? 'bg-success/15 text-success' : 'bg-danger/15 text-danger'
                               )}
                             >
-                              {u.status === 'active' ? '正常' : '已封禁'}
+                              {u.status === 'active' ? t('admin.statusActive') : t('admin.banned')}
                             </span>
                           </td>
                           <td className="p-3 font-mono text-faint">v{u.sessionVersion}</td>
@@ -721,9 +723,9 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
                                 <button
                                   className="px-2 py-1 rounded bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 text-[11px] active:scale-95"
                                   onClick={() => handleKickUser(u.username)}
-                                  title="递增会话版本，强制其在所有设备立刻下线"
+                                  title={t('admin.kickTitle')}
                                 >
-                                  踢下线
+                                  {t('admin.kickOffline')}
                                 </button>
                                 <button
                                   className={cn(
@@ -734,7 +736,7 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
                                   )}
                                   onClick={() => handleBanToggle(u)}
                                 >
-                                  {u.status === 'active' ? '封禁' : '解封'}
+                                  {u.status === 'active' ? t('admin.ban') : t('admin.unban')}
                                 </button>
                               </>
                             )}
@@ -758,7 +760,7 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
                   <span className="text-xs text-content font-medium">重置 [{resettingUser}] 密码:</span>
                   <input
                     type="password"
-                    placeholder="输入至少6位新密码"
+                    placeholder={t('admin.resetPasswordPlaceholder')}
                     className="input py-1 px-2 text-xs flex-1 max-w-xs"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
@@ -788,18 +790,18 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
                 <div className="space-y-0.5">
                   <div className="flex items-center gap-2">
                     <span className="text-sm">💾</span>
-                    <span className="text-xs font-bold text-content">全局源物理备份与环境变量合并引擎</span>
+                    <span className="text-xs font-bold text-content">{t('admin.sourcesEngineLabel')}</span>
                     <span
                       className={cn(
                         'text-[10px] px-1.5 py-0.5 rounded font-mono',
                         sourcesBackup?.exists ? 'bg-success/15 text-success' : 'bg-warning/15 text-warning'
                       )}
                     >
-                      {sourcesBackup?.exists ? `已就绪 · ${sourcesBackup.count} 个源备份` : '未检测到独立备份'}
+                      {sourcesBackup?.exists ? t('admin.backupReady', { count: sourcesBackup.count }) : t('admin.noBackup')}
                     </span>
                   </div>
                   <p className="text-[11px] text-faint">
-                    启动时自动读取物理备份与环境变量 (DEFAULT_SOURCES / DEFAULT_LIVE_SOURCES) 智能去重合并
+                    {t('admin.sourcesHint')}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
@@ -808,18 +810,18 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
                     disabled={backingUpSources}
                     className="px-2.5 py-1 text-xs rounded-lg border border-line bg-chip hover:bg-hover text-muted hover:text-content active:scale-95 transition-all disabled:opacity-50"
                     onClick={handleBackupSources}
-                    title="立即将当前全部源强制写入独立物理备份文件"
+                    title={t('admin.backupSourcesTitle')}
                   >
-                    {backingUpSources ? '备份中...' : '立即写入备份'}
+                    {backingUpSources ? t('admin.backingUp') : t('admin.writeBackup')}
                   </button>
                   <button
                     type="button"
                     disabled={restoringSources}
                     className="px-2.5 py-1 text-xs rounded-lg border border-accent/40 bg-accent/10 hover:bg-accent/20 text-accent font-medium active:scale-95 transition-all disabled:opacity-50"
                     onClick={handleRestoreSources}
-                    title="重新读取独立物理备份 + 环境变量进行增量智能合并"
+                    title={t('admin.restoreSourcesTitle')}
                   >
-                    {restoringSources ? '合并中...' : '智能合并恢复'}
+                    {restoringSources ? t('admin.mergeInProgress') : t('admin.restoreInProgress')}
                   </button>
                 </div>
               </div>
@@ -829,13 +831,13 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
                 <h3 className="text-xs font-semibold text-content">发布全局公共源（全员自动同步）</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <input
-                    placeholder="源名称（如：官方极速站）"
+                    placeholder={t('admin.sourceNamePlaceholder')}
                     className="input py-1.5 px-3 text-xs"
                     value={sourceName}
                     onChange={(e) => setSourceName(e.target.value)}
                   />
                   <input
-                    placeholder="接口地址（http(s)://...）"
+                    placeholder={t('admin.sourceUrlPlaceholder')}
                     className="input py-1.5 px-3 text-xs sm:col-span-2"
                     value={sourceUrl}
                     onChange={(e) => setSourceUrl(e.target.value)}
@@ -875,7 +877,7 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
                         <div className="flex items-center gap-2">
                           <span className="font-semibold text-xs text-content">{s.name}</span>
                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-chip text-muted">
-                            {s.type === 'vod' ? '影视站' : '直播源'}
+                            {s.type === 'vod' ? t('admin.movie') : t('admin.live')}
                           </span>
                         </div>
                         <p className="text-[11px] text-faint truncate mt-0.5 font-mono">{s.url}</p>
@@ -884,7 +886,7 @@ export function AdminModal({ open, onClose }: { open: boolean; onClose: () => vo
                         className="px-2.5 py-1 rounded bg-danger/10 hover:bg-danger/20 text-danger text-xs active:scale-95 shrink-0"
                         onClick={() => handleRemoveSource(s.key)}
                       >
-                        删除
+                        {t('admin.delete')}
                       </button>
                     </div>
                   ))}

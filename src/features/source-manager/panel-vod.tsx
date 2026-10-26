@@ -11,6 +11,7 @@ import { useSourceProbe } from '@/components/use-source-probe';
 import { isSourceDisabled, useAppStore } from '@/lib/store';
 import type { SourceConfig } from '@/lib/types';
 import { useToast } from '@/components/toast';
+import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 
 import { api } from '@/lib/client-api';
@@ -20,16 +21,17 @@ import { SourceForm } from './source-form';
 type VodFilter = 'all' | 'enabled' | 'disabled' | 'sub' | 'manual';
 
 // 与直播源面板保持同一组筛选项与顺序：先状态（已启用 / 已停用），后来源（来自订阅 / 手动添加）
-const VOD_FILTERS: { id: VodFilter; label: string }[] = [
-  { id: 'all', label: '全部' },
-  { id: 'enabled', label: '已启用' },
-  { id: 'disabled', label: '已停用' },
-  { id: 'sub', label: '来自订阅' },
-  { id: 'manual', label: '手动添加' },
+const VOD_FILTERS: { id: VodFilter; labelKey: string }[] = [
+  { id: 'all', labelKey: 'admin.filterAll' },
+  { id: 'enabled', labelKey: 'admin.subEnabled' },
+  { id: 'disabled', labelKey: 'admin.subDisabled' },
+  { id: 'sub', labelKey: 'admin.fromSub' },
+  { id: 'manual', labelKey: 'admin.addCustom' },
 ];
 export function VodSourcesPanel() {
   const store = useAppStore();
   const { toast } = useToast();
+  const { t } = useTranslation();
   const [editing, setEditing] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<VodFilter>('all');
@@ -92,7 +94,7 @@ export function VodSourcesPanel() {
   return (
     <section>
       <SectionTitle
-        title="点播源"
+        title={t('admin.panelVodSources')}
         hint={
           empty
             ? undefined
@@ -101,7 +103,7 @@ export function VodSourcesPanel() {
         extra={
           <button className="btn-primary btn-sm" onClick={() => setEditing('__new__')}>
             <Icon name="plus" className="w-3.5 h-3.5" />
-            添加 API
+            {t('admin.panelAddApi')}
           </button>
         }
       />
@@ -118,18 +120,18 @@ export function VodSourcesPanel() {
       {empty && editing !== '__new__' ? (
         <EmptyState
           icon="link"
-          title="还没有添加任何点播源"
-          description="添加一个 Apple CMS 采集站 API 即可开始搜索影片；也可到「数据源订阅」一次导入点播源与直播源"
+          title={t('admin.panelNoSources')}
+          description={t('admin.panelAddApiHint')}
           action={
             <button className="btn-primary btn-sm" onClick={() => setEditing('__new__')}>
-              添加第一个点播源
+              {t('admin.panelAddFirst')}
             </button>
           }
         />
       ) : (
         <>
           <div className="space-y-2 mb-3">
-            <SearchInput value={query} onChange={setQuery} placeholder="搜索名称或地址" />
+            <SearchInput value={query} onChange={setQuery} placeholder={t('admin.panelSearchPlaceholder')} />
             <div className="flex flex-wrap items-center gap-1">
               {VOD_FILTERS.map((f) => (
                 <button
@@ -141,26 +143,26 @@ export function VodSourcesPanel() {
                   onClick={() => setFilter(f.id)}
                   aria-pressed={filter === f.id}
                 >
-                  {f.label}
+                  {t(f.labelKey)}
                 </button>
               ))}
-              <span className="ml-auto text-[11px] text-faint">显示 {filtered.length} 个</span>
+              <span className="ml-auto text-[11px] text-faint">{t('admin.panelShowing', { count: filtered.length })}</span>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <button className="btn-ghost btn-sm" onClick={toggleAll} disabled={filtered.length === 0}>
-                {allSelected ? '全部停用' : '全部启用'}
+                {allSelected ? t('admin.resetAll') : t('admin.enableAll')}
               </button>
               <button
                 className="btn-ghost btn-sm"
                 onClick={runAll}
                 disabled={filtered.length === 0}
               >
-                {isProbing ? '取消测活' : '批量测活'}
+                {isProbing ? t('admin.cancelTest') : t('admin.batchTest')}
               </button>
               {/* 查看「已停用」时提供一键恢复，省去逐个点击 */}
               {filter === 'disabled' && (
                 <button className="btn-ghost btn-sm" onClick={restoreAll} disabled={filtered.length === 0}>
-                  全部恢复
+                  {t('admin.panelRestoreAll')}
                 </button>
               )}
             </div>
@@ -173,18 +175,18 @@ export function VodSourcesPanel() {
                   />
                 </div>
                 <span className="tabular-nums shrink-0">
-                  {progress.done}/{progress.total} · 可用 {progress.ok}
+                  {t('admin.panelProgress', { done: progress.done, total: progress.total, ok: progress.ok })}
                   {formatEta(progress.done, progress.total, progress.startedAt)}
                 </span>
                 <button className="btn-ghost btn-sm shrink-0" onClick={cancel}>
-                  取消
+                  {t('admin.panelCancel')}
                 </button>
               </div>
             )}
           </div>
 
           {filtered.length === 0 ? (
-            <EmptyState variant="plain" title="没有符合条件的源" />
+            <EmptyState variant="plain" title={t('admin.panelNoMatch')} />
           ) : (
             <ul className="space-y-2">
               {filtered.map((source) => (
@@ -248,6 +250,7 @@ function VodSourceRow({
   onTest: () => void;
 }) {
   const selected = useAppStore((s) => s.selectedKeys.includes(api.key));
+  const { t } = useTranslation();
   const yellowFilter = useAppStore((s) => s.yellowFilter);
   const toast = useToast().toast;
   const fromSubscription = api.key.startsWith('sub_');
@@ -257,12 +260,12 @@ function VodSourceRow({
     const snapshot = useAppStore.getState().removeCustomApi(api.key);
     if (!snapshot) return;
     // 轻操作：不做确认弹窗，给 6 秒撤销窗口
-    toast(`已移除「${api.name}」`, 'info', {
+    toast(t('admin.sourceRemoved', { name: api.name }), 'info', {
       action: {
-        label: '撤销',
+        label: t('admin.undo'),
         onClick: () => {
           const ok = useAppStore.getState().restoreCustomApi(snapshot);
-          toast(ok ? '已恢复' : '恢复失败：该源位置已被重新占用', ok ? 'success' : 'warning');
+          toast(ok ? t('admin.restored') : t('admin.restoreFailed2'), ok ? 'success' : 'warning');
         },
       },
     });
@@ -293,10 +296,10 @@ function VodSourceRow({
           disabled={adultBlocked}
           title={
             adultBlocked
-              ? '成人内容过滤开启中，需先关闭过滤才能启用此源'
+              ? t('admin.adultBlockHint')
               : selected
-                ? '已勾选：参与全网多源聚合搜索；取消勾选后仅用于播放页备用线路'
-                : '未勾选：仅在播放页作为播放线路，不参与全网并发搜索'
+                ? t('admin.checkedHint')
+                : t('admin.uncheckedHint')
           }
           aria-label={`选择 ${api.name}`}
         />
@@ -306,13 +309,13 @@ function VodSourceRow({
             {api.isAdult && <span className="text-pink-400 text-xs ml-1">(18+)</span>}
             {isEnv && (
               <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-chip text-faint align-middle">
-                部署者预置
+                {t('admin.panelDeployed')}
               </span>
             )}
             {fromSubscription && (
               <span
                 className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-accent/10 text-accent align-middle"
-                title="来自数据源订阅，重新同步时此源的名称/地址会以订阅内容为准"
+                title={t('admin.panelFromSubBadge')}
               >
                 订阅
               </span>
@@ -324,7 +327,7 @@ function VodSourceRow({
         <TestBadge
           state={testState}
           onTest={onTest}
-          title="测试可用性（搜索耗时与结果量）"
+          title={t('admin.panelTesting')}
           badgeWhenOk={({ ms }) => `✓ ${ms}ms`}
         />
         {!isEnv &&
@@ -334,16 +337,16 @@ function VodSourceRow({
               <button
                 className="rounded-md p-2 text-muted/30 cursor-not-allowed shrink-0"
                 disabled
-                aria-label="订阅源不可单独编辑"
-                title="该源来自订阅，修改会在下次同步时被覆盖；请修改远端订阅后重新同步"
+                aria-label={t('admin.panelFromSubEdit')}
+                title={t('admin.panelFromSubEditHint')}
               >
                 <Icon name="edit" className="w-4 h-4" />
               </button>
               <button
                 className="rounded-md p-2 text-muted/30 cursor-not-allowed shrink-0"
                 disabled
-                aria-label="订阅源不可单独删除"
-                title="该源来自订阅，单独删除会在下次同步时恢复；请到「数据源订阅」删除整个订阅"
+                aria-label={t('admin.panelFromSubDelete')}
+                title={t('admin.panelFromSubDeleteHint')}
               >
                 <Icon name="trash" className="w-4 h-4" />
               </button>
@@ -353,16 +356,16 @@ function VodSourceRow({
               <button
                 className="rounded-md p-2 text-muted transition-colors hover:bg-hover hover:text-accent shrink-0"
                 onClick={() => onEdit(api.key)}
-                aria-label="编辑"
-                title="编辑"
+                aria-label={t('admin.panelEdit')}
+                title={t('admin.panelEdit')}
               >
                 <Icon name="edit" className="w-4 h-4" />
               </button>
               <button
                 className="rounded-md p-2 text-muted transition-colors hover:bg-hover hover:text-danger shrink-0"
                 onClick={remove}
-                aria-label="删除"
-                title="移除（可在提示中撤销）"
+                aria-label={t('admin.delete')}
+                title={t('admin.panelRemove')}
               >
                 <Icon name="trash" className="w-4 h-4" />
               </button>

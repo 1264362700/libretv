@@ -7,22 +7,24 @@ import { loadCacheSettings, saveCacheSettings, getCacheSummary, clearVideoCache,
 
 import { useAppStore } from '@/lib/store';
 import { useToast } from '@/components/toast';
+import { useTranslation } from '@/lib/i18n';
 
 export function PlaybackPanel() {
   const store = useAppStore();
+  const { t } = useTranslation();
   return (
     <section>
-      <SectionTitle title="播放与过滤" />
+      <SectionTitle title={t('admin.panelPlayback')} />
       <div className="space-y-3">
         <ToggleRow
-          label="广告切片过滤"
-          description="剔除播放列表中的广告分片段落（按分片 URL 特征、片头插入与长片间超短中插识别，不动 DISCONTINUITY 时间轴）"
+          label={t('admin.panelAdFilter')}
+          description={t('admin.panelAdFilterDesc')}
           checked={store.adFilter}
           onChange={(v) => store.updateSettings({ adFilter: v })}
         />
         <ToggleRow
-          label="自动连播"
-          description="单集播放结束后自动播放下一集"
+          label={t('admin.panelAutoplay')}
+          description={t('admin.panelAutoplayDesc')}
           checked={store.autoplayNext}
           onChange={(v) => store.updateSettings({ autoplayNext: v })}
         />
@@ -35,6 +37,7 @@ export function PlaybackPanel() {
 /** 片段缓存：开启/关闭 + 用量展示 + 清理（数据在浏览器本地，独立于配置导出） */
 function VideoCachePanel() {
   const [enabled, setEnabled] = useState(() => loadCacheSettings().enabled);
+  const { t } = useTranslation();
   const [summary, setSummary] = useState<CacheSummary>({ segments: 0, bytes: 0, episodes: 0 });
   const [clearing, setClearing] = useState(false);
 
@@ -55,8 +58,8 @@ function VideoCachePanel() {
   return (
     <div className="space-y-3 pt-3 mt-3 border-t border-line">
       <ToggleRow
-        label="片段本地缓存"
-        description="暂停或观看时把后续分片缓存到浏览器本地，二次播放与断网卡顿时直接命中（存储于本机，不计入配置导出）"
+        label={t('admin.panelCache')}
+        description={t('admin.panelCacheDesc')}
         checked={enabled}
         onChange={(v) => {
           const next = saveCacheSettings({ enabled: v });
@@ -65,7 +68,7 @@ function VideoCachePanel() {
       />
       <div className="flex items-center justify-between text-xs text-faint">
         <span>
-          已缓存 {summary.segments} 个分片 · {formatBytes(summary.bytes)} · {summary.episodes} 集
+          {t('admin.panelCacheSummary', { segments: summary.segments, bytes: formatBytes(summary.bytes), episodes: summary.episodes })}
         </span>
         <button
           type="button"
@@ -78,7 +81,7 @@ function VideoCachePanel() {
             setClearing(false);
           }}
         >
-          清理缓存
+          {t('admin.panelClearCache')}
         </button>
       </div>
     </div>
@@ -87,25 +90,26 @@ function VideoCachePanel() {
 
 export function ImagePanel() {
   const store = useAppStore();
+  const { t } = useTranslation();
   const mode = store.imageProxyMode;
   const description: Record<'direct' | 'proxy' | 'custom', string> = {
-    direct: '原站直连；豆瓣封面自动换公共镜像，仍失败回退内置代理。最省服务器流量',
-    proxy: '封面优先经本站服务器转发并伪装来源，失败自动回退公共镜像/直连。最稳定，消耗服务器流量',
-    custom: '使用你填写的模板转发封面图',
+    direct: t('admin.directDesc'),
+    proxy: t('admin.serverForward'),
+    custom: t('admin.templateHint'),
   };
   return (
     <section>
-      <SectionTitle title="封面图加载" />
+      <SectionTitle title={t('admin.panelImage')} />
       <div className="space-y-2">
         <SelectRow
-          label="加载方式"
+          label={t('admin.panelImageMode')}
           value={mode}
           description={description[mode]}
           onChange={(v) => store.updateSettings({ imageProxyMode: v as 'direct' | 'proxy' | 'custom' })}
           options={[
-            { value: 'direct', label: '直连优先', hint: '最省服务器流量' },
-            { value: 'proxy', label: '内置代理', hint: '最稳定' },
-            { value: 'custom', label: '自定义', hint: '自建转发模板' },
+            { value: 'direct', label: t('admin.directFirst'), hint: t('admin.trafficBest') },
+            { value: 'proxy', label: t('admin.builtinProxy'), hint: t('admin.stabilityBest') },
+            { value: 'custom', label: t('admin.custom'), hint: t('admin.customTemplate') },
           ]}
         />
         {mode === 'custom' && <CustomProxyInput />}
@@ -120,6 +124,7 @@ export function ImagePanel() {
  */
 function CustomProxyInput() {
   const value = useAppStore((s) => s.customImageProxy);
+  const { t } = useTranslation();
   const updateSettings = useAppStore((s) => s.updateSettings);
   const [draft, setDraft] = useState(value);
 
@@ -135,8 +140,8 @@ function CustomProxyInput() {
   return (
     <input
       className="input w-full"
-      aria-label="自定义代理模板"
-      placeholder="代理模板，如 https://p.example.com/?url={url}"
+      aria-label={t('admin.panelCustomProxy')}
+      placeholder={t('admin.panelCustomProxyPlaceholder')}
       value={draft}
       onChange={(e) => setDraft(e.target.value)}
     />
@@ -146,18 +151,19 @@ function CustomProxyInput() {
 export function HomePanel() {
   const store = useAppStore();
   const { toast } = useToast();
+  const { t } = useTranslation();
 
   return (
     <section>
-      <SectionTitle title="首页与内容过滤" />
+      <SectionTitle title={t('admin.panelHome')} />
       <div className="space-y-3">
         <ToggleRow
-          label="成人内容过滤"
-          description="过滤“伦理片”等分类的结果"
+          label={t('admin.panelAdultFilter')}
+          description={t('admin.panelAdultFilterDesc')}
           checked={store.yellowFilter}
           onChange={(v) => {
             store.updateSettings({ yellowFilter: v });
-            toast(v ? '已开启成人内容过滤' : '已关闭成人内容过滤', 'info');
+            toast(v ? t('admin.adultFilterOn') : t('admin.adultFilterOff'), 'info');
           }}
         />
       </div>

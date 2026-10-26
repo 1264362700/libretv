@@ -1,6 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { Icon, type IconName } from './icon';
 
@@ -81,7 +82,7 @@ export function EmptyState({
 export function ErrorState({
   message,
   onRetry,
-  retryLabel = '重试',
+  retryLabel,
   tone = 'default',
   className,
 }: {
@@ -91,6 +92,8 @@ export function ErrorState({
   tone?: 'default' | 'onDark';
   className?: string;
 }) {
+  const { t } = useTranslation();
+  const retryText = retryLabel ?? t('states.retry');
   return (
     <div className={cn('flex flex-col items-center justify-center gap-3 py-8 text-center', className)}>
       <Icon name="alert" className={cn('w-6 h-6', tone === 'onDark' ? 'text-white/80' : 'text-danger')} />
@@ -102,7 +105,7 @@ export function ErrorState({
           className={cn('btn-ghost btn-sm', tone === 'onDark' && '!bg-white/10 !text-white !border-white/20')}
           onClick={onRetry}
         >
-          {retryLabel}
+          {retryText}
         </button>
       )}
     </div>

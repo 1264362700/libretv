@@ -25,8 +25,7 @@ export const CHANNELS = HEADER_NAV;
  * 融合 NovaTV 原生品牌视觉（鎏金 N 徽标 + NovaTV Cinema Ultra + 沉浸式滚动渐变毛玻璃）
  * 与 LibreTV 播放源管理、历史记录、管理员后台及登录鉴权体系
  */
-export function Header(_props?: { showSearch?: boolean }) {
-  void _props;
+export function Header() {
   return (
     <Suspense fallback={<HeaderShell isHeroOverlay={false} />}>
       <HeaderInner />

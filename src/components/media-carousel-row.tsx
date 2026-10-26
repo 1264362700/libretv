@@ -4,6 +4,7 @@ import { useRef } from 'react';
 import Link from 'next/link';
 import type { MediaItem } from '@/lib/media-library-service';
 import { resolveEpisodeBadge } from '@/lib/media-library-service';
+import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { MediaCard } from './media-card';
 
@@ -42,6 +43,7 @@ export function MediaCarouselRow({
   showHotRank = false,
   rankTitle,
 }: MediaCarouselRowProps) {
+  const { t } = useTranslation();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const scroll = (direction: 'left' | 'right') => {
@@ -140,7 +142,7 @@ export function MediaCarouselRow({
                   <div className="flex items-center gap-1.5">
                     <span className="text-base">🔥</span>
                     <h3 className="text-sm font-extrabold text-content tracking-tight">
-                      {rankTitle || '热播飙升榜 TOP 10'}
+                      {rankTitle || t('carousel.rank.default')}
                     </h3>
                   </div>
                   <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30">
@@ -190,7 +192,7 @@ export function MediaCarouselRow({
                         </span>
                       </div>
                       <p className="text-[11px] text-faint line-clamp-1">
-                        {topOne.card_subtitle || topOne.typeName || '全网热播榜首佳作'}
+                        {topOne.card_subtitle || topOne.typeName || t('carousel.top1.default')}
                       </p>
                     </div>
                   </div>

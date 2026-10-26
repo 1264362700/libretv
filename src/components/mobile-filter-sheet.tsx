@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { Icon } from './icon';
 
@@ -70,6 +71,8 @@ export function MobileFilterSheet({
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
   }, [mounted, onClose]);
+
+  const { t } = useTranslation();
 
   if (!mounted) return null;
 
@@ -158,7 +161,7 @@ export function MobileFilterSheet({
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-bold text-content">地区</span>
               <span className="text-[11px] text-faint">
-                {selectedRegion === '全部' ? '未限制' : selectedRegion}
+                {selectedRegion === '全部' ? t('filter.unlimited') : selectedRegion}
               </span>
             </div>
             <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
@@ -188,7 +191,7 @@ export function MobileFilterSheet({
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-bold text-content">类型题材</span>
               <span className="text-[11px] text-faint">
-                {selectedGenre === '全部' ? '未限制' : selectedGenre}
+                {selectedGenre === '全部' ? t('filter.unlimited') : selectedGenre}
               </span>
             </div>
             <div className="grid grid-cols-4 gap-1.5 sm:gap-2">

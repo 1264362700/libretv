@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import type { TmdbMediaItem } from '@/lib/tmdb';
 import { resolveEpisodeBadge } from '@/lib/media-library-service';
+import { buildMediaFeedParams } from '@/lib/media-feed';
 import { DoubanCard } from './video-card';
 
 interface TmdbApiResponse {
@@ -25,14 +26,14 @@ async function fetchTmdbClient(
   },
   signal?: AbortSignal
 ): Promise<TmdbApiResponse> {
-  const sp = new URLSearchParams({
+  const sp = buildMediaFeedParams({
     type: params.type,
-    page: String(params.page || 1),
+    page: params.page || 1,
     sort: params.sort || 'recommend',
+    area: params.area,
+    genre: params.genre,
+    year: params.year,
   });
-  if (params.area && params.area !== '全部') sp.set('area', params.area);
-  if (params.genre && params.genre !== '全部') sp.set('genre', params.genre);
-  if (params.year && params.year !== '全部') sp.set('year', params.year);
 
   const res = await fetch(`/api/media/feed?${sp.toString()}`, { signal });
   if (!res.ok) {

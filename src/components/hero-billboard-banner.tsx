@@ -82,7 +82,7 @@ export function HeroBillboardBanner({
             }`}
             style={{ transitionProperty: 'opacity, transform' }}
           >
-            <BannerImage backdrop={slide.backdrop} cover={slide.cover} title={slide.title} isActive={isActive} />
+            {(isActive || index === (currentIndex + 1) % slides.length) && (\n              <BannerImage\n                backdrop={slide.backdrop}\n                cover={slide.cover}\n                title={slide.title}\n                isActive={isActive}\n              />\n            )}
             {/* High-Contrast Cinematic Gradient Vignettes */}
             <div className="absolute inset-0 bg-gradient-to-t from-page via-page/65 to-transparent" />
             <div className="absolute inset-0 bg-gradient-to-r from-page via-page/75 to-transparent w-full md:w-3/4" />

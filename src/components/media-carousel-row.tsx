@@ -5,8 +5,10 @@ import Link from 'next/link';
 import type { MediaItem } from '@/lib/media-library-service';
 import { resolveEpisodeBadge } from '@/lib/media-library-service';
 import { useTranslation } from '@/lib/i18n';
+import { useAppStore } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import { MediaCard } from './media-card';
+import { SmartImage } from './smart-image';
 
 export interface MediaCarouselRowProps {
   title: string;
@@ -44,6 +46,8 @@ export function MediaCarouselRow({
   rankTitle,
 }: MediaCarouselRowProps) {
   const { t } = useTranslation();
+  const imageProxyMode = useAppStore((s) => s.imageProxyMode);
+  const customImageProxy = useAppStore((s) => s.customImageProxy);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const scroll = (direction: 'left' | 'right') => {
@@ -101,6 +105,7 @@ export function MediaCarouselRow({
           {moreHref && (
             <Link
               href={moreHref}
+              prefetch={false}
               className="flex items-center gap-1 text-xs font-semibold text-accent hover:text-accent-hover transition-colors p-1 group"
             >
               <span>更多</span>
@@ -166,12 +171,12 @@ export function MediaCarouselRow({
                   >
                     <div className="relative w-14 aspect-[2/3] rounded-lg overflow-hidden bg-chip shrink-0 shadow-sm">
                       {topOne.cover && (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={topOne.cover}
+                        <SmartImage
+                          url={topOne.cover}
+                          mode={imageProxyMode}
+                          customProxy={customImageProxy}
                           alt={topOne.title}
                           loading="lazy"
-                          referrerPolicy="no-referrer"
                           className="w-full h-full object-cover group-hover/top:scale-105 transition-transform duration-300"
                         />
                       )}
@@ -243,6 +248,7 @@ export function MediaCarouselRow({
               {moreHref && (
                 <Link
                   href={moreHref}
+                  prefetch={false}
                   className="mt-3 w-full py-1.5 rounded-xl bg-chip/70 hover:bg-hover text-center text-xs font-medium text-muted hover:text-content border border-line/50 transition-colors"
                 >
                   查看完整榜单 ›

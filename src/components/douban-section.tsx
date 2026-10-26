@@ -5,7 +5,9 @@ import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import type { TmdbMediaItem } from '@/lib/tmdb';
 import { resolveEpisodeBadge, fetchTmdbClient } from '@/lib/media-library-service';
+import { useAppStore } from '@/lib/store';
 import { DoubanCard } from './video-card';
+import { SmartImage } from './smart-image';
 
 const MOVIE_CATEGORIES: {
   label: string;
@@ -180,6 +182,7 @@ export function RecommendSection({
 
             <Link
               href="/catalog?type=movie"
+              prefetch={false}
               className="flex items-center gap-1 text-xs text-muted hover:text-amber-500 dark:hover:text-amber-400 font-medium transition-colors shrink-0 group"
             >
               <span>更多</span>
@@ -265,6 +268,7 @@ export function RecommendSection({
 
             <Link
               href="/catalog?type=tv"
+              prefetch={false}
               className="flex items-center gap-1 text-xs text-muted hover:text-amber-500 dark:hover:text-amber-400 font-medium transition-colors shrink-0 group"
             >
               <span>更多</span>
@@ -332,6 +336,8 @@ function NovaTop10Ranking({
   cmsRemarksMap?: Map<string, string>;
   onPick: (title: string) => void;
 }) {
+  const imageProxyMode = useAppStore((s) => s.imageProxyMode);
+  const customImageProxy = useAppStore((s) => s.customImageProxy);
   const top1 = items[0];
   const rest = items.slice(1, 10);
   const top1Badge = top1 ? resolveEpisodeBadge(top1, cmsRemarksMap) : '';
@@ -370,12 +376,12 @@ function NovaTop10Ranking({
             className="group relative block w-full text-left rounded-xl overflow-hidden mb-4 border border-amber-500/35 hover:border-amber-400/85 transition-all duration-300 shadow-lg cursor-pointer bg-slate-900"
           >
             <div className="relative aspect-[16/9] w-full overflow-hidden bg-slate-900">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={top1.backdrop || top1.cover}
+              <SmartImage
+                url={top1.backdrop || top1.cover}
+                mode={imageProxyMode}
+                customProxy={customImageProxy}
                 alt={top1.title}
                 loading="lazy"
-                referrerPolicy="no-referrer"
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
               />
               {/* Gradients */}
@@ -452,12 +458,12 @@ function NovaTop10Ranking({
                   {/* Poster Thumbnail */}
                   <div className="w-9 h-12 rounded overflow-hidden shrink-0 bg-chip relative">
                     {item.cover && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={item.cover}
+                      <SmartImage
+                        url={item.cover}
+                        mode={imageProxyMode}
+                        customProxy={customImageProxy}
                         alt={item.title}
                         loading="lazy"
-                        referrerPolicy="no-referrer"
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                       />
                     )}

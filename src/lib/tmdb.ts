@@ -7,7 +7,8 @@ const execFileAsync = promisify(execFile);
 
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 const IMAGE_BASE_W500 = 'https://image.tmdb.org/t/p/w500';
-const IMAGE_BASE_ORIGINAL = 'https://image.tmdb.org/t/p/original';
+// 首页横幅按 720px 高屏幕设计，w1280 足够清晰；避免下载原始大图拖慢首屏。
+const IMAGE_BASE_BACKDROP = 'https://image.tmdb.org/t/p/w1280';
 const CACHE_TTL_MS = 30 * 60 * 1000; // 30 分钟缓存
 
 export interface TmdbMediaItem extends DoubanItem {
@@ -250,7 +251,7 @@ export function mapTmdbItem(
   const firstGenre = genreNames[0];
   const categoryName = firstGenre || (isTv ? '精选剧集' : '院线电影');
   const cover = item.poster_path ? `${IMAGE_BASE_W500}${item.poster_path}` : '';
-  const backdrop = item.backdrop_path ? `${IMAGE_BASE_ORIGINAL}${item.backdrop_path}` : cover;
+  const backdrop = item.backdrop_path ? `${IMAGE_BASE_BACKDROP}${item.backdrop_path}` : cover;
   const area = overrideArea || item.origin_country?.[0] || undefined;
   const cardSubtitle = [year, area, ...genreNames].filter(Boolean).join(' · ') || categoryName;
 

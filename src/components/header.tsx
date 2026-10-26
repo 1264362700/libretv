@@ -106,15 +106,14 @@ function HeaderShell({ isHeroOverlay }: { isHeroOverlay: boolean }) {
           'py-2.5 sm:py-3'
         )}
       >
-        {/* Lensing 滚动跟随高光层（放大镜效果） */}
+        {/* Lensing 滚动跟随高光层（放大镜效果）— 仅首页 Hero 覆盖态 */}
         {isHeroOverlay && !scrolled && (
-          <div className="liquid-glass-lens" style={{ borderRadius: '0' }} />
+          <div
+            className="liquid-glass-lens"
+            style={{ borderRadius: '0', zIndex: 2 }}
+          />
         )}
-        {/* Specular 镜面高光层 */}
-        {(!isHeroOverlay || scrolled) && (
-          <div className="liquid-glass-specular" style={{ borderRadius: '0', top: '0', bottom: '0' }} />
-        )}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3 relative z-10">
           {/* 左侧：移动端汉堡菜单 + NovaTV Cinema Ultra 品牌 Logo + 频道导航 */}
           <div className="flex items-center gap-3 lg:gap-8 min-w-0">
             <button

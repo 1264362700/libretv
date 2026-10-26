@@ -76,17 +76,17 @@ export function SmartImage({
   }, [loading, url, mode, customProxy]);
 
   useEffect(() => {
-    if (shouldLoad && idx >= candidates.length) {
+    if (shouldLoad && idx >= candidates.length && !allFailed) {
       setAllFailed(true);
       onExhausted?.();
     }
-  }, [shouldLoad, idx, candidates.length, onExhausted]);
+  }, [shouldLoad, idx, candidates.length, allFailed, onExhausted]);
 
   const src = candidates[idx];
 
   return (
     <div ref={containerRef} className="w-full h-full">
-      {!shouldLoad || !src ? (
+      {!shouldLoad ? (
         <div className={cn('w-full h-full bg-slate-800/20', className)} aria-hidden="true" />
       ) : allFailed ? (
         <div
@@ -97,7 +97,7 @@ export function SmartImage({
           )}
           aria-label={`封面加载失败: ${alt}`}
         />
-      ) : (
+      ) : !src ? null : (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           ref={(el) => {

@@ -99,7 +99,7 @@ function HeaderShell({ isHeroOverlay }: { isHeroOverlay: boolean }) {
       <header
         ref={headerRef}
         className={cn(
-          'liquid-glass-header left-0 right-0 z-50',
+          'lg-glass lg-header left-0 right-0 z-50',
           isHeroOverlay ? 'fixed top-0' : 'sticky top-0',
           (!isHeroOverlay || scrolled) && 'scrolled',
           (!isHeroOverlay || !scrolled) && 'compact',
@@ -109,7 +109,7 @@ function HeaderShell({ isHeroOverlay }: { isHeroOverlay: boolean }) {
         {/* Lensing 滚动跟随高光层（放大镜效果）— 仅首页 Hero 覆盖态 */}
         {isHeroOverlay && !scrolled && (
           <div
-            className="liquid-glass-lens"
+            className="lg-lens"
             style={{ borderRadius: '0', zIndex: 2 }}
           />
         )}

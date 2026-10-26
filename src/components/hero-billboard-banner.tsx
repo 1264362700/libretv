@@ -27,7 +27,7 @@ function BannerImage({ backdrop, cover, title, isActive }: { backdrop?: string; 
       mode={imageProxyMode}
       customProxy={customImageProxy}
       alt={title}
-      loading="eager"
+      loading={isActive ? "eager" : "lazy"}
       className={`w-full h-full object-cover object-center ${isActive ? 'animate-ken-burns' : ''}`}
     />
   );
@@ -82,7 +82,14 @@ export function HeroBillboardBanner({
             }`}
             style={{ transitionProperty: 'opacity, transform' }}
           >
-            <BannerImage backdrop={slide.backdrop} cover={slide.cover} title={slide.title} isActive={isActive} />
+            {(isActive || index === (currentIndex + 1) % slides.length) && (
+              <BannerImage
+                backdrop={slide.backdrop}
+                cover={slide.cover}
+                title={slide.title}
+                isActive={isActive}
+              />
+            )}
             {/* High-Contrast Cinematic Gradient Vignettes */}
             <div className="absolute inset-0 bg-gradient-to-t from-page via-page/65 to-transparent" />
             <div className="absolute inset-0 bg-gradient-to-r from-page via-page/75 to-transparent w-full md:w-3/4" />

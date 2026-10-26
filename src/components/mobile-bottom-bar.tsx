@@ -68,7 +68,7 @@ export function MobileBottomBar() {
   return (
     <nav
       aria-label="移动端专属底部金刚导航栏"
-      ref={navRef} className="lg-glass lg-bar lg-tabbar md:hidden select-none"
+      ref={navRef} className="lg-glass lg-bar lg-tabbar xl:hidden select-none"
     >
       <span ref={indicatorRef} className="lg-tab-indicator" aria-hidden="true" />
       {/* 首页 */}
@@ -117,7 +117,7 @@ export function MobileBottomBar() {
         data-tab-id="history"
         aria-current={isHistory ? 'page' : undefined}
         className={cn(
-          'flex flex-1 flex-col items-center justify-center py-0.5 rounded-xl text-[10px] font-medium transition-all touch-manipulation',
+          'lg-tab-item',
           isHistory ? 'text-accent font-semibold' : 'text-muted hover:text-content'
         )}
       >

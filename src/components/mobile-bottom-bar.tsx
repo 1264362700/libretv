@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useAuth } from './auth';
 import { useTranslation } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
+import { useEffect, useRef } from 'react';
 
 /** 桌面端 Header 按钮触发抽屉（移动端底栏已改为 Link 导航） */
 export const SHOW_HISTORY_EVENT = 'libretv:show-history';
@@ -26,6 +27,8 @@ export function MobileBottomBar() {
   const pathname = usePathname();
   const { verified, isAdmin } = useAuth();
   const { t } = useTranslation();
+  const navRef = useRef<HTMLElement>(null);
+  const indicatorRef = useRef<HTMLSpanElement>(null);
 
   // 播放页隐藏底栏，确保全屏或手机横屏/竖屏观看时沉浸无遮挡
   if (pathname.startsWith('/watch')) {
@@ -37,17 +40,46 @@ export function MobileBottomBar() {
   const isHistory = pathname.startsWith('/history');
   const isSettings = pathname.startsWith('/settings');
   const isLogin = pathname.startsWith('/login');
+  const activeId = isHome ? 'home' : isCatalog ? 'catalog' : isHistory ? 'history' : isSettings ? 'settings' : isLogin ? 'login' : '';
+
+  useEffect(() => {
+    const nav = navRef.current;
+    const indicator = indicatorRef.current;
+    if (!nav || !indicator || !activeId) return;
+    const active = nav.querySelector<HTMLElement>(`[data-tab-id="${activeId}"]`);
+    if (!active) return;
+    const left = active.offsetLeft;
+    const width = active.offsetWidth;
+    const previousLeft = Number(indicator.dataset.left ?? left);
+    const previousWidth = Number(indicator.dataset.width ?? width);
+    indicator.style.opacity = '1';
+    indicator.style.left = `${left}px`;
+    indicator.style.width = `${width}px`;
+    if (typeof indicator.animate === 'function' && indicator.dataset.ready === 'true') {
+      indicator.animate([
+        { transform: `translateX(${previousLeft - left}px) scaleX(${previousWidth / Math.max(width, 1)})` },
+        { transform: `translateX(${(left - previousLeft) * 0.12}px) scaleX(1.1)`, offset: 0.68 },
+        { transform: 'translateX(0) scaleX(1)' }
+      ], { duration: 480, easing: 'cubic-bezier(.2,1.25,.35,1)' });
+    }
+    indicator.dataset.left = String(left);
+    indicator.dataset.width = String(width);
+    indicator.dataset.ready = 'true';
+  }, [activeId]);
 
   return (
     <nav
       aria-label="移动端专属底部金刚导航栏"
-      className="lg-glass lg-bar bg-surface/85 backdrop-blur-lg border border-line/40 px-2 pt-1.5 pb-[max(0.4rem,env(safe-area-inset-bottom,0px))] md:hidden flex items-center justify-around select-none"
+      ref={navRef} className="lg-glass lg-bar lg-tabbar md:hidden select-none"
     >
+      <span ref={indicatorRef} className="lg-tab-indicator" aria-hidden="true" />
       {/* 首页 */}
       <Link
         href="/"
+        data-tab-id="home"
+        aria-current={isHome ? 'page' : undefined}
         className={cn(
-          'flex flex-1 flex-col items-center justify-center py-0.5 rounded-xl text-[10px] font-medium transition-all touch-manipulation',
+          'lg-tab-item',
           isHome ? 'text-accent font-semibold' : 'text-muted hover:text-content'
         )}
       >
@@ -61,6 +93,8 @@ export function MobileBottomBar() {
       {/* 片库 */}
       <Link
         href="/catalog"
+        data-tab-id="catalog"
+        aria-current={isCatalog ? 'page' : undefined}
         className={cn(
           'flex flex-1 flex-col items-center justify-center py-0.5 rounded-xl text-[10px] font-medium transition-all touch-manipulation',
           isCatalog ? 'text-accent font-semibold' : 'text-muted hover:text-content'
@@ -82,6 +116,8 @@ export function MobileBottomBar() {
       {/* 观看历史 */}
       <Link
         href="/history"
+        data-tab-id="history"
+        aria-current={isHistory ? 'page' : undefined}
         className={cn(
           'flex flex-1 flex-col items-center justify-center py-0.5 rounded-xl text-[10px] font-medium transition-all touch-manipulation',
           isHistory ? 'text-accent font-semibold' : 'text-muted hover:text-content'
@@ -99,7 +135,7 @@ export function MobileBottomBar() {
         <Link
           href="/settings"
           className={cn(
-            'flex flex-1 flex-col items-center justify-center py-0.5 rounded-xl text-[10px] font-medium transition-all active:scale-90 touch-manipulation',
+            'lg-tab-item',
             isSettings ? 'text-accent font-semibold' : 'text-muted hover:text-content'
           )}
           title={isAdmin ? '源管理 (管理员专属)' : '设置'}

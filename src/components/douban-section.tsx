@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import type { TmdbMediaItem } from '@/lib/tmdb';
@@ -84,6 +84,31 @@ export function RecommendSection({
 }) {
   const [activeMovieTab, setActiveMovieTab] = useState(MOVIE_CATEGORIES[0]);
   const [activeTvTab, setActiveTvTab] = useState(TV_CATEGORIES[0]);
+  const tvFloorRef = useRef<HTMLElement | null>(null);
+  const [tvFloorVisible, setTvFloorVisible] = useState(false);
+
+  // 第二楼层远离首屏：进入视口前不请求剧集列表和剧集榜单，减少首页首批并发请求。
+  useEffect(() => {
+    const target = tvFloorRef.current;
+    if (!target || tvFloorVisible) return;
+
+    if (typeof IntersectionObserver === 'undefined') {
+      setTvFloorVisible(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setTvFloorVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '300px 0px' }
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [tvFloorVisible]);
 
   // Floor 1 左侧：今日重磅热播电影（2行 x 5列 = 10张）
   const movieQuery = useQuery({
@@ -136,6 +161,7 @@ export function RecommendSection({
         signal
       ),
     staleTime: 5 * 60_000,
+    enabled: tvFloorVisible,
   });
 
   // Floor 2 右侧：剧集高分飙升榜 TOP 10
@@ -143,6 +169,7 @@ export function RecommendSection({
     queryKey: ['novatv-top10-tv'],
     queryFn: ({ signal }) => fetchTmdbClient({ type: 'tv', sort: 'rank', page: 1 }, signal),
     staleTime: 10 * 60_000,
+    enabled: tvFloorVisible,
   });
 
   const movieItems = (movieQuery.data?.items ?? []).slice(0, 15);
@@ -238,7 +265,7 @@ export function RecommendSection({
       </section>
 
       {/* Floor 2: 热播剧集专区 (左侧 3行 15 张海报网格 + 右侧 🔥 剧集口碑榜 TOP 10) */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <section ref={tvFloorRef} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-2 border-b border-line">
           <div className="flex items-center gap-3">
             <div className="w-1.5 h-6 rounded-full bg-amber-400 shadow-glow-gold" />

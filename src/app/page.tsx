@@ -60,7 +60,7 @@ function HomeContent() {
   // 收集当前可用播放采集源（供全网搜索与点击秒播使用）
   const selectedSources = useMemo(() => {
     const seen = new Set<string>();
-    return selectedKeys
+    const rawList = selectedKeys
       .map((key) => resolveSource({ customAPIs, envSources }, key))
       .filter((s): s is NonNullable<typeof s> => {
         if (!s || !validateSourceUrl(s.url) || seen.has(s.key)) return false;
@@ -69,6 +69,15 @@ function HomeContent() {
       })
       .filter((s) => !isSourceDisabled({ sourceHealth }, s.key))
       .filter((s) => !isInDisabledSubscription({ subscriptions }, s.key));
+
+    // 优先保持预置权威优先顺序（顶级海外专线与无版权审查大源排在最前列）
+    const orderMap = new Map<string, number>();
+    envSources.forEach((s, idx) => orderMap.set(s.key, idx));
+    return rawList.sort((a, b) => {
+      const oA = orderMap.has(a.key) ? (orderMap.get(a.key) as number) : 9999;
+      const oB = orderMap.has(b.key) ? (orderMap.get(b.key) as number) : 9999;
+      return oA - oB;
+    });
   }, [customAPIs, envSources, selectedKeys, sourceHealth, subscriptions]);
 
   // 全球 4K 趋势大片（供首屏 HeroBillboard 巨幕轮播使用，与右侧热播飙升榜共享 QueryKey 与单次网络请求）

@@ -65,7 +65,7 @@ export function useCatalogFilters() {
 
   const selectedSources = useMemo(() => {
     const seen = new Set<string>();
-    return selectedKeys
+    const rawList = selectedKeys
       .map((key) => resolveSource({ customAPIs, envSources }, key))
       .filter((s): s is NonNullable<typeof s> => {
         if (!s || !validateSourceUrl(s.url) || seen.has(s.key)) return false;
@@ -74,6 +74,14 @@ export function useCatalogFilters() {
       })
       .filter((s) => !isSourceDisabled({ sourceHealth }, s.key))
       .filter((s) => !isInDisabledSubscription({ subscriptions }, s.key));
+
+    const orderMap = new Map<string, number>();
+    envSources.forEach((s, idx) => orderMap.set(s.key, idx));
+    return rawList.sort((a, b) => {
+      const oA = orderMap.has(a.key) ? (orderMap.get(a.key) as number) : 9999;
+      const oB = orderMap.has(b.key) ? (orderMap.get(b.key) as number) : 9999;
+      return oA - oB;
+    });
   }, [customAPIs, envSources, selectedKeys, sourceHealth, subscriptions]);
 
   const updateFilters = (changes: CatalogFilterChanges) => {

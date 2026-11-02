@@ -77,7 +77,7 @@ export function useWatchEngine({
   const [failedSources, setFailedSources] = useState<Set<string>>(new Set());
   const matcherKeyRef = useRef<string>('');
 
-  // 收集当前系统所有已启用的点播源（含当前源兜底）
+  // 收集当前系统所有已启用的点播源（含当前源兜底，并按海外高可用权重优先排序）
   const allCandidateSources = useMemo(() => {
     const seen = new Set<string>();
     const list = store.selectedKeys
@@ -90,7 +90,16 @@ export function useWatchEngine({
     if (source && !seen.has(source.key)) {
       list.unshift(source);
     }
-    return list;
+    // 保持顶级海外专线与无版权审查大源排在前列，换源与并发测速优先命中
+    const orderMap = new Map<string, number>();
+    store.envSources.forEach((s, idx) => orderMap.set(s.key, idx));
+    return list.sort((a, b) => {
+      if (source && a.key === source.key) return -1;
+      if (source && b.key === source.key) return 1;
+      const oA = orderMap.has(a.key) ? (orderMap.get(a.key) as number) : 9999;
+      const oB = orderMap.has(b.key) ? (orderMap.get(b.key) as number) : 9999;
+      return oA - oB;
+    });
   }, [store, source]);
 
   // 背景检索：优先从聚合搜索暂存中瞬时载入已知匹配线路

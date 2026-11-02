@@ -69,7 +69,7 @@ describe('getEnvSources', () => {
     delete process.env.USE_BUILTIN_SOURCES;
     delete process.env.DEFAULT_SOURCES;
     const list = getEnvSources();
-    expect(list.length).toBe(76);
+    expect(list.length).toBe(CUSTOMER_SOURCES_LIST.length);
     for (const s of list) {
       expect(s.key).toBeTruthy();
       expect(s.name).toBeTruthy();

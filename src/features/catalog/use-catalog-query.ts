@@ -44,7 +44,7 @@ export function useCatalogFilters() {
   const currentPage = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
 
   const urlQuery = searchParams.get('q') || '';
-  const catalogKeyword = searchParams.get('wd') || '';
+  const catalogKeyword = searchParams.get('wd') || searchParams.get('q') || '';
   const [filterInput, setFilterInput] = useState(catalogKeyword);
 
   useEffect(() => {
@@ -253,7 +253,7 @@ export function useCatalogData(filters: ReturnType<typeof useCatalogFilters>) {
       };
     },
     staleTime: 5 * 60_000,
-    enabled: !urlQuery,
+    enabled: true,
   });
 
   const rawItems: DoubanItem[] = (catalogQuery.data?.items as DoubanItem[]) ?? [];

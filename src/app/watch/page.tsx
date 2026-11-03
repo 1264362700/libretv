@@ -86,8 +86,26 @@ function WatchContent() {
   });
 
   // 3. 衍生变量计算
-  const episodes = useMemo(() => detailQuery.data?.episodes ?? [], [detailQuery.data]);
   const videoTitle = titleParam || detailQuery.data?.videoInfo?.title || t('watch.unknownTitle');
+
+  // 官方影视资料库元数据查询（优先拉取官方高清剧照、权威演职员名录与纯净剧情概览）
+  const officialDetailQuery = useQuery({
+    queryKey: ['official-media-detail', doubanIdParam, videoTitle, yearParam],
+    queryFn: async ({ signal }) => {
+      if (!videoTitle || videoTitle === t('watch.unknownTitle')) return null;
+      const sp = new URLSearchParams();
+      if (doubanIdParam) sp.set('id', doubanIdParam);
+      if (videoTitle) sp.set('title', videoTitle);
+      if (yearParam) sp.set('year', yearParam);
+      const res = await fetch(`/api/media/detail?${sp.toString()}`, { signal });
+      if (!res.ok) return null;
+      return await res.json();
+    },
+    enabled: Boolean(videoTitle && videoTitle !== t('watch.unknownTitle') && verified),
+    staleTime: 60 * 60_000,
+  });
+
+  const episodes = useMemo(() => detailQuery.data?.episodes ?? [], [detailQuery.data]);
 
   const currentIndex = useMemo(() => {
     if (episodes.length > 0) return Math.min(Math.max(indexParam, 0), episodes.length - 1);
@@ -167,30 +185,52 @@ function WatchContent() {
     toast,
   });
 
-  // 影片元数据合成（采集源详情与候选源合并）
+  // 影片元数据合成（官方权威元数据优先，采集源数据平滑兜底）
+  const official = officialDetailQuery.data;
   const videoInfo = detailQuery.data?.videoInfo;
-  const coverUrl = videoInfo?.cover || candidates.find((c) => c.result.pic)?.result.pic;
-  const yearText = videoInfo?.year || candidates.find((c) => c.result.year)?.result.year;
-  const typeText = videoInfo?.typeName || candidates.find((c) => c.result.typeName)?.result.typeName;
-  const areaText = videoInfo?.area || candidates.find((c) => c.result.area)?.result.area;
-  const remarksText = videoInfo?.remarks || candidates.find((c) => c.result.remarks)?.result.remarks;
+
+  const coverUrl =
+    official?.cover || videoInfo?.cover || candidates.find((c) => c.result.pic)?.result.pic;
+  const yearText =
+    official?.year || videoInfo?.year || candidates.find((c) => c.result.year)?.result.year;
+  const typeText =
+    (official?.genres && official.genres.length > 0 ? official.genres.join(' / ') : undefined) ||
+    videoInfo?.typeName ||
+    candidates.find((c) => c.result.typeName)?.result.typeName;
+  const areaText =
+    official?.area || videoInfo?.area || candidates.find((c) => c.result.area)?.result.area;
+  const remarksText =
+    videoInfo?.remarks || candidates.find((c) => c.result.remarks)?.result.remarks;
 
   const actorList = useMemo(() => {
+    if (official?.actors && Array.isArray(official.actors) && official.actors.length > 0) {
+      return official.actors;
+    }
     return parseNames(videoInfo?.actor);
-  }, [videoInfo?.actor]);
+  }, [official?.actors, videoInfo?.actor]);
 
   const directorList = useMemo(() => {
+    if (official?.directors && Array.isArray(official.directors) && official.directors.length > 0) {
+      return official.directors;
+    }
     return parseNames(videoInfo?.director);
-  }, [videoInfo?.director]);
+  }, [official?.directors, videoInfo?.director]);
 
   const cleanDesc = useMemo(() => {
+    if (official?.overview && official.overview.trim()) {
+      return official.overview.trim();
+    }
     return sanitizeDesc(videoInfo?.desc);
-  }, [videoInfo?.desc]);
+  }, [official?.overview, videoInfo?.desc]);
 
   const extraPics = useMemo(() => {
     const list: string[] = [];
     const seen = new Set<string>();
-    if (coverUrl) {
+    if (official?.backdrop) {
+      list.push(official.backdrop);
+      seen.add(official.backdrop);
+    }
+    if (coverUrl && !seen.has(coverUrl)) {
       list.push(coverUrl);
       seen.add(coverUrl);
     }
@@ -201,7 +241,7 @@ function WatchContent() {
       }
     }
     return list;
-  }, [coverUrl, candidates]);
+  }, [official?.backdrop, coverUrl, candidates]);
 
   const activePoster = selectedPoster || coverUrl;
 

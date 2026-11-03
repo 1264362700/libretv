@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Header } from '@/components/header';
 import { HeroBillboardBanner } from '@/components/hero-billboard-banner';
 import { RecommendSection } from '@/components/douban-section';
+import { MediaCard } from '@/components/media-card';
 import { AggregatedCard, aggregateResults } from '@/components/video-card';
 import {
   useAppStore,
@@ -125,7 +126,17 @@ function HomeContent() {
     });
   };
 
-  // 全网多采集源流式并发搜索
+  // 全球官方影视资料库极速精准搜索（返回标准高清海报、正规剧名、真实评分与年份）
+  const officialSearchQuery = useQuery({
+    queryKey: ['official-search', urlQuery],
+    queryFn: ({ signal }) => fetchTmdbClient({ type: 'movie', query: urlQuery, page: 1 }, signal),
+    enabled: Boolean(urlQuery),
+    staleTime: 60_000,
+  });
+
+  const [showRawCmsSearch, setShowRawCmsSearch] = useState(false);
+
+  // 全网多采集源底层流式并发搜索（按需展开用于深度探针）
   const searchQuery = useQuery({
     queryKey: ['search', urlQuery, selectedSources.map((s) => s.key).sort().join(','), yellowFilter],
     queryFn: ({ signal }) => {
@@ -135,7 +146,7 @@ function HomeContent() {
         onSource: (outcome) => setStreamedOutcomes((prev) => [...prev, outcome]),
       });
     },
-    enabled: Boolean(urlQuery) && selectedSources.length > 0,
+    enabled: Boolean(urlQuery) && showRawCmsSearch && selectedSources.length > 0,
     staleTime: 60_000,
   });
 
@@ -151,6 +162,9 @@ function HomeContent() {
   const visibleGroups = useMemo(() => groups.slice(0, visibleCount), [groups, visibleCount]);
   useEffect(() => setVisibleCount(RESULT_PAGE_SIZE), [groups]);
 
+  const officialItems = officialSearchQuery.data?.items ?? [];
+  const officialLoading = Boolean(urlQuery) && officialSearchQuery.isLoading;
+
   return (
     <div className="min-h-screen flex flex-col bg-page text-content transition-colors duration-200">
       {/* Top Glass Navigation */}
@@ -158,12 +172,17 @@ function HomeContent() {
 
       {urlQuery ? (
         <main className="relative flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-24 md:pb-12 overflow-x-hidden">
-          <section className="space-y-5">
-            <div className="flex items-center justify-between py-3 px-4 rounded-2xl glass-panel">
-              <h2 className="text-base sm:text-lg font-bold text-content flex items-center gap-2">
-                <span>🔍 全网播放源聚合搜索:</span>
-                <span className="text-amber-500 dark:text-amber-400">“{urlQuery}”</span>
-              </h2>
+          <section className="space-y-6">
+            <div className="flex items-center justify-between py-3.5 px-4 sm:px-5 rounded-2xl glass-panel">
+              <div className="flex items-center gap-2">
+                <span className="text-base sm:text-lg font-bold text-content">🔍 搜索结果:</span>
+                <span className="text-base sm:text-lg font-bold text-amber-500 dark:text-amber-400">“{urlQuery}”</span>
+                {officialItems.length > 0 && (
+                  <span className="text-xs text-muted font-normal ml-2 hidden sm:inline">
+                    （找到 {officialItems.length} 部官方收录影视）
+                  </span>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={() => router.push('/')}
@@ -173,36 +192,24 @@ function HomeContent() {
               </button>
             </div>
 
-            {visibleGroups.length > 0 ? (
-              <>
+            {/* 优先呈现：官方全维资料库结果（标准海报、纯净简介、即点即播） */}
+            {officialLoading ? (
+              <div className="py-20 text-center text-muted glass-panel rounded-2xl">
+                正在检索权威影视资料库…
+              </div>
+            ) : officialItems.length > 0 ? (
+              <div className="space-y-6">
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-5">
-                  {visibleGroups.map((group) => (
-                    <AggregatedCard
-                      key={group.key}
-                      group={group}
-                      onOpen={() => {
-                        const primary = group.items[0];
-                        if (typeof window !== 'undefined' && primary?.sourceKey && primary?.vodId) {
-                          try {
-                            const cached = group.items.map((it) => ({
-                              sourceKey: it.sourceKey,
-                              sourceName: it.sourceName,
-                              sourceVodId: it.vodId,
-                              sourceUrl: it.sourceUrl,
-                              remarks: it.remarks,
-                            }));
-                            sessionStorage.setItem(
-                              `libretv:matched:${primary.sourceKey}:${primary.vodId}`,
-                              JSON.stringify(cached)
-                            );
-                          } catch {}
-                        }
+                  {officialItems.map((item) => (
+                    <MediaCard
+                      key={item.id}
+                      item={item as MediaItem}
+                      cmsRemarksMap={remarksQuery.data?.remarksMap}
+                      onClick={() => {
                         const watchUrl = buildWatchUrl({
-                          title: group.name,
-                          year: group.year,
-                          sourceKey: primary?.sourceKey,
-                          vodId: primary?.vodId,
-                          sourceUrl: primary?.sourceUrl,
+                          title: item.title,
+                          year: item.year,
+                          doubanId: item.id,
                         });
                         if (!verified) {
                           router.push(`/login?redirect=${encodeURIComponent(watchUrl)}`);
@@ -213,29 +220,91 @@ function HomeContent() {
                     />
                   ))}
                 </div>
-                {visibleCount < groups.length && (
-                  <div className="flex justify-center mt-6">
+
+                {/* 底部折叠：采集源深度扫描 */}
+                <div className="pt-4 border-t border-line/50 flex flex-col items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowRawCmsSearch((prev) => !prev)}
+                    className="text-xs text-muted hover:text-content px-4 py-2 rounded-xl bg-chip/60 hover:bg-chip border border-line transition-all cursor-pointer"
+                  >
+                    {showRawCmsSearch ? '▲ 收起底层采集源扫描' : '▼ 未找到想看的内容？展开底层采集源深度扫描'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <EmptyState
+                  icon="search"
+                  title="未搜到匹配影视"
+                  description="资料库中未找到该影视条目，你可以尝试展开底层采集源深度扫描"
+                  className="!py-12"
+                />
+                {!showRawCmsSearch && (
+                  <div className="flex justify-center">
                     <button
                       type="button"
-                      className="px-6 py-2.5 rounded-xl glass-panel text-xs font-semibold text-content hover:text-amber-500 dark:hover:text-amber-400 transition-all cursor-pointer"
-                      onClick={() => setVisibleCount((v) => v + RESULT_PAGE_SIZE)}
+                      onClick={() => setShowRawCmsSearch(true)}
+                      className="text-xs text-accent hover:underline px-4 py-2 rounded-xl bg-accent/10 border border-accent/30 transition-all cursor-pointer"
                     >
-                      加载更多（还剩 {groups.length - visibleCount} 部）
+                      尝试通过底层采集源深度直搜 →
                     </button>
                   </div>
                 )}
-              </>
-            ) : isSearching ? (
-              <div className="py-20 text-center text-muted glass-panel rounded-2xl">
-                正在流式并发检索全网点播采集源…
               </div>
-            ) : (
-              <EmptyState
-                icon="search"
-                title="未搜到匹配影片"
-                description="请尝试其他关键词或在设置中启用更多播放源"
-                className="!py-16"
-              />
+            )}
+
+            {/* 底层采集源展开视图 */}
+            {showRawCmsSearch && (
+              <div className="space-y-4 pt-6 border-t border-line">
+                <h3 className="text-sm font-semibold text-muted">全网底层采集源聚合扫描结果:</h3>
+                {visibleGroups.length > 0 ? (
+                  <>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-5">
+                      {visibleGroups.map((group) => (
+                        <AggregatedCard
+                          key={group.key}
+                          group={group}
+                          onOpen={() => {
+                            const primary = group.items[0];
+                            const watchUrl = buildWatchUrl({
+                              title: group.name,
+                              year: group.year,
+                              sourceKey: primary?.sourceKey,
+                              vodId: primary?.vodId,
+                              sourceUrl: primary?.sourceUrl,
+                            });
+                            if (!verified) {
+                              router.push(`/login?redirect=${encodeURIComponent(watchUrl)}`);
+                              return;
+                            }
+                            router.push(watchUrl);
+                          }}
+                        />
+                      ))}
+                    </div>
+                    {visibleCount < groups.length && (
+                      <div className="flex justify-center mt-6">
+                        <button
+                          type="button"
+                          className="px-6 py-2.5 rounded-xl glass-panel text-xs font-semibold text-content hover:text-amber-500 transition-all cursor-pointer"
+                          onClick={() => setVisibleCount((v) => v + RESULT_PAGE_SIZE)}
+                        >
+                          加载更多采集源结果（还剩 {groups.length - visibleCount} 部）
+                        </button>
+                      </div>
+                    )}
+                  </>
+                ) : isSearching ? (
+                  <div className="py-12 text-center text-muted glass-panel rounded-2xl">
+                    正在流式并发检索全网点播采集源…
+                  </div>
+                ) : (
+                  <div className="py-8 text-center text-faint text-xs">
+                    底层采集源中暂无匹配结果
+                  </div>
+                )}
+              </div>
             )}
           </section>
         </main>

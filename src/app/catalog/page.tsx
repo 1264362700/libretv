@@ -253,21 +253,19 @@ function CatalogContent() {
         {/* 统计提示与换页状态 */}
         <div className="flex items-center justify-between text-xs text-muted py-2.5 px-1 min-h-[40px] border-b border-line/40 shrink-0 leading-normal">
           <span>
-            {urlQuery ? (
-              isVodSearching ? (
-                '正在全网采集站实时搜索最新片源…'
-              ) : (
-                <>
-                  全网聚合找到 <span className="text-content font-bold">{searchGroups.length}</span> 部匹配影片
-                </>
-              )
-            ) : catalogKeyword ? (
+            {catalogKeyword ? (
               catalogQuery.isLoading ? (
                 '正在全库深度搜索…'
               ) : items.length > 0 ? (
                 <>
-                  在【{activeChannelConfig.label}】全库深度搜到 “<span className="text-accent font-semibold">{catalogKeyword}</span>” 相关影片共 <span className="text-content font-bold">{items.length}</span> 部
+                  在【{activeChannelConfig.label}】全库深度搜到 “<span className="text-accent font-semibold">{catalogKeyword}</span>” 相关影视共 <span className="text-content font-bold">{items.length}</span> 部
                   {`（第 ${currentPage}/${totalPages} 页${total > 0 ? `，共约 ${total.toLocaleString()} 部` : ''}）`}
+                </>
+              ) : isVodSearching ? (
+                '正在全网采集站实时搜索最新片源…'
+              ) : searchGroups.length > 0 ? (
+                <>
+                  全网采集站聚合找到 <span className="text-content font-bold">{searchGroups.length}</span> 部匹配影片
                 </>
               ) : (
                 <>
@@ -294,100 +292,11 @@ function CatalogContent() {
           )}
         </div>
 
-        {/* 搜索模式与片库模式内容呈现 */}
-        {urlQuery ? (
-          isVodSearching && searchGroups.length === 0 ? (
-            <CatalogSkeleton />
-          ) : searchGroups.length === 0 ? (
-            <div className="py-20 text-center space-y-3 border border-dashed border-line/60 rounded-2xl bg-surface/40">
-              <p className="text-4xl">🔍</p>
-              <h3 className="text-base font-semibold text-content">全网采集站未搜到 “{urlQuery}”</h3>
-              <p className="text-xs text-muted">请检查关键词是否有误，或在设置中启用更多点播采集源</p>
-              <button
-                type="button"
-                onClick={handleClearSearch}
-                className="btn-primary text-xs px-4 py-1.5 rounded-lg active:scale-95"
-              >
-                返回片库大厅
-              </button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
-              {searchGroups.map((group) => (
-                <AggregatedCard
-                  key={group.key}
-                  group={group}
-                  onOpen={() => {
-                    const primary = group.items[0];
-                    if (typeof window !== 'undefined' && primary?.sourceKey && primary?.vodId) {
-                      try {
-                        const cached = group.items.map((it) => ({
-                          sourceKey: it.sourceKey,
-                          sourceName: it.sourceName,
-                          sourceVodId: it.vodId,
-                          sourceUrl: it.sourceUrl,
-                          remarks: it.remarks,
-                        }));
-                        sessionStorage.setItem(
-                          `libretv:matched:${primary.sourceKey}:${primary.vodId}`,
-                          JSON.stringify(cached)
-                        );
-                      } catch {}
-                    }
-                    const watchUrl = buildWatchUrl({
-                      title: group.name,
-                      year: group.year,
-                      sourceKey: primary?.sourceKey,
-                      vodId: primary?.vodId,
-                      sourceUrl: primary?.sourceUrl,
-                    });
-                    if (!verified) {
-                      router.push(`/login?redirect=${encodeURIComponent(watchUrl)}`);
-                      return;
-                    }
-                    router.push(watchUrl);
-                  }}
-                />
-              ))}
-            </div>
-          )
-        ) : catalogQuery.isLoading ? (
+        {/* 统一内容呈现：以官方全维片库卡片为主，支持点击直通并发测速秒播 */}
+        {catalogQuery.isLoading ? (
           <CatalogSkeleton />
-        ) : items.length === 0 ? (
-          <div className="py-20 text-center space-y-3 border border-dashed border-line/60 rounded-2xl bg-surface/40 animate-fade-in">
-            <p className="text-4xl">🍿</p>
-            <h3 className="text-base font-semibold text-content">
-              {catalogKeyword
-                ? `【${activeChannelConfig.label}】全库未找到与 “${catalogKeyword}” 相关的影片`
-                : '未找到符合条件的影片'}
-            </h3>
-            <p className="text-xs text-muted">
-              {catalogKeyword ? '请尝试更换关键词，或切换至全网跨站直搜' : '请尝试切换其他榜单或数据源'}
-            </p>
-            <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
-              {catalogKeyword && (
-                <button
-                  type="button"
-                  onClick={() => updateFilters({ q: catalogKeyword, wd: '' })}
-                  className="btn-primary text-xs px-3.5 py-1.5 rounded-xl active:scale-95 cursor-pointer"
-                >
-                  🌐 切换全网直搜 “{catalogKeyword}”
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => {
-                  setFilterInput('');
-                  updateFilters({ wd: '', page: 1 });
-                }}
-                className="px-3.5 py-1.5 rounded-xl bg-chip hover:bg-hover border border-line text-content text-xs font-semibold active:scale-95 cursor-pointer"
-              >
-                重置查看精选
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3 sm:gap-4 md:gap-4.5">
+        ) : items.length > 0 ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4 animate-fade-in">
             {items.map((item) => (
               <DoubanCard
                 key={item.id}
@@ -395,6 +304,49 @@ function CatalogContent() {
                 onClick={() => handleCardClick(item.title, item.id, item.year)}
               />
             ))}
+          </div>
+        ) : isVodSearching && searchGroups.length === 0 ? (
+          <CatalogSkeleton />
+        ) : searchGroups.length > 0 ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 sm:gap-4">
+            {searchGroups.map((group) => (
+              <AggregatedCard
+                key={group.key}
+                group={group}
+                onOpen={() => {
+                  const primary = group.items[0];
+                  const watchUrl = buildWatchUrl({
+                    title: group.name,
+                    year: group.year,
+                    sourceKey: primary?.sourceKey,
+                    vodId: primary?.vodId,
+                    sourceUrl: primary?.sourceUrl,
+                  });
+                  if (!verified) {
+                    router.push(`/login?redirect=${encodeURIComponent(watchUrl)}`);
+                    return;
+                  }
+                  router.push(watchUrl);
+                }}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="py-20 text-center space-y-3 border border-dashed border-line/60 rounded-2xl bg-surface/40 animate-fade-in">
+            <p className="text-4xl">🍿</p>
+            <h3 className="text-base font-semibold text-content">
+              {catalogKeyword ? `未找到与 “${catalogKeyword}” 相关的影视` : '该分类下暂无收录影视'}
+            </h3>
+            <p className="text-xs text-muted">你可以尝试清空筛选条件或调整搜索关键词</p>
+            {catalogKeyword && (
+              <button
+                type="button"
+                onClick={handleClearSearch}
+                className="btn-primary text-xs px-4 py-1.5 rounded-lg active:scale-95"
+              >
+                清空搜索并查看推荐
+              </button>
+            )}
           </div>
         )}
 

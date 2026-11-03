@@ -222,20 +222,21 @@ async function requestTmdbJsonUncoalesced(
       maxBuffer: 10 * 1024 * 1024,
     });
     const data = JSON.parse(stdout);
-    if (data && Array.isArray(data.results)) {
+    if (data && (Array.isArray(data.results) || data.id)) {
       setCache(cacheKey, data, CACHE_TTL_MS);
       return data;
     }
   }
 
-  throw new Error(`TMDB 接口请求失败: ${endpoint}`);
+  throw new Error(`资料库接口请求失败: ${endpoint}`);
 }
 
-// 合并同一进程内同时发生的相同 TMDB 请求，避免首页 Hero 与热榜重复击穿上游。
+// 合并同一进程内同时发生的相同请求，避免重复击穿上游。
 type TmdbResponse = {
   results?: TmdbRawItem[];
   total_pages?: number;
   total_results?: number;
+  [key: string]: unknown;
 };
 
 const inFlightTmdbRequests = new Map<string, Promise<TmdbResponse>>();
@@ -452,5 +453,157 @@ export async function fetchTmdbCatalog(options: TmdbDiscoverOptions = {}): Promi
     items,
     total: data.total_results || items.length,
     totalPages: Math.min(500, data.total_pages || 1),
+  };
+}
+
+export interface TmdbDetailInfo {
+  id: string;
+  title: string;
+  originalTitle?: string;
+  cover: string;
+  backdrop?: string;
+  year?: string;
+  rate?: string;
+  overview?: string;
+  category?: 'movie' | 'tv';
+  genres?: string[];
+  area?: string;
+  directors?: string[];
+  actors?: string[];
+  recommendations?: TmdbMediaItem[];
+}
+
+interface TmdbRawDetail {
+  id?: number;
+  title?: string;
+  name?: string;
+  original_title?: string;
+  original_name?: string;
+  poster_path?: string | null;
+  backdrop_path?: string | null;
+  release_date?: string;
+  first_air_date?: string;
+  vote_average?: number;
+  overview?: string;
+  genres?: Array<{ id: number; name: string }>;
+  origin_country?: string[];
+  production_countries?: Array<{ name: string }>;
+  credits?: {
+    crew?: Array<{ job?: string; name?: string }>;
+    cast?: Array<{ name?: string }>;
+  };
+  recommendations?: {
+    results?: TmdbRawItem[];
+  };
+}
+
+/**
+ * 获取单部影视条目的权威详情（含剧照、演职员表与同类推荐）
+ * 支持按官方 ID 查询，或按片名+年份精准反查
+ */
+export async function fetchTmdbDetail(params: {
+  id?: string;
+  type?: 'movie' | 'tv' | string;
+  title?: string;
+  year?: string;
+}): Promise<TmdbDetailInfo | null> {
+  let targetId = params.id ? String(params.id).trim() : '';
+  let targetType = params.type === 'tv' ? 'tv' : 'movie';
+
+  // 1. 若无 ID 但提供了片名，先通过搜索匹配最佳目标 ID
+  if (!targetId && params.title?.trim()) {
+    try {
+      const searchRes = await requestTmdbJson('/search/multi', {
+        query: params.title.trim(),
+        include_adult: 'false',
+        page: '1',
+      });
+      const hit =
+        (searchRes.results || []).find((item) => {
+          if (!item.title && !item.name) return false;
+          const itemYear = (item.release_date || item.first_air_date || '').slice(0, 4);
+          if (params.year && itemYear && itemYear === params.year) return true;
+          return true;
+        }) || (searchRes.results || [])[0];
+
+      if (hit && hit.id) {
+        targetId = String(hit.id);
+        targetType = hit.media_type === 'tv' ? 'tv' : 'movie';
+      }
+    } catch {
+      // 搜索降级
+    }
+  }
+
+  if (!targetId) return null;
+
+  // 2. 拉取详情与演职员附带数据
+  let data: TmdbRawDetail | null = null;
+  const reqDetail = async (kind: 'movie' | 'tv') => {
+    return (await requestTmdbJson(`/${kind}/${targetId}`, {
+      append_to_response: 'credits,recommendations',
+    })) as unknown as TmdbRawDetail;
+  };
+
+  try {
+    data = await reqDetail(targetType as 'movie' | 'tv');
+  } catch {
+    // 若指定类型未命中（例如电视剧传成了 movie），自动切换探测另一种
+    try {
+      const fallbackKind = targetType === 'tv' ? 'movie' : 'tv';
+      data = await reqDetail(fallbackKind);
+      targetType = fallbackKind;
+    } catch {
+      return null;
+    }
+  }
+
+  if (!data || !data.id) return null;
+
+  const isTv = targetType === 'tv';
+  const title = (data.title || data.name || '').trim();
+  const originalTitle = (data.original_title || data.original_name || '').trim();
+  const cover = data.poster_path ? `${IMAGE_BASE_W500}${data.poster_path}` : '';
+  const backdrop = data.backdrop_path ? `${IMAGE_BASE_BACKDROP}${data.backdrop_path}` : '';
+  const year = (data.release_date || data.first_air_date || '').slice(0, 4);
+  const rate = data.vote_average ? Number(data.vote_average).toFixed(1) : undefined;
+  const overview = (data.overview || '').trim();
+  const genres = Array.isArray(data.genres)
+    ? data.genres.map((g) => g.name).filter((n): n is string => Boolean(n))
+    : [];
+  const area = data.origin_country?.[0] || data.production_countries?.[0]?.name || '';
+
+  const crew = Array.isArray(data.credits?.crew) ? data.credits.crew : [];
+  const cast = Array.isArray(data.credits?.cast) ? data.credits.cast : [];
+  const directors = crew
+    .filter((c) => c.job === 'Director')
+    .map((c) => c.name)
+    .filter((n): n is string => Boolean(n));
+  const actors = cast
+    .slice(0, 12)
+    .map((c) => c.name)
+    .filter((n): n is string => Boolean(n));
+
+  const rawRecs = Array.isArray(data.recommendations?.results) ? data.recommendations.results : [];
+  const recommendations = rawRecs
+    .filter((i) => i.poster_path && (i.title || i.name))
+    .slice(0, 8)
+    .map((i) => mapTmdbItem(i, isTv ? 'tv' : 'movie'));
+
+  return {
+    id: String(data.id),
+    title,
+    originalTitle,
+    cover,
+    backdrop,
+    year,
+    rate,
+    overview,
+    category: isTv ? 'tv' : 'movie',
+    genres,
+    area,
+    directors,
+    actors,
+    recommendations,
   };
 }

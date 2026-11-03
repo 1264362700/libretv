@@ -196,6 +196,7 @@ export async function fetchTmdbClient(
     year?: string;
     sort?: string;
     page?: number;
+    query?: string;
   },
   signal?: AbortSignal
 ): Promise<{ items: TmdbMediaItem[]; total: number; totalPages?: number; page?: number }> {
@@ -206,6 +207,7 @@ export async function fetchTmdbClient(
     area: params.area,
     genre: params.genre,
     year: params.year,
+    query: params.query,
   });
 
   const res = await fetch(`/api/media/feed?${sp.toString()}`, { signal });

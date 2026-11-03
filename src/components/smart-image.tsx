@@ -85,15 +85,14 @@ export function SmartImage({
   const src = candidates[idx];
 
   return (
-    <div ref={containerRef} className="w-full h-full">
+    <div ref={containerRef} className={cn('relative overflow-hidden', className)}>
       {!shouldLoad ? (
-        <div className={cn('w-full h-full bg-slate-800/20', className)} aria-hidden="true" />
+        <div className="w-full h-full bg-slate-800/20" aria-hidden="true" />
       ) : allFailed ? (
         <div
           className={cn(
             'w-full h-full flex items-center justify-center bg-slate-800/70',
-            FAILED_SHAKE_CLASS,
-            className
+            FAILED_SHAKE_CLASS
           )}
           aria-label={`封面加载失败: ${alt}`}
         />
@@ -108,9 +107,8 @@ export function SmartImage({
           src={src}
           alt={alt}
           className={cn(
-            'transition-opacity duration-300 ease-out',
-            loaded ? 'opacity-100' : 'opacity-0',
-            className
+            'w-full h-full object-cover transition-opacity duration-300 ease-out',
+            loaded ? 'opacity-100' : 'opacity-0'
           )}
           loading={loading}
           referrerPolicy="no-referrer"

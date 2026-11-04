@@ -14,6 +14,7 @@ export interface MediaCardProps {
   onClick: () => void;
   className?: string;
   showSubtitle?: boolean;
+  loading?: 'lazy' | 'eager';
 }
 
 /**
@@ -31,6 +32,7 @@ export function MediaCard({
   onClick,
   className,
   showSubtitle = true,
+  loading = 'lazy',
 }: MediaCardProps) {
   const { toast } = useToast();
   const { t } = useTranslation();
@@ -84,7 +86,7 @@ export function MediaCard({
             mode={imageProxyMode}
             customProxy={customImageProxy}
             alt={item.title}
-            loading="lazy"
+            loading={loading ?? 'lazy'}
             className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
             onExhausted={() => setImgFailed(true)}
           />

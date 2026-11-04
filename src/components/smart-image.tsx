@@ -2,9 +2,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { buildImageCandidates, cn } from '@/lib/utils';
-
-/** 所有候选地址均失败时的抖动状态 */
-const FAILED_SHAKE_CLASS = 'animate-shake-warn';
+import { HeroImageSkeleton } from './hero-image-skeleton';
+import { PosterSkeleton } from './poster-skeleton';
+import { PosterPlaceholder } from './poster-placeholder';
 
 interface SmartImageProps {
   /** 原始图片地址（未经代理加工，降级链由本组件按加载方式生成） */
@@ -16,12 +16,23 @@ interface SmartImageProps {
   loading?: 'lazy' | 'eager';
   /** 候选链耗尽后回调，调用方切换占位图等兜底 UI */
   onExhausted?: () => void;
+  /** 海报比例：'2/3'（电影海报）| 'video'（16:9）| 'square'，默认 2/3 */
+  aspect?: '2/3' | 'video' | 'square';
+  /** 骨架屏变体：'hero'（Hero 轮播位，固定 16:9）| 'poster'（卡片海报位，固定 2:3），默认 'poster' */
+  variant?: 'hero' | 'poster';
 }
 
 /**
  * 带视口延迟、降级链与平滑淡入过渡的封面图组件。
  * lazy 图片进入视口附近 200px 才设置 src，避免浏览器原生 lazy-load
  * 在长首页提前并发下载大量首屏外海报；eager 图片（如 Hero 当前背景）立即加载。
+ * 骨架屏与失败兜底全部走语义化 Token，固定 aspect-ratio 确保 CLS ≈ 0。
+ *
+ * 三状态切换：
+ * 1. 未加载（!loaded）：渲染骨架屏（HeroImageSkeleton / PosterSkeleton），固定比例不留空白
+ * 2. 加载中（shouldLoad && !loaded）：骨架屏保持显示，img 预渲染 opacity-0 准备淡入
+ * 3. 加载完成（loaded）：隐藏骨架屏，img opacity-0 → opacity-100 平滑淡入
+ * 4. 全部失败（allFailed）：渲染 PosterPlaceholder，调用 onExhausted
  */
 export function SmartImage({
   url,
@@ -31,6 +42,8 @@ export function SmartImage({
   className,
   loading = 'lazy',
   onExhausted,
+  aspect = '2/3',
+  variant = 'poster',
 }: SmartImageProps) {
   const candidates = buildImageCandidates(url, mode, customProxy);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -47,7 +60,7 @@ export function SmartImage({
     setShouldLoad(loading === 'eager');
   }, [url, mode, customProxy, loading]);
 
-  // 明确控制 lazy 图片的启动距离，避免仅依赖浏览器实现各异的原生 lazy 阈值。
+  // lazy 图片进入视口附近 200px 才设置 src，避免首屏外并发下载抢占带宽
   useEffect(() => {
     if (loading === 'eager') {
       setShouldLoad(true);
@@ -84,20 +97,28 @@ export function SmartImage({
 
   const src = candidates[idx];
 
+  // 固定 aspect-ratio，图片加载前后布局不抖动（CLS ≈ 0）
+  const aspectClass =
+    aspect === 'video' ? 'aspect-video' : aspect === 'square' ? 'aspect-square' : 'aspect-[2/3]';
+
   return (
-    <div ref={containerRef} className={cn('relative overflow-hidden', className)}>
-      {!shouldLoad ? (
-        <div className="w-full h-full bg-slate-800/20" aria-hidden="true" />
-      ) : allFailed ? (
-        <div
-          className={cn(
-            'w-full h-full flex items-center justify-center bg-slate-800/70',
-            FAILED_SHAKE_CLASS
-          )}
-          aria-label={`封面加载失败: ${alt}`}
-        />
-      ) : !src ? null : (
-        // eslint-disable-next-line @next/next/no-img-element
+    <div ref={containerRef} className={cn('relative overflow-hidden', aspectClass, className)}>
+      {/* 未加载完成前：渲染骨架屏，固定比例，不留空白 */}
+      {!loaded && !allFailed && (
+        variant === 'hero' ? (
+          <HeroImageSkeleton isLoaded={loaded} />
+        ) : (
+          <PosterSkeleton />
+        )
+      )}
+
+      {/* 全部候选链耗尽：失败兜底，抖动提示，不影响卡片点击 */}
+      {allFailed && (
+        <PosterPlaceholder alt={alt} />
+      )}
+
+      {/* 真实图片：未加载完成时 opacity-0，加载完成后 opacity-100 平滑淡入 */}
+      {!allFailed && src && (
         <img
           ref={(el) => {
             if (el?.complete && el.naturalWidth > 0 && !loaded) {
@@ -107,10 +128,11 @@ export function SmartImage({
           src={src}
           alt={alt}
           className={cn(
-            'w-full h-full object-cover transition-opacity duration-300 ease-out',
+            'absolute inset-0 w-full h-full object-cover',
+            'transition-opacity duration-300 ease-out',
             loaded ? 'opacity-100' : 'opacity-0'
           )}
-          loading={loading}
+          loading={shouldLoad ? loading : 'lazy'}
           referrerPolicy="no-referrer"
           onLoad={() => setLoaded(true)}
           onError={() => {

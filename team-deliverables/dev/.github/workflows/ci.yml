@@ -1,0 +1,161 @@
+name: CI
+
+# 合并门禁：feature 分支推送与 Pull Request 时自动跑类型检查、单测、Lint 与生产构建。
+#
+# 两种触发的分工不同，不要混淆：
+# - feature/fix/hotfix/docs/refactor 分支 push 与 PR：这是**真正的门禁**。分支保护要求
+#   「类型检查 / 单元测试 / ESLint / 生产构建」四项检查通过才允许合并，因此不合规的代码
+#   进不了 Master。
+# - Master push：这是**部署记录**。Master 推送即触发 Render 自动部署，CI 是在
+#   部署之后才开始跑的，绿灯只能说明「这次部署的代码本身通过了校验」，
+#   **拦不住本次部署**。保留它是为了让每次上线在 Actions 页面留下可追溯档案。
+#
+# 四道门禁拆为四个并行 job + 一个端到端 job，而非一个 job 内的连续 steps：
+# GitHub Actions 的 step 默认「失败即跳过后续」，一旦某一环在 runner 上因环境
+# 波动失败，其余门禁会被连带跳过，日志里只看到部分检查在跑，既看不出真实问题，
+# 也无法判断是哪一环出错。拆开后互不影响，每次运行都能得到完整结论，
+# 且并行执行后总耗时取决于最慢一环而非各段相加。
+#
+# runner 固定 ubuntu-24.04：GitHub 公告 ubuntu-latest 将于 2026-10-19 起迁移至
+# Ubuntu 26，浮动标签会让构建环境在无人改动时静默变化。
+
+on:
+  push:
+    branches:
+      - 'feature/**'
+      - 'fix/**'
+      - 'hotfix/**'
+      - 'docs/**'
+      - 'refactor/**'
+      - 'Master'
+  pull_request:
+    branches:
+      - Master
+  # 手动触发：Actions 页面右上角 "Run workflow" 下拉可手动跑一次，
+  # 选中任意分支即可，不必为验证而专门推一个空提交。
+  workflow_dispatch:
+
+# 同一个 PR 的连续推送取消更早的未完成运行，避免旧代码抢跑导致误判。
+# 注意 group 用 github.ref：PR 事件是 refs/pull/N/merge，与分支 push 的
+# refs/heads/xxx 不同，因此二者不会被互相取消（这正是我们要的，PR 检查不能被
+# 分支推送取消掉）。
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  typecheck:
+    name: 类型检查
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: tsc --noEmit
+        run: npm run typecheck
+
+  test:
+    name: 单元测试
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # vitest 默认多线程会显著拉高内存占用，runner 在跑 34 个测试文件时
+      # 易被 OOM Killer 杀掉，表现为无输出的异常中断。
+      # 单 fork 单进程是本机已验证的稳定参数。
+      - name: vitest run
+        run: npm test -- --pool=forks --poolOptions.forks.singleFork=true --poolOptions.forks.maxForks=1
+
+  lint:
+    name: ESLint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: eslint src
+        run: npm run lint
+
+  build:
+    name: 生产构建
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: next build
+        run: npm run build
+
+  e2e:
+    name: 端到端测试
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    # 端到端用例需要能登录的真实口令。仓库未配置 E2E_PASSWORD 时，
+    # 用例内部会整体 skip（见 e2e/helpers/env.ts），此 job 仍会通过，
+    # 避免因为「没配密钥」把合并挡死；配好密钥后同一 job 自动变成真门禁。
+    env:
+      E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: 安装 Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: 构建产物
+        run: npm run build
+        env:
+          # 与本地一致的登录口令，供 next build 内联到运行时环境
+          PASSWORD: ${{ secrets.E2E_PASSWORD }}
+
+      - name: 运行端到端用例
+        run: npm run test:e2e
+        env:
+          PASSWORD: ${{ secrets.E2E_PASSWORD }}
+
+      # 失败时保留 trace 与截图，便于在 Actions 页面直接下载定位
+      - name: 上传测试报告
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7

@@ -10,13 +10,10 @@ import {
   useHlsPipeline,
   type PipelineProps,
   type HlsQualityLevel,
-  type HlsAudioTrackItem,
 } from '@/features/player/use-hls-pipeline';
-import { useSubtitleTrack } from '@/features/player/use-subtitle-track';
 import { usePlayerShortcuts } from '@/features/player/use-player-shortcuts';
 import { useTouchSpeedBoost } from '@/features/player/use-touch-speed';
 import { buildSkipSettings } from '@/features/player/skip-settings';
-import { SubtitleLayer } from '@/features/player/subtitle-layer';
 import { SkipPills } from '@/features/player/skip-pills';
 import { EpisodeDrawer } from '@/features/player/episode-drawer';
 
@@ -68,20 +65,14 @@ export interface PlayerShellHandle {
   isPlaying: () => boolean;
   /** 当前播放秒数 */
   getCurrentTime: () => number;
-  /** 挂载本地外挂字幕（SRT / WebVTT 文本），返回成功解析的字幕条数 */
-  loadSubtitle: (content: string, label?: string) => number;
   /** 将当前播放秒数设为本剧片头结束点，返回标记的秒数 */
   markCurrentAsIntroEnd: () => number;
   /** 切换画中画（Picture-in-Picture）悬浮小窗模式 */
   togglePip: () => Promise<boolean>;
   /** 切换清晰度画质档位 (-1 为 Auto) */
   switchLevel?: (index: number) => void;
-  /** 切换多语言音频轨道 */
-  setAudioTrack?: (id: number) => void;
   /** 获取当前所有画质档位 */
   getLevels?: () => HlsQualityLevel[];
-  /** 获取当前所有音频轨道 */
-  getAudioTracks?: () => HlsAudioTrackItem[];
 }
 
 export const PlayerShell = forwardRef<PlayerShellHandle, PlayerShellProps>((props, ref) => {
@@ -140,12 +131,6 @@ export const PlayerShell = forwardRef<PlayerShellHandle, PlayerShellProps>((prop
   const showHintRef = useRef(showHint);
   showHintRef.current = showHint;
 
-  // 外挂字幕状态机 (REQ-P1-01: 按剧 showKey 独立记忆字幕偏移)
-  const onRestoredSubtitleOffset = useCallback((saved: number) => {
-    showHintRef.current(`已为您延续本剧外挂字幕偏移 [${saved >= 0 ? `+${saved}` : saved}s]`);
-  }, []);
-  const subtitle = useSubtitleTrack(showKey, onRestoredSubtitleOffset);
-
   // 始终持有最新 props/回调，避免重建播放器
   const propsRef = useRef<PipelineProps>({
     url,
@@ -182,7 +167,6 @@ export const PlayerShell = forwardRef<PlayerShellHandle, PlayerShellProps>((prop
   );
 
   const switchLevelCallbackRef = useRef<((index: number) => void) | null>(null);
-  const setAudioTrackCallbackRef = useRef<((id: number) => void) | null>(null);
 
   const handleLevelsUpdated = useCallback((levels: HlsQualityLevel[], currentLevel: number) => {
     const art = artRef.current;
@@ -272,47 +256,7 @@ export const PlayerShell = forwardRef<PlayerShellHandle, PlayerShellProps>((prop
     }
   }, []);
 
-  const handleAudioTracksUpdated = useCallback((tracks: HlsAudioTrackItem[], currentTrack: number) => {
-    const art = artRef.current;
-    if (!art) return;
-    const audioSettingName = 'audio-track-setting';
-
-    if (tracks.length > 1) {
-      const currentName = tracks[currentTrack]?.name || '默认音轨';
-      const audioSetting = {
-        name: audioSettingName,
-        html: '音频轨道',
-        tooltip: currentName,
-        width: 220,
-        selector: tracks.map((t) => ({
-          default: t.id === currentTrack,
-          html: t.id === currentTrack ? `<span style="color:#f59e0b;font-weight:600">✓ ${t.name}</span>` : t.name,
-          trackId: t.id,
-        })),
-        onSelect: (item: { trackId: number; html: string }) => {
-          setAudioTrackCallbackRef.current?.(item.trackId);
-          return item.html;
-        },
-      };
-
-      try {
-        if (art.setting?.find?.(audioSettingName)) {
-          art.setting.update(audioSetting);
-        } else {
-          art.setting?.add?.(audioSetting);
-        }
-      } catch {}
-    } else {
-      // 单音轨源自适应隐藏 (CHK-A-04)
-      try {
-        if (art.setting?.find?.(audioSettingName)) {
-          art.setting.remove(audioSettingName);
-        }
-      } catch {}
-    }
-  }, []);
-
-  // HLS 播放管线（换源/错误恢复/预取/字幕刷新/跳过判定/事件处理/画质与音轨）
+  // HLS 播放管线（换源/错误恢复/预取/跳过判定/事件处理/画质）
   const {
     setupHls,
     loadEpisode,
@@ -328,26 +272,21 @@ export const PlayerShell = forwardRef<PlayerShellHandle, PlayerShellProps>((prop
     handleLoadedMetadata,
     getCurrentMediaUrl,
     switchLevel,
-    setAudioTrack,
     getLevels,
-    getAudioTracks,
   } = useHlsPipeline({
     artRef,
     propsRef,
     showHint,
     setError,
     setShowPoster,
-    refreshSubtitle: subtitle.refresh,
     skipRefs,
     setShowSkipOpening,
     setShowSkipEnding,
     setUndoIntro,
     onLevelsUpdated: handleLevelsUpdated,
-    onAudioTracksUpdated: handleAudioTracksUpdated,
   });
 
   switchLevelCallbackRef.current = switchLevel;
-  setAudioTrackCallbackRef.current = setAudioTrack;
 
   // 键盘快捷键 + 移动端长按 3 倍速
   usePlayerShortcuts(artRef, showHintRef);
@@ -468,17 +407,7 @@ export const PlayerShell = forwardRef<PlayerShellHandle, PlayerShellProps>((prop
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adFilter]);
 
-  // 供上层调用的稳定字幕挂载逻辑（命令面板复用）
-  const loadSubtitle = useCallback(
-    (content: string, label?: string) => {
-      const count = subtitle.loadSubtitle(content, label);
-      showHint(count > 0 ? `已挂载字幕「${label || '外挂字幕'}」(${count} 条)` : '字幕解析为空，请检查格式');
-      return count;
-    },
-    [subtitle, showHint]
-  );
-
-  // 对外暴露播放控制与字幕/片头快捷操作
+  // 对外暴露播放控制与片头快捷操作
   useImperativeHandle(
     ref,
     () => ({
@@ -495,7 +424,6 @@ export const PlayerShell = forwardRef<PlayerShellHandle, PlayerShellProps>((prop
       },
       isPlaying: () => Boolean(artRef.current?.playing),
       getCurrentTime: () => Number(artRef.current?.currentTime || 0),
-      loadSubtitle,
       markCurrentAsIntroEnd: () => {
         const cur = Math.round(Number(artRef.current?.currentTime || 0));
         if (cur > 0) {
@@ -530,59 +458,14 @@ export const PlayerShell = forwardRef<PlayerShellHandle, PlayerShellProps>((prop
         }
       },
       switchLevel,
-      setAudioTrack,
       getLevels,
-      getAudioTracks,
     }),
-    [showHint, loadSubtitle, switchLevel, setAudioTrack, getLevels, getAudioTracks]
+    [showHint, switchLevel, getLevels]
   );
 
-  // 字幕时间轴微调（胶囊按钮点击时给出偏移提示）
-  const adjustSubOffset = (delta: number) => {
-    const next = subtitle.adjustOffset(delta);
-    showHint(`字幕时间轴偏移：${next >= 0 ? `+${next}` : next}s`);
-  };
-
   return (
-    <div
-      className="relative w-full h-full"
-      onDragOver={(e) => {
-        e.preventDefault();
-      }}
-      onDrop={(e) => {
-        e.preventDefault();
-        const file = e.dataTransfer?.files?.[0];
-        if (!file) return;
-        if (!/\.(srt|vtt|ass)$/i.test(file.name)) {
-          showHint('请拖入 .srt 或 .vtt 字幕文件');
-          return;
-        }
-        const reader = new FileReader();
-        reader.onload = () => {
-          const text = String(reader.result || '');
-          loadSubtitle(text, file.name);
-        };
-        reader.readAsText(file, 'utf-8');
-      }}
-    >
+    <div className="relative w-full h-full">
       <div ref={containerRef} className="w-full h-full" style={{ WebkitTouchCallout: 'none' }} />
-
-      {/* 外挂字幕渲染层 + 时间轴校准胶囊 (REQ-P1-01) */}
-      <SubtitleLayer
-        activeSubText={subtitle.activeText}
-        subtitleLabel={subtitle.label}
-        subtitleOffset={subtitle.offset}
-        error={error}
-        onAdjustOffset={adjustSubOffset}
-        onResetOffset={() => {
-          subtitle.resetOffset();
-          showHint('已重置字幕时间轴并恢复原始对齐');
-        }}
-        onClear={() => {
-          subtitle.clearSubtitle();
-          showHint('已卸载外挂字幕');
-        }}
-      />
 
       {/* 静音海报层 */}
       {showPoster && !error && (
@@ -691,7 +574,6 @@ export const PlayerShell = forwardRef<PlayerShellHandle, PlayerShellProps>((prop
           onSelectEpisode={onSelectEpisode}
           host={epPortalHost}
           onHint={showHint}
-          subtitleLabel={subtitle.label}
         />
       )}
     </div>

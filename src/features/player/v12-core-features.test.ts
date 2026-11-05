@@ -6,12 +6,6 @@ import {
   QUALITY_STORAGE_KEY,
 } from './use-hls-pipeline';
 import {
-  getSubtitleOffsetStorageKey,
-  getStoredSubtitleOffset,
-  saveStoredSubtitleOffset,
-  removeStoredSubtitleOffset,
-} from './use-subtitle-track';
-import {
   buildEpisodeRows,
   buildEpisodeAnchors,
   EPISODE_ANCHOR_THRESHOLD,
@@ -114,36 +108,6 @@ describe('LibreTV v1.2 Core Enhancements Unit Tests', () => {
       saveQualityPreference('1080P');
       expect(localStorage.getItem(QUALITY_STORAGE_KEY)).toBe('1080P');
       expect(getStoredQualityPreference()).toBe('1080P');
-    });
-  });
-
-  // ==========================================
-  // REQ-P1-01: 外挂字幕时间轴步进微调与按剧持久化
-  // ==========================================
-  describe('REQ-P1-01: 外挂字幕多档步进与独立记忆', () => {
-    it('按剧 showKey 生成独立的存储键名', () => {
-      const key = getSubtitleOffsetStorageKey('douluo_dalu:s1');
-      expect(key).toBe('libretv:sub_offset:douluo_dalu:s1');
-    });
-
-    it('支持毫秒级/多档阶梯步进存储与读取', () => {
-      const showKey = 'interstellar:2014';
-      expect(getStoredSubtitleOffset(showKey)).toBe(0);
-
-      saveStoredSubtitleOffset(showKey, 1.5);
-      expect(getStoredSubtitleOffset(showKey)).toBe(1.5);
-
-      saveStoredSubtitleOffset(showKey, -2.5);
-      expect(getStoredSubtitleOffset(showKey)).toBe(-2.5);
-
-      removeStoredSubtitleOffset(showKey);
-      expect(getStoredSubtitleOffset(showKey)).toBe(0);
-    });
-
-    it('容错处理损坏的 localStorage 数值', () => {
-      const showKey = 'broken_test';
-      localStorage.setItem(getSubtitleOffsetStorageKey(showKey), 'invalid_number');
-      expect(getStoredSubtitleOffset(showKey)).toBe(0);
     });
   });
 
@@ -274,29 +238,6 @@ describe('LibreTV v1.2 Core Enhancements Unit Tests', () => {
       expect(formatQualityLabel({ name: '   ', height: 720 }, 1)).toBe('720P 高清');
       expect(formatQualityLabel({ name: '', height: 0, bitrate: 650000 }, 2)).toBe('650 kbps');
       expect(formatQualityLabel({ height: 0, bitrate: 0 }, 3)).toBe('档位 4');
-    });
-
-    it('外挂字幕偏好极端边界：空 showKey、非法数值容错与步进累加', () => {
-      expect(getStoredSubtitleOffset('')).toBe(0);
-      expect(getStoredSubtitleOffset(undefined)).toBe(0);
-
-      // 模拟多档微调连续累加 (+0.5 + 1.0 + 2.5 = 4.0, -2.5 = 1.5)
-      const showKey = 'boundary_series';
-      saveStoredSubtitleOffset(showKey, 0.5);
-      expect(getStoredSubtitleOffset(showKey)).toBe(0.5);
-      saveStoredSubtitleOffset(showKey, 1.5);
-      expect(getStoredSubtitleOffset(showKey)).toBe(1.5);
-      saveStoredSubtitleOffset(showKey, 4.0);
-      expect(getStoredSubtitleOffset(showKey)).toBe(4.0);
-      saveStoredSubtitleOffset(showKey, 1.5);
-      expect(getStoredSubtitleOffset(showKey)).toBe(1.5);
-
-      // 极端浮点数与负数存储
-      saveStoredSubtitleOffset(showKey, -120.5);
-      expect(getStoredSubtitleOffset(showKey)).toBe(-120.5);
-
-      removeStoredSubtitleOffset(showKey);
-      expect(getStoredSubtitleOffset(showKey)).toBe(0);
     });
 
     it('剧集虚拟行与百集区间极端边界：0集、单集、刚好阈值40集、41集、余数行', () => {

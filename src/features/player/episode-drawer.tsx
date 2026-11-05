@@ -9,7 +9,6 @@ interface EpisodeDrawerProps {
   onSelectEpisode: (index: number) => void;
   host: HTMLDivElement;
   onHint: (text: string) => void;
-  subtitleLabel: string;
 }
 
 /**
@@ -26,7 +25,6 @@ export function EpisodeDrawer({
   onSelectEpisode,
   host,
   onHint,
-  subtitleLabel,
 }: EpisodeDrawerProps) {
   const [epDrawerOpen, setEpDrawerOpen] = useState(false);
   const epHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -71,7 +69,7 @@ export function EpisodeDrawer({
       />
 
       {/* 右上角轻量选集唤醒胶囊（兼顾触屏设备与全屏直观选集） */}
-      {!epDrawerOpen && !subtitleLabel && (
+      {!epDrawerOpen && (
         <button
           type="button"
           onClick={openEpDrawer}

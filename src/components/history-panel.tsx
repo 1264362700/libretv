@@ -191,35 +191,39 @@ function HistoryItem({ item }: { item: HistoryEntry }) {
           // 点击即同步一次时间戳，置顶最近观看
           upsertHistory({ ...item, timestamp: Date.now() }).catch(() => {});
         }}
-        className="block bg-card hover:bg-hover rounded-lg p-3 pr-10 transition-colors"
+        className="block bg-card hover:bg-hover rounded-xl p-3 pr-10 border border-line/60 hover:border-line transition-all shadow-sm"
       >
-        <div className="flex items-center gap-3">
-          {item.pic && !imgFailed ? (
-            <SmartImage
-              url={item.pic}
-              mode={imageProxyMode}
-              customProxy={customImageProxy}
-              alt=""
-              className="w-10 h-14 object-cover rounded bg-chip"
-              onExhausted={() => setImgFailed(true)}
-            />
-          ) : (
-            <div className="w-10 h-14 rounded bg-chip flex items-center justify-center shrink-0">
-              <svg className="w-4 h-4 text-faint" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 4v16m10-16v16M7 8h10M7 12h10" />
-              </svg>
-            </div>
-          )}
-          <div className="min-w-0 flex-1">
-            <div className="text-sm font-medium text-content truncate">{item.title}</div>
-            <div className="text-xs text-faint mt-0.5 flex items-center gap-1.5 flex-wrap">
-              {item.totalEpisodes > 0 && <span>第 {item.episodeIndex + 1}/{item.totalEpisodes} 集</span>}
-              {hasPercent && <span>· {formatTime(item.playbackPosition)}</span>}
-              <span>· {formatRelativeTime(item.timestamp)}</span>
+        <div className="flex items-center gap-3.5">
+          <div className="w-12 h-16 rounded-lg bg-chip shrink-0 overflow-hidden relative border border-line/40">
+            {item.pic && !imgFailed ? (
+              <SmartImage
+                url={item.pic}
+                mode={imageProxyMode}
+                customProxy={customImageProxy}
+                alt={item.title}
+                className="w-full h-full object-cover"
+                onExhausted={() => setImgFailed(true)}
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-faint">
+                <svg className="w-5 h-5 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 4v16m10-16v16M7 8h10M7 12h10" />
+                </svg>
+              </div>
+            )}
+          </div>
+          <div className="min-w-0 flex-1 py-0.5">
+            <div className="text-sm font-semibold text-content truncate leading-snug">{item.title}</div>
+            <div className="text-xs text-muted mt-1.5 flex items-center gap-1.5 flex-nowrap overflow-hidden">
+              <span className="truncate">
+                {item.totalEpisodes > 0 && `第 ${item.episodeIndex + 1}/${item.totalEpisodes} 集`}
+                {hasPercent && ` · ${formatTime(item.playbackPosition)}`}
+                {` · ${formatRelativeTime(item.timestamp)}`}
+              </span>
             </div>
             {hasPercent && (
-              <div className="mt-1.5 h-1 bg-hover rounded-full overflow-hidden">
-                <div className="h-full bg-accent" style={{ width: `${percent}%` }} />
+              <div className="mt-2 h-1 w-full bg-hover rounded-full overflow-hidden">
+                <div className="h-full bg-accent rounded-full" style={{ width: `${percent}%` }} />
               </div>
             )}
           </div>
@@ -227,7 +231,7 @@ function HistoryItem({ item }: { item: HistoryEntry }) {
       </Link>
       <button
         className={cn(
-          'absolute right-2 top-2 p-2 rounded-full text-faint hover:text-danger',
+          'absolute right-2.5 top-2.5 p-1.5 rounded-lg text-faint hover:text-danger hover:bg-hover/80',
           'opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity'
         )}
         aria-label="删除记录"

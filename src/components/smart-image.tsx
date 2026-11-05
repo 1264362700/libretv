@@ -2,9 +2,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { buildImageCandidates, cn } from '@/lib/utils';
-
-/** 所有候选地址均失败时的抖动状态 */
-const FAILED_SHAKE_CLASS = 'animate-shake-warn';
+import { HeroImageSkeleton } from './hero-image-skeleton';
+import { PosterSkeleton } from './poster-skeleton';
+import { PosterPlaceholder } from './poster-placeholder';
 
 interface SmartImageProps {
   /** 原始图片地址（未经代理加工，降级链由本组件按加载方式生成） */
@@ -18,6 +18,10 @@ interface SmartImageProps {
   priority?: boolean;
   /** 候选链耗尽后回调，调用方切换占位图等兜底 UI */
   onExhausted?: () => void;
+  /** 海报比例：'2/3'（电影海报）| 'video'（16:9）| 'square'，默认 2/3 */
+  aspect?: '2/3' | 'video' | 'square';
+  /** 骨架屏变体：'hero'（Hero 轮播位，固定 16:9）| 'poster'（卡片海报位，固定 2:3），默认 'poster' */
+  variant?: 'hero' | 'poster';
 }
 
 /**
@@ -34,6 +38,8 @@ export function SmartImage({
   loading = 'lazy',
   priority = false,
   onExhausted,
+  aspect = '2/3',
+  variant = 'poster',
 }: SmartImageProps) {
   const isEager = priority || loading === 'eager';
   const effectiveLoading = isEager ? 'eager' : 'lazy';
@@ -52,7 +58,7 @@ export function SmartImage({
     setShouldLoad(isEager);
   }, [url, mode, customProxy, isEager]);
 
-  // 明确控制 lazy 图片的启动距离，避免仅依赖浏览器实现各异的原生 lazy 阈值。
+  // lazy 图片进入视口附近 200px 才设置 src，避免首屏外并发下载抢占带宽
   useEffect(() => {
     if (isEager) {
       setShouldLoad(true);
@@ -88,6 +94,10 @@ export function SmartImage({
   }, [shouldLoad, idx, candidates.length, allFailed, onExhausted]);
 
   const src = candidates[idx];
+
+  // 固定 aspect-ratio，图片加载前后布局不抖动（CLS ≈ 0）
+  const aspectClass =
+    aspect === 'video' ? 'aspect-video' : aspect === 'square' ? 'aspect-square' : 'aspect-[2/3]';
 
   return (
     <div ref={containerRef} className="w-full h-full relative overflow-hidden">

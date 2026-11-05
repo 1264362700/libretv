@@ -17,7 +17,7 @@ const PlayerShell = dynamic(() => import('@/components/player-shell').then((m) =
   ),
 });
 import { Spinner } from '@/components/states';
-import { SwitchSourceModal } from '@/components/switch-source';
+import { QoSRadarDrawer } from '@/features/watch/qos-radar-drawer';
 import { enqueueDownload } from '@/components/download-manager';
 import { Icon } from '@/components/icon';
 import { useAuth } from '@/components/auth';
@@ -322,6 +322,20 @@ function WatchContent() {
       added ? 'success' : 'info'
     );
   }, [videoTitle, sourceKey, source?.url, vodId, activePoster, yearText, typeText, videoInfo?.remarks, remarksText, episodes.length, toast]);
+
+  // 键盘快捷键 S 快速呼出/收起线路 QoS 监控雷达抽屉 (CHK-R-01)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+      if ((e.key === 's' || e.key === 'S') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        setSwitchOpen((v) => !v);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   useEffect(() => {
     if (checked && !verified) {
@@ -680,16 +694,17 @@ function WatchContent() {
         />
       </main>
 
-      {switchOpen && (
-        <SwitchSourceModal
-          currentTitle={videoTitle}
-          currentSourceKey={sourceKey}
-          currentVodId={vodId}
-          currentIndex={currentIndex}
-          currentPosition={getCurrentPosition()}
-          onClose={() => setSwitchOpen(false)}
-        />
-      )}
+      <QoSRadarDrawer
+        isOpen={switchOpen}
+        onClose={() => setSwitchOpen(false)}
+        currentSourceKey={sourceKey}
+        currentVodId={vodId}
+        currentIndex={currentIndex}
+        currentPosition={getCurrentPosition()}
+        videoTitle={videoTitle}
+        candidates={candidates}
+        onSwitch={(cand) => switchToCandidate(cand, true)}
+      />
 
       {handoffOpen && (
         <QrHandoffModal

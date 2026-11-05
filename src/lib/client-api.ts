@@ -461,14 +461,34 @@ export const api = {
     return request<DoubanResponse>(`/api/hot-list?${sp.toString()}`, { signal });
   },
 
-  /** 换源：按标题跨源搜索并取详情，附带接口耗时（测速）；支持 signal 以便关闭弹窗时中止在途请求 */
-  detailSpeed: async (id: string, source: SourceConfig, signal?: AbortSignal) => {
+  /** 换源：按标题跨源搜索并取详情，附带接口耗时（测速）；支持 3000ms 自动截断硬超时与外部 signal 中止 */
+  detailSpeed: async (id: string, source: SourceConfig, signal?: AbortSignal, timeoutMs = 3000) => {
     const start = performance.now();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(new DOMException('测速超时', 'TimeoutError')), timeoutMs);
+
+    const onAbort = () => controller.abort();
+    if (signal) {
+      if (signal.aborted) {
+        clearTimeout(timer);
+        return { ok: false, ms: 0, detail: undefined as VideoDetail | undefined, error: '已取消' };
+      }
+      signal.addEventListener('abort', onAbort);
+    }
+
     try {
-      const detail = await api.detail(id, source, signal);
+      const detail = await api.detail(id, source, controller.signal);
       return { ok: true, ms: Math.round(performance.now() - start), detail };
     } catch (err) {
-      return { ok: false, ms: Math.round(performance.now() - start), detail: undefined as VideoDetail | undefined, error: err instanceof Error ? err.message : '失败' };
+      return {
+        ok: false,
+        ms: Math.round(performance.now() - start),
+        detail: undefined as VideoDetail | undefined,
+        error: err instanceof Error ? err.message : '失败',
+      };
+    } finally {
+      clearTimeout(timer);
+      if (signal) signal.removeEventListener('abort', onAbort);
     }
   },
 

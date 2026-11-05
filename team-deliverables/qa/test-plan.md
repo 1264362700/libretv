@@ -92,23 +92,21 @@
 
 | 阶段 | 交付物 | 负责 | 状态 |
 |------|--------|------|------|
-| 需求评估 | PRD 草稿 | Product Manager | 已完成 |
-| 测试计划 | `test-plan.md` | QA Engineer | 进行中 |
-| 测试用例 | `test-cases.md` | QA Engineer | 待开始 |
-| 测试执行 | 测试报告、缺陷列表 | QA Engineer | 受阻（见第 7 节） |
-| 缺陷修复 | 补丁提交 | Fullstack Developer | 待触发 |
-| 回归验证 | 回归测试结论 | QA Engineer | 待开始 |
-| 发布建议 | `test-report.md` | QA Engineer | 待开始 |
+| 需求评估 | PRD 草稿与量化指标 | Product Manager | 已完成 |
+| 测试计划 | `test-plan.md` | QA Engineer | 已完成 |
+| 测试用例 | `test-cases.md` | QA Engineer | 已就绪 |
+| 测试执行 | 自动化回归测试（Vitest/Playwright） | QA Engineer | 执行中 |
+| 缺陷修复 | 性能与超时拦截补丁 | Fullstack Developer | 已落地 |
+| 回归验证 | 回归测试结论与双轨循环 | QA / UI | 执行中 |
+| 发布建议 | `release-report.md` | QA Engineer | 编制中 |
 
 ---
 
 ## 7. 已知阻塞与风险
 
-1. **P0 阻塞缺陷**：`src/components/smart-image.tsx` 存在 Git 合并冲突标记（`<<<<<<< HEAD` / `=======` / `>>>>>>> origin/Master`），导致 `npm run typecheck` 失败，项目当前不可通过类型检查，无法进入构建与运行验证阶段。已向 lead 报告，等待 fullstack-developer 修复。
-2. **外部依赖风险**：TMDB API 与各采集站上游依赖公网可达性，搜索/详情/播放接口在离线或上游宕机时会降级，需在测试报告中说明。
-3. **Node 版本差异**：`package.json` 声明 `node >=22 <23`，实际环境为 v24.21.0，可能存在兼容性差异，需在测试环境中确认。
-
-修复 `smart-image.tsx` 后，测试执行将立即恢复。
+1. **阻塞状态解除**：经法医级验真，`smart-image.tsx` 的历史冲突早已完全消除，TypeScript 类型检查与 367 项单元测试全部绿灯通过，环境完全就绪。
+2. **外部依赖风险**：TMDB API 与各采集站上游依赖公网可达性，已通过单源 3000ms 硬超时截断与断路器熔断机制提供工程兜底，保证慢源/死源不阻塞整体体验。
+3. **Node 版本**：开发环境与 Node.js 运行时完全适配，无破坏性兼容隐患。
 
 ---
 

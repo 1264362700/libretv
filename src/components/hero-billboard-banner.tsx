@@ -27,6 +27,7 @@ function BannerImage({ backdrop, cover, title, isActive }: { backdrop?: string; 
       mode={imageProxyMode}
       customProxy={customImageProxy}
       alt={title}
+      priority={isActive}
       loading={isActive ? "eager" : "lazy"}
       className={`w-full h-full object-cover object-center ${isActive ? 'animate-ken-burns' : ''}`}
     />

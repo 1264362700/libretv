@@ -7,7 +7,7 @@ import { resolveSource } from '@/lib/store';
 import type { SourceConfig, SearchResultItem } from '@/lib/types';
 import { StreamSourceMatcher, type MatchedSource } from '@/lib/stream-source-matcher';
 import { buildWatchUrl } from '@/lib/utils';
-import { recordSourceFailure, recordSourceSuccess } from '@/lib/source-circuit-breaker';
+import { canProbeSource, recordSourceFailure, recordSourceSuccess } from '@/lib/source-circuit-breaker';
 import type { CandidateItem } from './watch-types';
 
 /** 快于当前线路多少才值得提示用户（相对节省比例 30%） */
@@ -211,16 +211,25 @@ export function useWatchEngine({
         if (baseline === null || baseline <= 0) return;
         recordSourceSuccess(source.key, baseline);
 
-        const results = await Promise.all(
+        const settled = await Promise.allSettled(
           others.map(async (c) => {
-            const r = await api.detailSpeed(c.result.vodId, c.source, controller.signal);
+            if (!canProbeSource(c.source.key)) {
+              return { cand: c, ok: false, ms: undefined };
+            }
+            const r = await api.detailSpeed(c.result.vodId, c.source, controller.signal, 3000);
             if (r.ok && r.ms) {
               recordSourceSuccess(c.source.key, r.ms);
+            } else {
+              recordSourceFailure(c.source.key);
             }
             return { cand: c, ok: r.ok, ms: r.ms };
           })
         );
         if (cancelled) return;
+
+        const results = settled
+          .filter((item): item is PromiseFulfilledResult<{ cand: CandidateItem; ok: boolean; ms?: number }> => item.status === 'fulfilled')
+          .map((item) => item.value);
 
         const faster = results
           .filter((r) => r.ok && r.ms !== undefined)

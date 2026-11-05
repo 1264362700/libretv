@@ -67,4 +67,12 @@ describe('source-circuit-breaker & QoS scoring', () => {
     expect(getSourceMetrics('recover_src').consecutiveFailures).toBe(0);
     expect(getSourceQoSScore('recover_src', afterCooldown + 200)).toBeGreaterThan(60);
   });
+
+  it('验证高延迟或超时衰减符合 QoS 阶梯设计', () => {
+    recordSourceSuccess('slow_src', 2500);
+    const score = getSourceQoSScore('slow_src');
+    expect(score).toBeLessThan(80);
+    const badge = getSourceQoSBadge('slow_src');
+    expect(['A', 'B']).toContain(badge.grade);
+  });
 });

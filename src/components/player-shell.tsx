@@ -6,7 +6,12 @@ import Artplayer from 'artplayer';
 import { formatTime } from '@/lib/utils';
 import { getShowPreciseSkip, saveShowPreciseSkip, type PreciseSkipConfig } from '@/lib/precise-skip';
 
-import { useHlsPipeline, type PipelineProps } from '@/features/player/use-hls-pipeline';
+import {
+  useHlsPipeline,
+  type PipelineProps,
+  type HlsQualityLevel,
+  type HlsAudioTrackItem,
+} from '@/features/player/use-hls-pipeline';
 import { useSubtitleTrack } from '@/features/player/use-subtitle-track';
 import { usePlayerShortcuts } from '@/features/player/use-player-shortcuts';
 import { useTouchSpeedBoost } from '@/features/player/use-touch-speed';
@@ -69,6 +74,14 @@ export interface PlayerShellHandle {
   markCurrentAsIntroEnd: () => number;
   /** 切换画中画（Picture-in-Picture）悬浮小窗模式 */
   togglePip: () => Promise<boolean>;
+  /** 切换清晰度画质档位 (-1 为 Auto) */
+  switchLevel?: (index: number) => void;
+  /** 切换多语言音频轨道 */
+  setAudioTrack?: (id: number) => void;
+  /** 获取当前所有画质档位 */
+  getLevels?: () => HlsQualityLevel[];
+  /** 获取当前所有音频轨道 */
+  getAudioTracks?: () => HlsAudioTrackItem[];
 }
 
 export const PlayerShell = forwardRef<PlayerShellHandle, PlayerShellProps>((props, ref) => {
@@ -165,7 +178,138 @@ export const PlayerShell = forwardRef<PlayerShellHandle, PlayerShellProps>((prop
     [skipConfigRef, hasSkippedOpeningRef, hasJumpedEndingRef, endedRef]
   );
 
-  // HLS 播放管线（换源/错误恢复/预取/字幕刷新/跳过判定/事件处理）
+  const switchLevelCallbackRef = useRef<((index: number) => void) | null>(null);
+  const setAudioTrackCallbackRef = useRef<((id: number) => void) | null>(null);
+
+  const handleLevelsUpdated = useCallback((levels: HlsQualityLevel[], currentLevel: number) => {
+    const art = artRef.current;
+    if (!art) return;
+    const settingName = 'quality-setting';
+    const controlName = 'quality-control';
+
+    if (levels.length > 1) {
+      const currentLabel = currentLevel === -1 ? '自动 (Auto)' : (levels[currentLevel]?.label || '画质');
+      const qualitySetting = {
+        name: settingName,
+        html: '清晰度 / 画质',
+        tooltip: currentLabel,
+        width: 220,
+        selector: [
+          {
+            default: currentLevel === -1,
+            html: currentLevel === -1 ? '<span style="color:#f59e0b;font-weight:600">✓ 自动 (Auto)</span>' : '自动 (Auto)',
+            level: -1,
+          },
+          ...levels.map((lvl) => ({
+            default: currentLevel === lvl.index,
+            html: currentLevel === lvl.index ? `<span style="color:#f59e0b;font-weight:600">✓ ${lvl.label}</span>` : lvl.label,
+            level: lvl.index,
+          })),
+        ],
+        onSelect: (item: { level: number; html: string }) => {
+          switchLevelCallbackRef.current?.(item.level);
+          return item.html;
+        },
+      };
+
+      try {
+        if (art.setting?.find?.(settingName)) {
+          art.setting.update(qualitySetting);
+        } else {
+          art.setting?.add?.(qualitySetting);
+        }
+      } catch {}
+
+      const controlOption = {
+        name: controlName,
+        position: 'right' as const,
+        index: 20,
+        html: currentLevel === -1 ? '画质' : (levels[currentLevel]?.label.split(' ')[0] || '画质'),
+        tooltip: '清晰度',
+        style: {
+          padding: '0 8px',
+          fontSize: '12px',
+          cursor: 'pointer',
+        },
+        selector: [
+          {
+            default: currentLevel === -1,
+            html: currentLevel === -1 ? '<span style="color:#f59e0b;font-weight:600">✓ 自动 (Auto)</span>' : '自动 (Auto)',
+            level: -1,
+          },
+          ...levels.map((lvl) => ({
+            default: currentLevel === lvl.index,
+            html: currentLevel === lvl.index ? `<span style="color:#f59e0b;font-weight:600">✓ ${lvl.label}</span>` : lvl.label,
+            level: lvl.index,
+          })),
+        ],
+        onSelect: (item: { level: number; html: string }) => {
+          switchLevelCallbackRef.current?.(item.level);
+          return item.html;
+        },
+      };
+
+      try {
+        if (art.controls?.[controlName]) {
+          art.controls.update(controlOption);
+        } else {
+          art.controls?.add?.(controlOption);
+        }
+      } catch {}
+    } else {
+      // 单码率源自适应隐藏 (CHK-Q-04)
+      try {
+        if (art.setting?.find?.(settingName)) {
+          art.setting.remove(settingName);
+        }
+        if (art.controls?.[controlName]) {
+          art.controls.remove(controlName);
+        }
+      } catch {}
+    }
+  }, []);
+
+  const handleAudioTracksUpdated = useCallback((tracks: HlsAudioTrackItem[], currentTrack: number) => {
+    const art = artRef.current;
+    if (!art) return;
+    const audioSettingName = 'audio-track-setting';
+
+    if (tracks.length > 1) {
+      const currentName = tracks[currentTrack]?.name || '默认音轨';
+      const audioSetting = {
+        name: audioSettingName,
+        html: '音频轨道',
+        tooltip: currentName,
+        width: 220,
+        selector: tracks.map((t) => ({
+          default: t.id === currentTrack,
+          html: t.id === currentTrack ? `<span style="color:#f59e0b;font-weight:600">✓ ${t.name}</span>` : t.name,
+          trackId: t.id,
+        })),
+        onSelect: (item: { trackId: number; html: string }) => {
+          setAudioTrackCallbackRef.current?.(item.trackId);
+          return item.html;
+        },
+      };
+
+      try {
+        if (art.setting?.find?.(audioSettingName)) {
+          art.setting.update(audioSetting);
+        } else {
+          art.setting?.add?.(audioSetting);
+        }
+      } catch {}
+    } else {
+      // 单音轨源自适应隐藏 (CHK-A-04)
+      try {
+        if (art.setting?.find?.(audioSettingName)) {
+          art.setting.remove(audioSettingName);
+        }
+      } catch {}
+    }
+  }, []);
+
+  // HLS 播放管线（换源/错误恢复/预取/字幕刷新/跳过判定/事件处理/画质与音轨）
   const {
     setupHls,
     loadEpisode,
@@ -180,6 +324,10 @@ export const PlayerShell = forwardRef<PlayerShellHandle, PlayerShellProps>((prop
     handleVideoError,
     handleLoadedMetadata,
     getCurrentMediaUrl,
+    switchLevel,
+    setAudioTrack,
+    getLevels,
+    getAudioTracks,
   } = useHlsPipeline({
     artRef,
     propsRef,
@@ -191,7 +339,12 @@ export const PlayerShell = forwardRef<PlayerShellHandle, PlayerShellProps>((prop
     setShowSkipOpening,
     setShowSkipEnding,
     setUndoIntro,
+    onLevelsUpdated: handleLevelsUpdated,
+    onAudioTracksUpdated: handleAudioTracksUpdated,
   });
+
+  switchLevelCallbackRef.current = switchLevel;
+  setAudioTrackCallbackRef.current = setAudioTrack;
 
   // 键盘快捷键 + 移动端长按 3 倍速
   usePlayerShortcuts(artRef, showHintRef);
@@ -373,8 +526,12 @@ export const PlayerShell = forwardRef<PlayerShellHandle, PlayerShellProps>((prop
           return false;
         }
       },
+      switchLevel,
+      setAudioTrack,
+      getLevels,
+      getAudioTracks,
     }),
-    [showHint, loadSubtitle]
+    [showHint, loadSubtitle, switchLevel, setAudioTrack, getLevels, getAudioTracks]
   );
 
   // 字幕时间轴微调（胶囊按钮点击时给出偏移提示）

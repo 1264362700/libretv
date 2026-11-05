@@ -275,6 +275,7 @@ export function VideoCard({ item, onClick }: { item: SearchResultItem; onClick: 
 export function DoubanCard({
   item,
   cmsRemarksMap,
+  priority = false,
   onClick,
 }: {
   item: {
@@ -293,6 +294,7 @@ export function DoubanCard({
     remarks?: string;
   };
   cmsRemarksMap?: Map<string, string>;
+  priority?: boolean;
   onClick: () => void;
 }) {
   const {
@@ -343,6 +345,8 @@ export function DoubanCard({
             mode={imageProxyMode}
             customProxy={customImageProxy}
             alt={item.title}
+            priority={priority}
+            loading={priority ? 'eager' : 'lazy'}
             className="w-full h-full object-cover object-center group-hover:scale-110 transition-transform duration-500 ease-out"
             onExhausted={() => setImgFailed(true)}
           />

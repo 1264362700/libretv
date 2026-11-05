@@ -12,12 +12,14 @@ test-results/
 playwright-report/
 blob-report/
 .playwright/
+.playwright-browsers/
 
 # AI 工具产物（本机会话/缓存数据，不入库）
 .mimosa/
 .zcode/
 .codebuddy/
 .workbuddy/
+.agents/teamwork/
 generated-images/
 cookies.txt
 data/*.json

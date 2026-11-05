@@ -206,10 +206,11 @@ export function RecommendSection({
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5 gap-4">
-                {movieItems.map((item) => (
+                {movieItems.map((item, idx) => (
                   <DoubanCard
                     key={item.id}
                     item={item}
+                    priority={idx < 5}
                     cmsRemarksMap={cmsRemarksMap}
                     onClick={() => onPick(item.title)}
                   />

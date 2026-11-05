@@ -2,9 +2,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { buildImageCandidates, cn } from '@/lib/utils';
-import { HeroImageSkeleton } from './hero-image-skeleton';
-import { PosterSkeleton } from './poster-skeleton';
-import { PosterPlaceholder } from './poster-placeholder';
+
+/** 所有候选地址均失败时的抖动状态 */
+const FAILED_SHAKE_CLASS = 'animate-shake-warn';
 
 interface SmartImageProps {
   /** 原始图片地址（未经代理加工，降级链由本组件按加载方式生成） */
@@ -14,6 +14,8 @@ interface SmartImageProps {
   alt: string;
   className?: string;
   loading?: 'lazy' | 'eager';
+  /** 是否首屏高优先级加载（立即启动请求 + fetchPriority=high + 规避首屏二次渲染延迟） */
+  priority?: boolean;
   /** 候选链耗尽后回调，调用方切换占位图等兜底 UI */
   onExhausted?: () => void;
   /** 海报比例：'2/3'（电影海报）| 'video'（16:9）| 'square'，默认 2/3 */
@@ -23,16 +25,9 @@ interface SmartImageProps {
 }
 
 /**
- * 带视口延迟、降级链与平滑淡入过渡的封面图组件。
- * lazy 图片进入视口附近 200px 才设置 src，避免浏览器原生 lazy-load
- * 在长首页提前并发下载大量首屏外海报；eager 图片（如 Hero 当前背景）立即加载。
- * 骨架屏与失败兜底全部走语义化 Token，固定 aspect-ratio 确保 CLS ≈ 0。
- *
- * 三状态切换：
- * 1. 未加载（!loaded）：渲染骨架屏（HeroImageSkeleton / PosterSkeleton），固定比例不留空白
- * 2. 加载中（shouldLoad && !loaded）：骨架屏保持显示，img 预渲染 opacity-0 准备淡入
- * 3. 加载完成（loaded）：隐藏骨架屏，img opacity-0 → opacity-100 平滑淡入
- * 4. 全部失败（allFailed）：渲染 PosterPlaceholder，调用 onExhausted
+ * 带视口延迟、降级链、平滑骨架屏与渐进淡入过渡的封面图组件。
+ * lazy 图片进入视口附近 200px 才设置 src，避免长首页提前并发下载大量首屏外海报；
+ * eager/priority 图片（如 Hero 轮播与首屏关键大卡）立即发起网络加载并赋予高优先级。
  */
 export function SmartImage({
   url,
@@ -41,13 +36,15 @@ export function SmartImage({
   alt,
   className,
   loading = 'lazy',
+  priority = false,
   onExhausted,
   aspect = '2/3',
-  variant = 'poster',
 }: SmartImageProps) {
+  const isEager = priority || loading === 'eager';
+  const effectiveLoading = isEager ? 'eager' : 'lazy';
   const candidates = buildImageCandidates(url, mode, customProxy);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [shouldLoad, setShouldLoad] = useState(loading === 'eager');
+  const [shouldLoad, setShouldLoad] = useState(isEager);
   const [idx, setIdx] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [allFailed, setAllFailed] = useState(false);
@@ -57,12 +54,12 @@ export function SmartImage({
     setIdx(0);
     setLoaded(false);
     setAllFailed(false);
-    setShouldLoad(loading === 'eager');
-  }, [url, mode, customProxy, loading]);
+    setShouldLoad(isEager);
+  }, [url, mode, customProxy, isEager]);
 
   // lazy 图片进入视口附近 200px 才设置 src，避免首屏外并发下载抢占带宽
   useEffect(() => {
-    if (loading === 'eager') {
+    if (isEager) {
       setShouldLoad(true);
       return;
     }
@@ -86,7 +83,7 @@ export function SmartImage({
     );
     observer.observe(target);
     return () => observer.disconnect();
-  }, [loading, url, mode, customProxy]);
+  }, [isEager, url, mode, customProxy]);
 
   useEffect(() => {
     if (shouldLoad && idx >= candidates.length && !allFailed) {
@@ -102,44 +99,51 @@ export function SmartImage({
     aspect === 'video' ? 'aspect-video' : aspect === 'square' ? 'aspect-square' : 'aspect-[2/3]';
 
   return (
-    <div ref={containerRef} className={cn('relative overflow-hidden', aspectClass, className)}>
-      {/* 未加载完成前：渲染骨架屏，固定比例，不留空白 */}
-      {!loaded && !allFailed && (
-        variant === 'hero' ? (
-          <HeroImageSkeleton isLoaded={loaded} />
-        ) : (
-          <PosterSkeleton />
-        )
-      )}
-
-      {/* 全部候选链耗尽：失败兜底，抖动提示，不影响卡片点击 */}
-      {allFailed && (
-        <PosterPlaceholder alt={alt} />
-      )}
-
-      {/* 真实图片：未加载完成时 opacity-0，加载完成后 opacity-100 平滑淡入 */}
-      {!allFailed && src && (
-        <img
-          ref={(el) => {
-            if (el?.complete && el.naturalWidth > 0 && !loaded) {
-              setLoaded(true);
-            }
-          }}
-          src={src}
-          alt={alt}
+    <div ref={containerRef} className={cn('relative overflow-hidden w-full h-full', aspectClass, className)}>
+      {!shouldLoad ? (
+        <div className={cn('w-full h-full bg-slate-800/20 animate-pulse', className)} aria-hidden="true" />
+      ) : allFailed ? (
+        <div
           className={cn(
-            'absolute inset-0 w-full h-full object-cover',
-            'transition-opacity duration-300 ease-out',
-            loaded ? 'opacity-100' : 'opacity-0'
+            'w-full h-full flex items-center justify-center bg-slate-800/70',
+            FAILED_SHAKE_CLASS,
+            className
           )}
-          loading={shouldLoad ? loading : 'lazy'}
-          referrerPolicy="no-referrer"
-          onLoad={() => setLoaded(true)}
-          onError={() => {
-            setLoaded(false);
-            setIdx((i) => i + 1);
-          }}
+          aria-label={`封面加载失败: ${alt}`}
         />
+      ) : !src ? null : (
+        <>
+          {!loaded && (
+            <div
+              className={cn('w-full h-full bg-slate-800/20 animate-pulse absolute inset-0', className)}
+              aria-hidden="true"
+            />
+          )}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            ref={(el) => {
+              if (el?.complete && el.naturalWidth > 0 && !loaded) {
+                setLoaded(true);
+              }
+            }}
+            src={src}
+            alt={alt}
+            className={cn(
+              'w-full h-full object-cover transition-opacity duration-300 ease-out',
+              loaded ? 'opacity-100' : 'opacity-0',
+              className
+            )}
+            loading={effectiveLoading}
+            // @ts-expect-error fetchpriority 为现代浏览器标准属性
+            fetchpriority={isEager ? 'high' : 'auto'}
+            referrerPolicy="no-referrer"
+            onLoad={() => setLoaded(true)}
+            onError={() => {
+              setLoaded(false);
+              setIdx((i) => i + 1);
+            }}
+          />
+        </>
       )}
     </div>
   );

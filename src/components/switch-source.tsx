@@ -6,6 +6,7 @@ import { api } from '@/lib/client-api';
 import type { SourceConfig, SearchResultItem } from '@/lib/types';
 import { buildWatchUrl, cn } from '@/lib/utils';
 import { useAppStore, resolveSource } from '@/lib/store';
+import { recordSourceFailure, recordSourceSuccess } from '@/lib/source-circuit-breaker';
 import { useToast } from './toast';
 import { Icon } from './icon';
 import { SmartImage } from './smart-image';
@@ -106,15 +107,20 @@ export function SwitchSourceModal({
           if (exact) matched.push({ source: s, result: exact });
         }
 
-        // 2) 并发测速（详情接口耗时）并获取集数
+        // 2) 并发测速（详情接口耗时，3000ms 硬超时截断）并获取集数
         setPhase('testing');
-        await Promise.all(
+        await Promise.allSettled(
           matched.map(async (c) => {
-            const r = await api.detailSpeed(c.result.vodId, c.source, controller.signal);
+            const r = await api.detailSpeed(c.result.vodId, c.source, controller.signal, 3000);
             if (cancelled) return;
             c.ok = r.ok;
             c.ms = r.ms;
             c.episodes = r.detail?.episodes.length ?? 0;
+            if (r.ok && r.ms) {
+              recordSourceSuccess(c.source.key, r.ms);
+            } else {
+              recordSourceFailure(c.source.key);
+            }
           })
         );
         if (cancelled) return;

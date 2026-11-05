@@ -143,6 +143,7 @@ describe('LibreTV v1.2 Core Enhancements Unit Tests', () => {
     });
 
     it('1000 集长剧生成 10 个百集区间快速锚点', () => {
+      expect(EPISODE_ANCHOR_CHUNK_SIZE).toBe(100);
       const anchors = buildEpisodeAnchors(1000);
       expect(anchors.length).toBe(10);
       expect(anchors[0]).toEqual({ start: 0, end: 99, label: '1-100' });
@@ -232,6 +233,115 @@ describe('LibreTV v1.2 Core Enhancements Unit Tests', () => {
       // 候选源 D 集数未知 (undefined 或 0) -> 不做缺集阻断
       expect(isCandidateMissingEpisode(undefined, currentIndex)).toBe(false);
       expect(isCandidateMissingEpisode(0, currentIndex)).toBe(false);
+    });
+  });
+
+  // ==========================================
+  // 极端边界与容错测试 (Edge Cases & Resilience)
+  // ==========================================
+  describe('v1.2 极端边界与容错测试 (Edge Cases & Boundary Defense)', () => {
+    it('画质标签极端边界：纯数字名称、空白串、未知结构降级', () => {
+      // 纯数字名称如 "1080" 应根据 height 转为人眼友好标签
+      expect(formatQualityLabel({ name: '1080', height: 1080 }, 0)).toBe('1080P 高清');
+      expect(formatQualityLabel({ name: '   ', height: 720 }, 1)).toBe('720P 高清');
+      expect(formatQualityLabel({ name: '', height: 0, bitrate: 650000 }, 2)).toBe('650 kbps');
+      expect(formatQualityLabel({ height: 0, bitrate: 0 }, 3)).toBe('档位 4');
+    });
+
+    it('外挂字幕偏好极端边界：空 showKey、非法数值容错与步进累加', () => {
+      expect(getStoredSubtitleOffset('')).toBe(0);
+      expect(getStoredSubtitleOffset(undefined)).toBe(0);
+
+      // 模拟多档微调连续累加 (+0.5 + 1.0 + 2.5 = 4.0, -2.5 = 1.5)
+      const showKey = 'boundary_series';
+      saveStoredSubtitleOffset(showKey, 0.5);
+      expect(getStoredSubtitleOffset(showKey)).toBe(0.5);
+      saveStoredSubtitleOffset(showKey, 1.5);
+      expect(getStoredSubtitleOffset(showKey)).toBe(1.5);
+      saveStoredSubtitleOffset(showKey, 4.0);
+      expect(getStoredSubtitleOffset(showKey)).toBe(4.0);
+      saveStoredSubtitleOffset(showKey, 1.5);
+      expect(getStoredSubtitleOffset(showKey)).toBe(1.5);
+
+      // 极端浮点数与负数存储
+      saveStoredSubtitleOffset(showKey, -120.5);
+      expect(getStoredSubtitleOffset(showKey)).toBe(-120.5);
+
+      removeStoredSubtitleOffset(showKey);
+      expect(getStoredSubtitleOffset(showKey)).toBe(0);
+    });
+
+    it('剧集虚拟行与百集区间极端边界：0集、单集、刚好阈值40集、41集、余数行', () => {
+      // 0 集
+      expect(buildEpisodeRows([], 4)).toEqual([]);
+      expect(buildEpisodeAnchors(0)).toEqual([]);
+
+      // 单集
+      expect(buildEpisodeRows([0], 4)).toEqual([[0]]);
+      expect(buildEpisodeAnchors(1)).toEqual([]);
+
+      // 13 集 / 4 列 -> 4 行，最后一行仅 1 集
+      const thirteen = Array.from({ length: 13 }, (_, i) => i);
+      const rows = buildEpisodeRows(thirteen, 4);
+      expect(rows.length).toBe(4);
+      expect(rows[3]).toEqual([12]);
+
+      // 刚好阈值 40 集 -> 不生成锚点
+      expect(buildEpisodeAnchors(40)).toEqual([]);
+
+      // 恰好 41 集 -> 生成 1 个锚点
+      const anchors41 = buildEpisodeAnchors(41);
+      expect(anchors41.length).toBe(1);
+      expect(anchors41[0]).toEqual({ start: 0, end: 40, label: '1-41' });
+
+      // 恰好 200 集 -> 生成 2 个百集锚点
+      const anchors200 = buildEpisodeAnchors(200);
+      expect(anchors200.length).toBe(2);
+      expect(anchors200[0]).toEqual({ start: 0, end: 99, label: '1-100' });
+      expect(anchors200[1]).toEqual({ start: 100, end: 199, label: '101-200' });
+    });
+
+    it('备注文本与追剧红点极端边界：空备注、倒退集数、格式异常', () => {
+      expect(extractEpisodeNumber('')).toBe(0);
+      expect(extractEpisodeNumber(undefined)).toBe(0);
+      expect(extractEpisodeNumber('  ')).toBe(0);
+      expect(extractEpisodeNumber('全一季')).toBe(0);
+      expect(extractEpisodeNumber('更新至第 03 话')).toBe(3);
+      expect(extractEpisodeNumber('108期全')).toBe(108);
+
+      // 采集源集数倒退时不触发新集更新红点
+      const fav = { lastKnownEpisodes: 50, remarks: '更新至50集' };
+      const rollback = checkHasNewEpisodes(fav, '更新至45集');
+      expect(rollback.hasUpdate).toBe(false);
+      expect(rollback.newCount).toBe(0);
+
+      // fav 没有任何基准集数时兜底
+      const emptyFav = { lastKnownEpisodes: 0, remarks: '' };
+      const noBase = checkHasNewEpisodes(emptyFav, '更新至20集');
+      expect(noBase.hasUpdate).toBe(false);
+    });
+
+    it('QoS 提速与缺集硬门禁极端边界：延迟相同、候选更慢、首集(index=0)判定', () => {
+      // 延迟相同提速 0%
+      expect(calculateSpeedupPercent(300, 300)).toBe(0);
+      // 候选更慢提速 0%
+      expect(calculateSpeedupPercent(300, 400)).toBe(0);
+      // 负数与非法值返回 0%
+      expect(calculateSpeedupPercent(-100, 200)).toBe(0);
+      expect(calculateSpeedupPercent(200, -50)).toBe(0);
+
+      // 首集 (currentIndex = 0) 门禁判定
+      // 候选源 1 集 (覆盖 index 0) -> 放行
+      expect(isCandidateMissingEpisode(1, 0)).toBe(false);
+      // 候选源 0 集或未知 -> 放行
+      expect(isCandidateMissingEpisode(0, 0)).toBe(false);
+      expect(isCandidateMissingEpisode(undefined, 0)).toBe(false);
+
+      // 第二集 (currentIndex = 1) 门禁判定
+      // 候选源仅 1 集 (仅覆盖 index 0，缺少 index 1) -> 必须拦截
+      expect(isCandidateMissingEpisode(1, 1)).toBe(true);
+      // 候选源有 2 集 -> 放行
+      expect(isCandidateMissingEpisode(2, 1)).toBe(false);
     });
   });
 });

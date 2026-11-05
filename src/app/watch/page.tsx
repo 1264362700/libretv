@@ -321,7 +321,7 @@ function WatchContent() {
       added ? `已将「${videoTitle}」加入我的追剧单，更新时将自动提醒` : `已将「${videoTitle}」移出追剧单`,
       added ? 'success' : 'info'
     );
-  }, [videoTitle, sourceKey, source?.url, vodId, activePoster, yearText, typeText, videoInfo?.remarks, remarksText, episodes.length, toast]);
+  }, [videoTitle, sourceKey, source?.url, vodId, activePoster, yearText, typeText, videoInfo?.remarks, remarksText, episodes.length, toast, t]);
 
   // 键盘快捷键 S 快速呼出/收起线路 QoS 监控雷达抽屉 (CHK-R-01)
   useEffect(() => {

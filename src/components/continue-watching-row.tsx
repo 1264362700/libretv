@@ -384,7 +384,14 @@ function FavoriteWatchCard({
   const handleRemove = (e: React.MouseEvent) => {
     e.stopPropagation();
     void removeFavorite(fav.id).then(() => {
-      toast(`已将「${fav.title}」移出追剧单`, 'info');
+      toast(`已将「${fav.title}」移出追剧单`, 'info', {
+        action: {
+          label: '撤销',
+          onClick: () => {
+            void db.favorites.put(fav);
+          },
+        },
+      });
     });
   };
 

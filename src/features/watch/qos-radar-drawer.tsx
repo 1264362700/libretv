@@ -271,7 +271,6 @@ export function QoSRadarDrawer({
 
           {evaluatedCandidates.map((cand) => {
             const badge = cand.badge as SourceQoSBadge;
-            const isSelectable = !cand.isCurrent && !cand.isEpisodeMissing && !cand.isCircuitOpen;
 
             return (
               <div

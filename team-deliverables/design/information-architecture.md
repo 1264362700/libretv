@@ -1,307 +1,359 @@
-# information-architecture.md — 信息架构与页面流程
+# information-architecture.md — LibreTV v1.2 信息架构与状态流转设计
 
-**产品**：LibreTV（cl.tv）视频聚合播放平台  
-**版本**：v1.0（基于 PRD.md v1.0 草稿）  
-**编制**：UI/UX 设计师（ui-ux-designer）  
-**依据**：`PRD.md`、`PROTOTYPE.md`、`DEVELOPMENT.md`、`PRD-IMAGE-OPT.md`  
-**状态**：待 Lead 审阅 → 交付 fullstack-developer 实施
-
----
-
-## 0. 总览
-
-LibreTV 是一个元数据中心化 + JIT 多源切片流匹配的视频聚合播放平台，基于 Next.js 15 + TypeScript + Tailwind CSS 构建，采用“门面元数据层（TMDB/豆瓣/Bangumi/Cinemeta/TVMaze 等）+ 播放解析层（AppleCMS/TVBox/IPTV 采集源）”双层架构。前端为纯前端渲染，本地优先、纯隐私保护，无商业广告。
-
-全站共 **6 个页面路由**，优先级均为 P0（除历史页、设置页为 P1）：
-
-| 路由 | 页面 | 一句话定位 | 优先级 | 是否受登录保护 |
-|------|------|------------|--------|----------------|
-| `/` | 首页 | Hero 轮播 + TMDB 官方搜索 + 采集源深度扫描 | P0 | 部分（播放入口需登录） |
-| `/catalog` | 片库页 | 分频道片库、多维筛选、聚合卡片 | P0 | 部分（点击播放需登录） |
-| `/watch` | 播放页 | 多源并发测速、自动故障转移、选集、追剧单、离线下载 | P0 | 是（全部） |
-| `/history` | 历史页 | 观看历史列表、搜索、清空 | P1 | 否（本地 IndexedDB，无后端） |
-| `/login` | 登录页 | 账号登录 / 邀请码注册，登录拦截全站受保护页 | P0 | 否（已登录自动跳回） |
-| `/settings` | 设置页 | 源管理、偏好设置、配置导入导出 | P1 | 否（建议登录后使用） |
+**产品**：LibreTV (cl.tv) 流媒体与聚合视听平台  
+**版本**：v1.2 (Gate 2 / R2 UI 设计交付)  
+**设计角色**：UI/UX 设计师 (ui-ux-designer)  
+**基准需求**：`team-deliverables/pm/iteration-plan.md` (Gate 1 用户裁决方案 B)  
+**技术约束**：`team-deliverables/dev/tech-feasibility-assessment.md`  
+**交付归属**：`team-deliverables/design/information-architecture.md`  
+**生效日期**：2026-11-05  
 
 ---
 
-## 1. 网站地图（Sitemap）
+## 0. 设计定位与升级背景
 
-以下按页面层级与导航归属组织，供开发与 QA 参考。
+在 LibreTV v1.2 迭代中，根据系统主管与用户的正式裁决（方案 B：稳健收敛），针对 6 大核心体验断层实施全套 UI/UX 架构升级：
+1. **REQ-P0-01**：HLS 视频多清晰度（画质档位）选择与锁定（Auto / 1080P / 720P / 4K）；
+2. **REQ-P0-02**：内置多语言音频轨道无缝切换（国英双语 / 原声日语 / 粤语等）；
+3. **REQ-P0-03**：1000 集长剧选集 `@tanstack/react-virtual` 虚拟化滚动重构；
+4. **REQ-P0-04**：首页“我的追剧·最近更新”动态流专区与智能红点提示（Hero 巨幕下方、推荐流上方；追平或为空时自适应优雅折叠）；
+5. **REQ-P0-05**：播放线路 QoS 综合监控雷达抽屉与“一键秒切极速源”；
+6. **REQ-P1-01**：外挂字幕时间轴毫秒级阶梯步进微调与按剧持久化。
 
-```
-cl.tv (LibreTV)
-├── / 首页 (Home)
-│   ├── Header：Logo | 搜索入口 | 设置 | 用户状态/登录
-│   ├── Hero 巨幕轮播（TMDB 官方趋势大片 ×6，带播放按钮）
-│   ├── 左图右榜双栏楼层
-│   │   ├── 左侧：推荐内容卡片网格（官方海报卡片 MediaCard）
-│   │   └── 右侧：热播榜单（文字列表）
-│   ├── 底层采集源深度扫描（可展开，NDJSON 流式逐源返回）
-│   └── SiteFooter
-├── /catalog 片库页 (Catalog)
-│   ├── 页头：频道图标 + 频道标题 + 副标题
-│   ├── 搜索表单：输入框 + 深搜按钮 + 清空按钮
-│   ├── 搜索结果横幅（仅有搜索词时显示）
-│   ├── 热门搜索词（仅无搜索词时显示）
-│   ├── 多维筛选面板（地区 / 类型 / 年份 / 排序；移动端底部弹窗）
-│   ├── 统计与加载状态行（结果总数 + 实时更新动画）
-│   ├── 内容网格（官方片库卡片 / 聚合卡片）
-│   ├── 分页导航（仅无搜索词时显示）
-│   └── 浮动回到顶部按钮
-├── /watch 播放页 (Watch)
-│   ├── 顶部自适应导航栏（sticky）：返回 | 首页 | 标题 + 源名 + 第 X/Y 集 | 操作组
-│   ├── 左主视区（1fr）：环境光影 | 播放器（ArtPlayer + hls.js） | 视频信息与快捷控制栏 | 播放线路栏（水平滚动）
-│   ├── 右侧栏（360–380px，桌面端固定；移动端折叠为底部选集栏）：
-│   │   ├── 剧集选集（百集分段折叠，当前集高亮）
-│   │   ├── 本集看点
-│   │   ├── 影片档案（导演 / 演员 / 类型 / 地区 / 剧情简介）
-│   │   ├── 演职员探索图谱
-│   │   └── 海报墙
-│   ├── 全宽“猜你喜欢”智能推荐专区
-│   └── 弹层：SwitchSourceModal | QrHandoffModal | SpeedSuggestionDialog | WatchFallbackState
-├── /history 历史页 (History)
-│   ├── 页头：返回 | 标题“观看历史” | 总数（N） | 清空历史按钮
-│   ├── 搜索栏：搜索图标 + 输入框 + 清空按钮
-│   ├── 列表区：空态 | 提示（共 N 条，最近 50 条）| 历史记录列表（缩略图 / 标题 / 副标题 / 进度条 / 删除）
-│   └── ConfirmDialog（清空历史确认）
-├── /login 登录页 (Login)
-│   ├── 全屏背景：流光装饰
-│   ├── 品牌区：Logo | 标题 | 副标题
-│   ├── 卡片容器：被顶号提示 | Tab（账号登录 / 邀请码注册）| 错误提示条 | 登录表单 | 注册表单 | 底部链接
-│   └── SiteFooter
-└── /settings 设置页 (Settings)
-    ├── 页头：返回 | 标题“设置”
-    ├── 一级 Tab：源管理 | 偏好设置 | 数据
-    ├── 二级 Tab（随一级变化）：
-    │   ├── 源管理：点播源 | 数据源订阅
-    │   ├── 偏好设置：播放与过滤 | 封面图加载 | 首页与内容
-    │   └── 数据：配置导入导出
-    └── 内容区（随子 Tab 变化）
-```
+本文档详细定义页面层级拓扑、导航结构、数据实体关系及核心功能的状态转移图（State Machine Flow），为线框图原型（`wireframes.md`）、视觉规范（`ui-spec.md`）及后续研发与验收提供严密依据。
 
-### 1.1 全局布局骨架
+---
 
-所有页面共享以下全局结构（移动端另行适配，见 §4）：
+## 1. 系统全景地图与层级结构 (Sitemap & Page Hierarchy)
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│ Header（固定顶部）：Logo | 搜索 | 设置 | 用户状态             │
-├─────────────────────────────────────────────────────────────┤
-│ 主内容区（max-w-7xl mx-auto，页面差异化区域）              │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-│ SiteFooter                                                  │
-└─────────────────────────────────────────────────────────────┘
+LibreTV (cl.tv)
+├── / 首页 (HomePage)
+│   ├── Header 顶部玻璃导航栏 (Logo / 全局搜索 / 频道切换 / 设置 / 登录状态)
+│   ├── Hero 巨幕大轮播 (4K 趋势海报 / 快速起播 / 影视档案入口)
+│   ├── 🌟 [v1.2 核心] 追剧动态与无缝续播横滑专区 (ContinueWatchingRow)
+│   │   ├── 胶囊选项卡：【▶ 继续观看】 / 【⭐ 我的追剧 (🔴有新集更新)】
+│   │   ├── 追剧动态卡片 (更新红点 / 最新集数差量 / 一键直达最新未看集)
+│   │   └── 续播历史卡片 (精准进度百分比 / 秒数续播 / 单条删除及撤销)
+│   ├── 左图右榜双栏楼层 (推荐影视流 MediaCard + 热门飙升榜)
+│   ├── 底层采集源深度流式扫描视图 (可展开，流式并发探针)
+│   └── SiteFooter 全局页脚
+├── /watch 播放页 (WatchPage)
+│   ├── 顶部自适应悬浮导航条 (返回 / 标题 / 当前源名与延迟徽章 / 测速换源抽屉触发器 / 跨屏接力 / 追剧开关)
+│   ├── 左主视区：环境光影 + 播放器核心 (PlayerShell)
+│   │   ├── ArtPlayer 播放内核 (Web/系统全屏 / 倍速 / 比例 / 截图)
+│   │   ├── 🌟 [v1.2 核心] 控制栏清晰度切换菜单 (Auto / 1080P / 720P / 4K 档位热切与锁定)
+│   │   ├── 🌟 [v1.2 核心] 设置面板音频轨道切换子项 (国语 / 英语 / 日语 / 粤语等内置音轨热切)
+│   │   ├── 🌟 [v1.2 核心] 外挂字幕渲染与右上角阶梯微调胶囊 (±0.5s / ±1.0s / ±2.5s / 重置)
+│   │   ├── 播放器内右侧悬浮感应贴边选集抽屉 (全屏模式选集)
+│   │   └── 播放器底部主控与快捷线路栏 (含当前线路延迟与雷达抽屉快捷入口)
+│   ├── 右侧栏 (WatchSidebar，桌面端常驻 / 移动端折叠)
+│   │   ├── 🌟 [v1.2 核心] 1000 集长剧虚拟化滚动选集面板 (Virtual Episode Grid)
+│   │   │   ├── 顶部排序与控制栏 (剧集总数 / 正序倒序切换)
+│   │   │   ├── 百集快速区间锚点条 (1-100 / 101-200 / 201-300 / ...)
+│   │   │   └── 虚拟化视口网格容器 (恒定 48~60 DOM 节点，当前集居中焦点高亮)
+│   │   ├── 本集剧情看点 (动漫/剧集单集简介展开)
+│   │   ├── 影视资料与海报墙 (年份 / 地区 / 分类 / 演职员纯文本 / 剧照)
+│   │   └── 猜你喜欢相关推荐流
+│   └── 🌟 [v1.2 核心] 全局右侧滑出 QoS 线路雷达监控抽屉 (QoSRadarDrawer)
+│       ├── 抽屉顶部：线路全景统计 + 测速刷新按钮
+│       ├── 顶置推荐：常驻极速源一键秒切 Banner (🚀 提速百分比 / 目标延迟 / 一键秒切)
+│       ├── QoS 线路雷达列表 (EWMA 毫秒延迟 / S-A-B-C 评级徽章 / 集数覆盖度 / 熔断器状态)
+│       └── 抽屉底部操作栏 (手动重新并发测速 / 线路筛选)
+├── /catalog 片库大厅 (CatalogPage)
+├── /history 观看历史页 (HistoryPage)
+├── /settings 设置中心 (SettingsPage)
+└── /login 登录与邀请注册 (LoginPage)
 ```
 
 ---
 
-## 2. 页面流（User Flow / 路由跳转关系）
+## 2. 6 大核心功能信息架构图
 
-### 2.1 全局跳转规则（关键）
-
-1. **登录拦截**：任何未登录状态访问 `/watch`，或在 `/`、`/catalog` 点击播放入口，统一跳转 `/login?redirect=<当前完整 URL>`；登录成功后 `window.location.href = redirect` 回跳。
-2. **401 响应**：统一通过 `libretv:unauthorized` 全局事件触发登录框。
-3. **播放页内设置入口**：跳转 `/settings`；设置页内“返回首页”跳转 `/`。
-4. **历史记录点击**：跳转 `/watch?source=...&id=...&index=...&position=...`，恢复进度。
-5. **已登录访问 `/login`**：自动跳回 redirect 参数指定的页或首页。
-
-### 2.2 主要用户流（Mermaid 流程图）
-
-#### 流程 A：冷启动 → 浏览首页 → 播放影片（未登录）
+### 2.1 首页“我的追剧·最近更新”动态流架构 (REQ-P0-04)
 
 ```mermaid
 flowchart TD
-    A[用户打开 cl.tv /] --> B[首页：Hero 轮播 + 推荐卡片 + 搜索]
-    B --> C{用户点击某张卡片播放}
-    C -- 已登录 --> D[/watch 直接播放，保留进度]
-    C -- 未登录 --> E[/login?redirect=/watch?...]
-    E --> F[账号登录 / 邀请码注册]
-    F -- 成功 --> G[回跳 redirect 指定的 /watch 页面]
-    F -- 失败 --> E[显示错误提示，重新输入]
+    HomePage["首页 (/)"] --> HeroBanner["HeroBillboardBanner 巨幕轮播"]
+    HeroBanner --> ContinueRow["ContinueWatchingRow 专属横滑楼层 (z-20)"]
+    ContinueRow --> RecommendSection["RecommendSection 推荐流与飙升榜"]
+
+    subgraph DataEngine["本地数据与比对引擎"]
+        DexieFav["Dexie db.favorites (追剧收藏)"]
+        DexieHist["Dexie db.history (观看历史)"]
+        RemarksSync["CMS 主采集源 remarksQuery (集数静默同步)"]
+        DiffAlgorithm["checkHasNewEpisodes 算法 (正则比对最新集数)"]
+        DexieFav --> DiffAlgorithm
+        RemarksSync --> DiffAlgorithm
+    end
+
+    DiffAlgorithm --> UpdateCount{"是否有新集更新？"}
+    UpdateCount -->|"是 (count > 0)"| ShowPulseBadge["点亮专属红点呼吸胶囊: 🔴 更新 N 集"]
+    UpdateCount -->|"否"| ShowNormalBadge["显示常规状态: ★ 追剧中"]
+
+    ContinueRow --> SwitchTabs{"横滑专区选项卡"}
+    SwitchTabs -->|"Tab 1"| HistoryTab["继续观看 · 无缝续播"]
+    SwitchTabs -->|"Tab 2"| FavTab["我的追剧 · 更新提醒"]
+
+    HistoryTab --> HistCard["续播卡片 (海报 + 进度条 + 剩余秒数 + 快捷删除)"]
+    FavTab --> FavCard["追剧卡片 (海报 + 状态角标 + 最新集数备注 + 一键直达最新集)"]
+
+    FavCard --> DirectPlay["点击卡片: 自动定位至未看第一集或最新集, 标记已看, 跳转 /watch"]
 ```
 
-#### 流程 B：片库深搜 → 播放
+### 2.2 播放器画质与多音轨二级控制流架构 (REQ-P0-01 & REQ-P0-02)
 
 ```mermaid
 flowchart TD
-    A[/catalog 片库页：选择频道] --> B[多维筛选：地区/类型/年份/排序]
-    B --> C[官方片库卡片网格 / 聚合卡片]
-    C --> D[点击卡片播放]
-    D -- 未登录 --> E[/login?redirect=/watch?...]
-    D -- 已登录 --> F[/watch?source=...&id=...&title=...&year=...]
-    E --> G[登录/注册成功] --> F
+    HlsInstance["Hls.js 播放器管线 (useHlsPipeline)"] --> ManifestEvent["MANIFEST_PARSED / LEVEL_LOADED"]
+    
+    subgraph LevelDetection["画质档位探测与管理"]
+        ManifestEvent --> CheckLevels{"hls.levels.length > 1 ?"}
+        CheckLevels -->|"是 (多码率源)"| ParseLevels["解析 Levels (4K 2160P / 1080P / 720P)"]
+        ParseLevels --> MountLevelMenu["注入 ArtPlayer 控制栏 [画质/清晰度] 菜单"]
+        CheckLevels -->|"否 (单码率源)"| HideLevelMenu["自适应隐藏或显示默认原画 (不渲染破损项)"]
+        MountLevelMenu --> UserSelectLevel["用户点击切换档位"]
+        UserSelectLevel --> SetHlsLevel["hls.currentLevel = index (-1 为 Auto)"]
+        SetHlsLevel --> ABRState{"切换目标"}
+        ABRState -->|"Auto"| EnableABR["恢复 Hls.js 自适应码率"]
+        ABRState -->|"固定档位"| LockResolution["锁定分辨率 + 存入 localStorage 偏好"]
+    end
+
+    subgraph AudioTrackDetection["内置音轨探测与管理"]
+        ManifestEvent --> CheckAudioTracks{"hls.audioTracks.length > 1 ?"}
+        CheckAudioTracks -->|"是 (多语言音轨)"| ParseAudioTracks["解析 AudioTracks (国语 / 英语 / 粤语 / 日语等)"]
+        ParseAudioTracks --> MountAudioMenu["注入 ArtPlayer Settings 面板 [音频轨道] 子菜单"]
+        CheckAudioTracks -->|"否 (单音轨)"| HideAudioMenu["自适应隐藏音频选项"]
+        MountAudioMenu --> UserSelectAudio["用户点击选择目标音轨"]
+        UserSelectAudio --> SetAudioTrack["hls.audioTrack = trackId (无缝热切)"]
+        SetAudioTrack --> AudioFeedback["展示轻量 Toast: 正在平滑切换音轨..."]
+    end
 ```
 
-#### 流程 C：播放中换源与故障转移
+### 2.3 1000 集长剧选集虚拟化与快速锚点联动架构 (REQ-P0-03)
 
 ```mermaid
 flowchart TD
-    A[/watch 播放页：自动拉取详情并开始播放首集] --> B{当前源是否有播放地址?}
-    B -- 否 --> C[显示“立即切换至备用线路”按钮 + WatchFallbackState]
-    B -- 是 --> D[多源并发测速：显示延迟 + QoS 等级]
-    D --> E[优选最快线路播放]
-    E --> F{播放中线路卡顿/切片异常?}
-    F -- 是 --> G[5 秒内自动切换下一条高速线路，保留进度]
-    F -- 否 --> H[继续播放]
-    G --> E
+    WatchSidebar["播放页侧栏 (WatchSidebar)"] --> TotalCheck{"集数 totalEpisodes > 40 ?"}
+    
+    TotalCheck -->|"是 (长剧集场景)"| MountAnchorBar["渲染百集快速区间锚点条 (1-100, 101-200...)"]
+    TotalCheck -->|"否 (普通短剧)"| NormalLayout["直接渲染虚拟化视口"]
+
+    MountAnchorBar --> UserClickAnchor["用户点击百集锚点 (如 501-600)"]
+    UserClickAnchor --> CalcTargetRow["计算行索引: Math.floor(500 / cols)"]
+    CalcTargetRow --> VirtualScroll["调用 rowVirtualizer.scrollToIndex(targetRow, smooth)"]
+
+    subgraph VirtualEngine["@tanstack/react-virtual 视口虚拟化引擎"]
+        RowChunk["将剧集切分为行 (Desktop 4列, Mobile 6列)"]
+        VirtualHook["useVirtualizer (estimateSize: 36px, overscan: 3)"]
+        RowChunk --> VirtualHook
+        VirtualHook --> MeasureObserver["ResizeObserver 监听容器宽度自适应列数"]
+        VirtualHook --> DOMWindow["动态渲染视口内 6~8 行 DOM (总节点恒定 48~60 个)"]
+    end
+
+    VirtualScroll --> DOMWindow
+    
+    subgraph FocusCenter["当前播放集自动焦点与居中同步"]
+        CurrentIndexChange["换集事件触发 (currentIndex 变更)"]
+        CurrentIndexChange --> AutoCenter["自动定位到当前集所在行并滚动至视口中央"]
+        AutoCenter --> ApplyFocusRing["激活当前集高亮发光与键盘焦点环 (Ring Accent)"]
+    end
+
+    DOMWindow --> ApplyFocusRing
 ```
 
-#### 流程 D：观看历史 → 续播
+### 2.4 播放线路 QoS 综合监控雷达抽屉与秒切状态流架构 (REQ-P0-05)
 
 ```mermaid
 flowchart TD
-    A[/history 历史页：按时间倒序显示最近 50 条] --> B[搜索过滤匹配标题]
-    B --> C[点击某条记录]
-    C --> D[/watch?source=...&id=...&index=...&position=...]
-    D --> E[从上次停留位置续播（误差 < 2 秒）]
+    WatchPage["播放页大厅 (/watch)"] --> TriggerQoS["点击顶部线路标签 / 控制栏测速入口 / 快捷推荐胶囊"]
+    TriggerQoS --> OpenDrawer["滑出 QoS 线路雷达监控抽屉 (QoSRadarDrawer)"]
+
+    subgraph RadarHeader["抽屉顶部与极速秒切 Banner"]
+        HeaderStat["线路总览: 共 X 条线路 · Y 条极速可用"]
+        BestSourceBanner{"是否存在提速 ≥ 30% 且覆盖当前集的极速源？"}
+        BestSourceBanner -->|"是"| ShowSpeedBanner["常驻极速源 Banner: 🚀 较当前源提速 XX% [一键秒切]"]
+        BestSourceBanner -->|"否"| HideSpeedBanner["展示常规状态: 当前已处于最佳播放线路"]
+    end
+
+    OpenDrawer --> RadarHeader
+    OpenDrawer --> RadarList["QoS 线路卡片列表 (按 EWMA 延迟升序实时排序)"]
+
+    subgraph CardContent["每条线路卡片信息元数据"]
+        CardName["源名称 (如 海外蓝光专线 / 优质切片源)"]
+        CardPing["实时 Ping 延迟 (毫秒, 如 68ms)"]
+        CardBadge["QoS 评级徽章 (S极速 / A良好 / B一般 / C受阻)"]
+        CardCoverage["集数完整度覆盖 (如 40集全 · 覆盖当前第12集)"]
+        CardCircuit["熔断状态 (健康闭合 / 半开探测 / 熔断冷却)"]
+    end
+
+    RadarList --> CardContent
+
+    ShowSpeedBanner -->|"用户点击 [一键秒切] 或点击卡片 [立即切换]"| ExecuteSwitch["调用 useWatchEngine.switchSource()"]
+    ExecuteSwitch --> SavePosition["记录当前播放时间戳 (精确至秒)"]
+    SavePosition --> LoadNewStream["载入新线路切片流并复用已有播放器容器"]
+    LoadNewStream --> RestoreSeek["恢复原播放时间戳 (误差 ≤ 1s), Toast 提示换源成功"]
 ```
 
-#### 流程 E：设置页配置（源管理 / 偏好 / 配置导入导出）
+### 2.5 外挂字幕时间轴阶梯微调与持久化架构 (REQ-P1-01)
 
 ```mermaid
 flowchart TD
-    A[/settings 设置页：一级 Tab 源管理 / 偏好设置 / 数据] --> B{选择子 Tab}
-    B -- 点播源 --> C[添加 / 编辑 / 删除自定义点播源；勾选参与搜索]
-    B -- 数据源订阅 --> D[添加订阅 URL；一键同步导入点播源与直播源；查看同步状态]
-    B -- 播放与过滤 --> E[自动连播 / 成人过滤 / 广告过滤开关]
-    B -- 封面图加载 --> F[直连 / 代理 / 自定义代理三选一]
-    B -- 首页与内容 --> G[推荐数据源选择：豆瓣 / Bangumi / 热榜 / Top250 等]
-    B -- 配置导入导出 --> H[导出 JSON / 导入 JSON 恢复配置]
+    SubtitleLoad["用户拖拽 / 载入外挂字幕 (SRT / VTT)"] --> SubtitleLayer["SubtitleLayer 激活右上角时间轴微调胶囊"]
+    SubtitleLayer --> ReadStorage["读取 localStorage (`libretv:sub_offset:${showKey}`)"]
+    ReadStorage --> RestoreOffset["恢复本剧历史字幕偏移 (如 +1.5s)"]
+
+    subgraph StepperControls["阶梯式多档步进调节器"]
+        StepHalf["±0.5s 微调按钮 (应对句尾轻微错位)"]
+        StepOne["±1.0s 中档步进 (应对短句早出/晚出)"]
+        StepTwoHalf["±2.5s 大档快调 (应对片头剪辑差异)"]
+        ResetBtn["一键归零重置按钮 (Offset = 0s)"]
+    end
+
+    SubtitleLayer --> StepperControls
+    StepperControls --> UpdateOffset["更新 offsetRef 与 state 双写"]
+    UpdateOffset --> TimeUpdate["播放器 timeupdate 驱动 findActiveSubtitleText"]
+    TimeUpdate --> RealtimeShift["实时位移对白文本渲染时间 (反馈延迟 ≤ 50ms)"]
+    UpdateOffset --> SaveStorage["写回 localStorage 按剧独立持久化"]
 ```
 
-### 2.3 路由参数与状态传递矩阵
+---
 
-| 来源页 | 目标页 | 关键 URL 参数 | 说明 |
-|--------|--------|---------------|------|
-| `/` | `/watch` | `title`, `year`, `douban_id` (或 `source`, `id`) | 首页卡片点击播放 |
-| `/` | `/login` | `redirect=/watch?...` | 未登录播放拦截 |
-| `/catalog` | `/watch` | `source`, `id`, `title`, `year` | 片库卡片点击播放 |
-| `/catalog` | `/login` | `redirect=/watch?...` | 未登录播放拦截 |
-| `/history` | `/watch` | `source`, `id`, `index`, `position`, `title` | 历史记录续播 |
-| `/login` | `/` 或 `redirect` | `redirect` | 登录成功回跳 |
-| `/watch` | `/settings` | 无 | 播放页内设置入口 |
-| `/settings` | `/` | 无 | 设置页返回首页 |
+## 3. 核心交互状态转移图 (State Transition Diagrams)
+
+### 3.1 首页追剧专区状态转移机 (ContinueWatchingRow State Machine)
+
+```mermaid
+stateDiagram-v2
+    [*] --> Initializing : 首页载入，初始化 Dexie 数据库连接
+    
+    Initializing --> EmptyHidden : 追剧单为空 且 观看历史为空
+    note right of EmptyHidden : 专区优雅完全折叠，DOM 不留任何空白占位，确保首页视觉紧凑
+    
+    Initializing --> HistoryActive : 有历史记录 且 无追剧收藏
+    Initializing --> FavoritesActive : 有追剧收藏 且 历史记录为空
+    Initializing --> DefaultTab : 历史与追剧均存在 (默认展示继续观看)
+
+    state DefaultTab {
+        [*] --> HistoryView
+        HistoryView --> FavoritesView : 用户点击【⭐ 我的追剧】标签
+        FavoritesView --> HistoryView : 用户点击【▶ 继续观看】标签
+    }
+
+    state FavoritesView {
+        [*] --> ComparingEpisodes : 后台比对 db.favorites 与 remarksQuery
+        ComparingEpisodes --> AllCaughtUp : 所有追剧集数已追平 (无新集)
+        note right of AllCaughtUp : 卡片显示“★ 追剧中”，底部标注“已更新至最新”
+        
+        ComparingEpisodes --> HasUpdates : 检测到新集数差量 (count > 0)
+        note right of HasUpdates : 专区标题点亮“N 部有新集”，卡片高亮“🔴 更新 N 集”脉冲呼吸胶囊
+        
+        HasUpdates --> ClickToWatch : 用户点击更新卡片
+        ClickToWatch --> MarkSeen : 自动将已看集数推进至最新集，标记 seenEpisodes
+        MarkSeen --> NavigatePlayer : 直通 /watch 播放页自动播放下一未看集
+    }
+
+    state HistoryView {
+        [*] --> ShowHistoryCards : 渲染最近观看卡片流
+        ShowHistoryCards --> ClickResume : 用户点击卡片
+        ClickResume --> ResumeWatch : 直通 /watch 从断点秒数精准续播
+        ShowHistoryCards --> RemoveHistory : 用户点击右上角 [×] 移除
+        RemoveHistory --> UndoToast : 弹出 Toast 带 5 秒撤销按钮
+        UndoToast --> RestoreItem : 点击撤销，恢复记录
+        UndoToast --> FinalDelete : 5 秒倒计时结束，物理移出 Dexie
+    }
+```
+
+### 3.2 播放器画质档位热切与锁定状态转移机 (Video Quality State Machine)
+
+```mermaid
+stateDiagram-v2
+    [*] --> ProbingLevels : 载入 HLS 视频切片清单 (Manifest)
+    
+    ProbingLevels --> SingleLevel : hls.levels.length <= 1
+    note right of SingleLevel : 单码率切片源，控制栏自适应隐藏清晰度按钮或标示“原画/默认”
+
+    ProbingLevels --> MultiLevelAuto : hls.levels.length > 1 (多码率)
+    note right of MultiLevelAuto : 默认进入 Auto 自适应码率状态 (ABR)，hls.currentLevel = -1
+
+    MultiLevelAuto --> ManualLocked : 用户手动选择具体画质 (如 1080P / 4K)
+    state ManualLocked {
+        [*] --> HotSwitching : hls.currentLevel = targetIndex
+        HotSwitching --> BufferingNewLevel : Hls.js 平滑请求新码率分片 (≤ 1.5s)
+        BufferingNewLevel --> PlayingLocked : 播放继续，时间戳跳变 < 1s，保持锁定
+        
+        PlayingLocked --> NetworkStalled : 遭遇弱网连续缓冲卡顿 (重试超过 3 次)
+        NetworkStalled --> AutoFallbackToast : 弹出保护 Toast: “网络不稳定，已切回自适应画质”
+        AutoFallbackToast --> [*] : 自动回退至 Auto 状态
+    }
+
+    ManualLocked --> MultiLevelAuto : 用户在菜单中重新勾选【自动 (Auto)】
+```
+
+### 3.3 QoS 综合监控雷达抽屉与秒切状态转移机 (QoS Radar Drawer State Machine)
+
+```mermaid
+stateDiagram-v2
+    [*] --> DrawerClosed : 抽屉处于隐藏收拢态
+    
+    DrawerClosed --> OpeningDrawer : 用户点击换源按钮 / 快捷测速标签
+    OpeningDrawer --> DrawerOpened : 桌面端从右侧平滑滑出 / 移动端从底部升起
+
+    state DrawerOpened {
+        [*] --> ReadingMetrics : 复用 useWatchEngine 现有 EWMA 延迟与评级
+        
+        ReadingMetrics --> EvaluatingBanner : 评估最快源是否满足提速 ≥ 30% 且覆盖当前集
+        EvaluatingBanner --> BannerActive : 满足秒切条件，顶置呈现极速 Banner
+        EvaluatingBanner --> BannerIdle : 不满足条件，顶置显示常规最优提示
+        
+        state UserActions {
+            [*] --> IdleWaiting
+            IdleWaiting --> ManualRetest : 点击【重新测速】按钮
+            ManualRetest --> ParallelProbing : 并发探活 (超时严格截断至 3000ms)
+            ParallelProbing --> UpdateSorting : 线路列表按响应耗时重新升序洗牌
+            UpdateSorting --> IdleWaiting
+
+            IdleWaiting --> ClickFastBanner : 点击顶部【一键秒切极速源】
+            IdleWaiting --> ClickListItem : 点击列表内任意线路卡片【切换】
+        }
+    }
+
+    ClickFastBanner --> ExecutingSwitch : 触发无缝换源流
+    ClickListItem --> ExecutingSwitch : 触发无缝换源流
+
+    state ExecutingSwitch {
+        [*] --> FreezePlayback : 捕获并冻结当前播放精确时间戳
+        FreezePlayback --> SwitchHlsSource : 销毁旧 Hls 实例并载入新切片源
+        SwitchHlsSource --> SeekAndResume : 恢复至原时间戳，微调缓冲 (≤ 1.5s 完成)
+        SeekAndResume --> ToastSuccess : 弹出 Toast: “已秒切至 [源名]，保留播放进度”
+    }
+
+    ToastSuccess --> DrawerClosed : 自动平滑关闭抽屉
+    DrawerOpened --> DrawerClosed : 用户点击遮罩 / 关闭图标 / 键盘 Esc
+```
 
 ---
 
-## 3. 页面信息架构（逐页内容结构）
+## 4. 路由参数与跨页面持久化契约
 
-### 3.1 首页 `/`
+### 4.1 URL 路由参数定义规范
 
-| 区块 | 内容来源 | 关键字段 | 状态处理 |
-|------|----------|----------|----------|
-| Header | 本地状态 | `verified` | 决定播放入口是否拦截 |
-| Hero 轮播 | `fetchTmdbClient({type:'trending'})` | `items[].id/title/cover/year/rating` (前 6 条) | 加载态 Spinner；空态 EmptyState |
-| 左栏推荐卡片 | TMDB / 推荐数据源 | `items[].id/title/cover/year/rating/overview` | 骨架屏加载；空态 EmptyState |
-| 右栏热播榜单 | 官方/聚合数据 | 文字列表 | 可点击跳转 `/watch` |
-| 底层采集源扫描 | `POST /api/search?stream=1` | `SourceSearchOutcome[].list[]` (`sourceKey/sourceName/vodId/name/pic/year/area/remarks`) | 流式逐源；坏源琥珀色标记；不阻塞好源 |
-| 搜索框 | URL 参数 `s` | 关键词，长度≤100 | 跳转 `/catalog?wd=<词>` 或首页内展示结果 |
-| 登录状态 | `GET /api/status` | `verified` | 决定播放跳转拦截 |
-| 预置源 | `GET /api/status` | `defaultSources` | 默认勾选参与搜索的源 |
-| 源健康 | `store.sourceHealth` | `ok/ms/timedOut/error` | 绿/琥珀/红色点 |
+| 路由 | 参数名 | 类型 | 说明 | 示例 |
+|:---|:---|:---|:---|:---|
+| `/watch` | `title` | string | 影视标准名称 (用于多源匹配) | `title=三体` |
+| `/watch` | `year` | string | 上映年份 (用于辅助消歧) | `year=2023` |
+| `/watch` | `index` | number | 当前播放集索引 (0-indexed) | `index=0` (第1集) |
+| `/watch` | `sourceKey` | string | 选定点播源唯一标识 | `sourceKey=bfzym3u8` |
+| `/watch` | `sourceUrl` | string | 点播源接口 URL (用于离线解析) | `sourceUrl=https%3A%2F%2F...` |
+| `/watch` | `position` | number | 秒级续播断点时间戳 (可选) | `position=1420` (第23分40秒) |
+| `/watch` | `quality` | string | 初始偏好画质锁 (可选) | `quality=1080p` |
 
-### 3.2 片库页 `/catalog`
+### 4.2 本地存储 (LocalStorage & IndexedDB) 数据键契约
 
-| 区块 | 内容来源 | 关键字段 | 状态处理 |
-|------|----------|----------|----------|
-| 频道标题/图标/副标题 | `catalog-config.ts` | `activeChannelConfig.icon/label/subTitle/regions/genres` | 随频道变化 |
-| 搜索表单 | URL 参数 `wd` / `catalogKeyword` | 关键词 | 深搜按钮触发 |
-| 热门搜索词 | `CHANNEL_HOT_KEYWORDS` | 词列表 | 药丸按钮，点击填入并搜索 |
-| 多维筛选 | `useCatalogFilters` | `currentRegion/currentGenre/currentYear/currentSort` | 持久化到 URL；移动端底部弹窗 |
-| 搜索结果横幅 | `POST /api/search` | 结果计数 | “正在【频道】全库深度搜索 X（找到约 N 部）” |
-| 内容网格 | `GET /api/media/catalog` 或 `POST /api/search` | `list[].id/title/cover/year/rating` | 分页；骨架屏加载；空态 🍿 图标 |
-| 分页 | `currentPage` / `totalPages` | 第 X / Y 页 | URL 更新，筛选条件保留，刷新不丢失 |
-
-### 3.3 播放页 `/watch`
-
-| 区块 | 内容来源 | 关键字段 | 状态处理 |
-|------|----------|----------|----------|
-| 视频标题 | URL / `GET /api/media/detail` | `title` / `videoInfo.title` | 优先官方元数据；截断显示 |
-| 剧集列表 | `GET /api/detail` | `episodes[]` (播放地址数组) | 百集分段折叠；当前集高亮 |
-| 当前集 | URL 参数 `index` | 0-based | URL 更新，页面不刷新，新集自动加载 |
-| 播放地址 | `episodes[index].url` | HLS / HTTP-FLV | ArtPlayer + hls.js；无地址时显示错误 + 切换按钮 |
-| 官方海报/背景 | `GET /api/media/detail` | `cover` / `backdrop` | 环境光影 + 海报墙 |
-| 演职员 | `GET /api/media/detail` | `actors[]` / `directors[]` | 头像小图 + 姓名 |
-| 剧情简介 | `GET /api/media/detail` | `overview` | 可展开折叠 |
-| 单集看点 | `GET /api/media/episode-intro` | `title/desc/airdate/duration` | 当前集 |
-| 源名称 / QoS | store / `source-circuit-breaker.ts` | `source.name` / `sourceKey` / `getSourceQoSBadge` | 绿/琥珀/红点；延迟 ms |
-| 追剧单状态 | `db.favorites` | `favoriteIdOf(title)` | 填充/空心星标；新集首页红点 |
-| 播放进度 | `db.history` | `playbackPosition` / `duration` | IndexedDB 持久化，刷新续播 |
-
-### 3.4 历史页 `/history`
-
-| 区块 | 内容来源 | 关键字段 | 状态处理 |
-|------|----------|----------|----------|
-| 历史记录 | `db.history` | `HistoryEntry[]` (`title/pic/episodeIndex/totalEpisodes/playbackPosition/duration/timestamp`) | 按时间倒序；最近 50 条 |
-| 进度百分比 | 计算得出 | `playbackPosition / duration * 100` | 仅 10%~95% 显示 |
-| 相对时间 | `formatRelativeTime` | `timestamp` | 如“3 小时前” |
-| 搜索过滤 | 本地输入 | 关键词 | 实时过滤匹配标题 |
-| 删除单条 | `removeHistory` | 条目 | toast“已删除” + 5 秒撤销 |
-| 清空历史 | `clearAllHistory` | 全部 | ConfirmDialog 确认；不可撤销；空态 |
-
-### 3.5 登录页 `/login`
-
-| 区块 | 内容来源 | 关键字段 | 状态处理 |
-|------|----------|----------|----------|
-| 登录模式 | 本地状态 | `mode` (`login` / `register`) | Tab 切换，清空错误 |
-| 账号 | 表单输入 | `username` (≥3 字符) | 登录/注册均需 |
-| 密码 | 表单输入 | `password` (≥6 字符) | 登录/注册均需 |
-| 邀请码 | 表单输入 / URL 参数 | `inviteCode` / `invite` | 注册必填 |
-| 登录接口 | `POST /api/auth` (`action=login`) | `success/user/message` | 成功后跳 redirect 或首页 |
-| 注册接口 | `POST /api/auth` (`action=register`) | 需 `inviteCode` | 成功后自动登录并跳转 |
-| 被顶号提示 | URL 参数 `kickNotice` | 危险提示条文案 | 危险色条展示 |
-| 已登录自动跳转 | `GET /api/status` `verified` | `true` | 自动跳回首页或 redirect |
-
-### 3.6 设置页 `/settings`
-
-| 一级 Tab | 二级 Tab | 内容来源 | 关键字段 |
-|----------|----------|----------|----------|
-| 源管理 | 点播源 | `store.customAPIs` | `key/name/url/isAdult/timeoutMs/priority` |
-| 源管理 | 数据源订阅 | `store.subscriptions` | `url/name/lastSync/lastStatus/lastError` |
-| 偏好设置 | 播放与过滤 | `store.autoplayNext` / `store.yellowFilter` | 布尔开关 |
-| 偏好设置 | 封面图加载 | `store.imageProxyMode` | `direct` / `proxy` / `custom` |
-| 偏好设置 | 首页与内容 | `store.recommendSource` | 枚举值 |
-| 数据 | 配置导入导出 | `store.partialize` / `importConfig` | JSON 导出/导入 |
-
----
-
-## 4. 响应式与移动端适配信息架构
-
-| 组件 | 桌面端表现 | 移动端（375px）表现 |
-|------|-----------|-------------------|
-| 顶部导航 | 固定顶部导航栏 | 底部标签栏（`mobile-bottom-bar.tsx`）：首页、片库、历史、设置、我的 |
-| 多维筛选 | 顶部筛选面板 | 底部弹窗（`mobile-filter-sheet.tsx`） |
-| 播放页右侧栏 | 固定宽度 360–380px | 折叠为底部选集栏 |
-| 影院宽屏模式 | 右侧栏收起，视区扩大至 84vh | 同上逻辑 |
-| 卡片尺寸 | `w-[125px] sm:w-[145px] md:w-[160px] shrink-0`，轨道高度 ~210px | 同等比例自适应，保持 aspect-ratio |
-| 骨架屏 | 与真实卡片 1:1 几何对齐 | 同上 |
-
----
-
-## 5. 数据状态与全局组件归属
-
-| 状态域 | 存储位置 | 持久化方式 | 关联页面 |
-|--------|----------|------------|----------|
-| 登录/验证状态 | `src/components/auth.tsx` `useAuth` | 内存 + 401 拦截 | 全局（登录拦截） |
-| 全局设置 | `src/lib/store.ts` `useAppStore` | Zustand + localStorage | 设置页、首页、播放页 |
-| 历史记录 | `src/lib/db.ts` `db.history` | IndexedDB | 历史页、播放页（续播） |
-| 追剧单/收藏 | `src/lib/db.ts` `db.favorites` | IndexedDB | 播放页、首页（红点） |
-| 源健康度 | `store.sourceHealth` / `recordSourceHealth` | 内存 | 首页源卡片、播放页线路栏 |
-| 播放进度 | `src/features/watch/use-watch-progress.ts` | IndexedDB | 播放页 |
-
----
-
-## 6. 交付确认清单（供 Lead 与 PM 验收）
-
-- [ ] 网站地图涵盖全部 6 个页面路由及导航归属
-- [ ] 主要用户流（冷启动播放、片库深搜播放、换源故障转移、历史续播、设置配置）完整
-- [ ] 路由参数与状态传递矩阵完整
-- [ ] 逐页信息架构与字段来源对齐 PRD.md §8
-- [ ] 响应式与移动端适配信息架构明确
-- [ ] 全局数据状态与组件归属清晰
-
----
-
-**下一步**：信息架构确认后，进入 `wireframes.md` 低保真原型设计。
+| 存储媒介 | Key 命名规则 | 数据结构 | 用途说明 |
+|:---|:---|:---|:---|
+| `Dexie db.favorites` | 表 `favorites` | `{ id, title, sourceKey, lastKnownEpisodes, seenEpisodes, remarks, timestamp }` | 首页追剧更新红点对比与集数追踪 |
+| `Dexie db.history` | 表 `history` | `{ id, title, episodeIndex, playbackPosition, duration, timestamp }` | 首页继续观看断点续播 |
+| `LocalStorage` | `libretv:sub_offset:${showKey}` | `number` (如 `1.5`, `-0.5`) | 外挂字幕时间轴微调按剧持久化 |
+| `LocalStorage` | `libretv:preferred_quality` | `'auto' \| '4k' \| '1080p' \| '720p'` | 用户画质档位全局偏好记忆 |
+| `LocalStorage` | `libretv:sidebar_reversed` | `boolean` | 长剧选集正序/倒序排列偏好 |

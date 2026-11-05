@@ -1,358 +1,214 @@
-# ui-spec.md — UI 设计规范与组件清单
+# ui-spec.md — LibreTV v1.2 UI 视觉设计规范与 Design Tokens
 
-**产品**：LibreTV（cl.tv）视频聚合播放平台  
-**版本**：v1.0（基于 PRD.md v1.0、PROTOTYPE.md v1.0、DEVELOPMENT.md §四、PRD-IMAGE-OPT.md）  
-**编制**：UI/UX 设计师（ui-ux-designer）  
-**状态**：待 Lead 审阅 → 交付 fullstack-developer 实施；QA 据此确认界面可测试点
-
----
-
-## 0. 设计基调与全局原则
-
-| 项 | 规范 |
-|----|------|
-| 品牌 | cl.tv，极简现代，影院级沉浸感暗黑风格 |
-| 主题 | 深色主题为主，支持浅色/深色切换（Tailwind + `theme.tsx`） |
-| 广告 | 无商业广告：全站不出现插屏、贴片广告、弹窗广告；仅保留功能性提示（加载中、空状态、错误） |
-| 圆角 | 统一 `rounded-xl` / `rounded-2xl`；卡片与弹窗使用阴影 `shadow-sm` / `shadow-xl` |
-| 字体 | 系统默认无衬线；标题 `font-bold` / `font-extrabold`；正文 `text-sm` / `text-base`；辅助文字 `text-xs` / `text-[11px]` |
-| 布局 | 顶部固定导航栏（Header）；主内容区 `max-w-7xl mx-auto`；底部页脚（SiteFooter） |
-| 响应式 | 移动端底部标签栏 + 抽屉/底部弹窗；桌面端左侧内容 + 右侧侧栏（播放页） |
-| 无障碍 | 图标按钮必须有 `aria-label`；装饰性图片 `alt=""`；内容图片提供降级文案；自动轮播在键盘聚焦、触摸与 `prefers-reduced-motion` 下暂停并提供暂停按钮；抽屉/弹窗/播放器支持键盘 Tab / Esc 回归 |
+**产品**：LibreTV (cl.tv) 流媒体与聚合视听平台  
+**版本**：v1.2 (Gate 2 / R2 UI 设计交付)  
+**设计角色**：UI/UX 设计师 (ui-ux-designer)  
+**基准需求**：`team-deliverables/pm/iteration-plan.md` (Gate 1 方案 B 核心 6 项)  
+**技术约束**：`team-deliverables/dev/tech-feasibility-assessment.md`  
+**交付归属**：`team-deliverables/design/ui-spec.md`  
+**生效日期**：2026-11-05  
 
 ---
 
-## 1. 设计系统基础（Token）
+## 0. 设计系统核心原则 (Core Aesthetics & Design Tokens)
 
-所有颜色、间距、圆角优先使用 `tailwind.config.ts` 中的语义化 CSS 变量，不要将具名颜色散落各处。
-
-### 1.1 配色（语义化 Token）
-
-| Token | 用途 | 尾wind 类名（参考） |
-|-------|------|-------------------|
-| `bg-page` | 页面基础背景 | `bg-page` |
-| `bg-surface` | 表面层（卡片容器背景） | `bg-surface` |
-| `bg-surface-raised` | 提升表面（登录卡片、弹窗） | `bg-surface-raised` |
-| `bg-chip` | 芯片/标签背景 | `bg-chip` |
-| `text-content` | 主要文本 | `text-content` |
-| `text-muted` | 次要文本 | `text-muted` |
-| `text-faint` | 辅助/占位文本 | `text-faint` |
-| `border-line` | 边框线色 | `border-line` |
-| `border-line/60` | 半透明边框 | `border-line/60` |
-| `bg-accent` / `text-accent` / `border-accent` / `text-on-accent` | 品牌主色（amber/accent `#f59e0b` 系） | `bg-accent` 等 |
-
-### 1.2 状态色（语义化）
-
-| 状态 | 用途 | 视觉表现 |
-|------|------|----------|
-| 成功（success） | Toast 成功、操作完成 | 绿色系 |
-| 信息（info） | 提示、引导 | 蓝色系 |
-| 危险（danger） | 错误条、确认删除、被顶号 | 红色系 |
-| 警告/琥珀 | 源超时、部分失败 | 琥珀色 `#f59e0b` 系 |
-| QoS 绿点 | 源健康 `ok`（延迟 < 500ms） | 绿色实心点（极速） |
-| QoS 琥珀点 | 源轻微劣化 `timedOut` / 500~1500ms | 琥珀色实心点（可用） |
-| QoS 红点 | 源健康 `error` / > 1500ms | 红色实心点（受阻） |
-| QoS 探测中 | 源并发测速探测中 | 蓝色微波纹动态呼吸点（`animate-pulse`） |
-
-### 1.3 字体规范
-
-| 类型 | 尺寸 | 粗细 | 行高 | 使用场景 |
-|------|------|------|------|----------|
-| 标题 H1 | `text-[24px]` / `text-2xl` | `font-extrabold` | `tight` | 页面主标题 |
-| 标题 H2 | `text-[20px]` / `text-xl` | `font-bold` | `tight` | 区块标题 |
-| 标题 H3 | `text-[18px]` / `text-lg` | `font-bold` | `normal` | 卡片标题、子标题 |
-| 正文 | `text-base` / `text-[16px]` | `font-normal` | `normal` | 正文说明、剧情简介 |
-| 辅助正文 | `text-sm` / `text-[14px]` | `font-normal` | `normal` | 副标题、元数据 |
-| 辅助小字 | `text-xs` / `text-[12px]` | `font-normal` | `normal` | 年份、评分、相对时间 |
-| 标注极小 | `text-[11px]` | `font-normal` | `normal` | 标签、QoS 等级文字 |
-
-### 1.4 间距规范
-
-| Token | 值 | 使用场景 |
-|-------|-----|----------|
-| `space-xs` | `4px` | 紧凑内间距 |
-| `space-sm` | `8px` | 组件内元素间距 |
-| `space-md` | `16px` | 卡片内边距、区块间距 |
-| `space-lg` | `24px` | 大区块间距 |
-| `space-xl` | `32px` | 页面主区块间距 |
-| `space-2xl` | `48px` | 主要页面分区间距 |
-
-卡片尺寸参考：`w-[125px] sm:w-[145px] md:w-[160px] shrink-0`，轨道高度收敛在 ~210px。
-
-### 1.5 圆角与阴影
-
-| 项 | 值 | 使用场景 |
-|----|-----|----------|
-| `rounded-xl` | `8px` | 一般卡片、按钮、输入框 |
-| `rounded-2xl` | `12px` | 登录卡片、弹窗、Hero 轮播容器 |
-| `shadow-sm` | 轻阴影 | 卡片悬停、表格行 |
-| `shadow-xl` | 重阴影 | 弹窗、抽屉、登录卡片 |
+LibreTV 遵循 **NovaTV Cinema Ultra Dark（影院级沉浸暗黑）** 与 **Apple visionOS / iOS Spatial Liquid Glass（空间液态毛玻璃）** 设计哲学：
+1. **绝对聚焦视听本身**：深邃曜石基底搭配极细腻玻璃折射，绝无任何商业广告与侵入式干扰；
+2. **高对比度与高信噪比**：以影院鎏金（Amber `#F59E0B`）为视觉动眼锚点，关键指标（延迟、画质、红点）一目了然；
+3. **触控与桌面双端自如**：统一 Tailwind CSS 语义化 Tokens，组件具备健全的键盘可达性（Focus Ring）与触控阻尼动效。
 
 ---
 
-## 2. 组件清单（供全栈开发者实施）
+## 1. Design Tokens 基础参数体系
 
-### 2.1 基础原子组件
+### 1.1 色彩系统 (Semantic Colors & CSS Variables)
 
-| 组件名 | 用途 | 关键属性/状态 | 测试点（QA） |
-|--------|------|---------------|--------------|
-| `Button` | 主要操作按钮 | variant: primary/ghost/danger；size: sm/md/lg；loading: boolean；disabled: boolean | 点击触发、loading 状态下禁用、disabled 置灰、键盘 Enter 触发 |
-| `Input` | 文本输入 | type: text/password；placeholder；disabled；error: boolean；aria-label | 聚焦/失焦、校验错误显示、密码可见切换 |
-| `Spinner` | 加载指示 | size: sm/md/lg | 展示/隐藏、尺寸正确 |
-| `Badge` | 状态标签 | variant: success/info/danger/warning；text | 文字显示、颜色对应状态 |
-| `Checkbox` | 布尔选择 | checked；disabled；onChange | 勾选/取消、无障碍标签 |
-| `Switch` | 开关 | checked；disabled；onChange | 开/关状态、动画 |
-| `Select` | 下拉选择 | options；value；onChange；disabled | 展开/收起、选中值显示、搜索（如有） |
-| `Tabs` | 标签页 | items；activeIndex；onChange | 切换激活态、键盘 Tab 导航 |
-| `Avatar` | 头像 | src；alt；size；fallback | 图片加载成功/失败兜底、alt 文案 |
+基于项目 `tailwind.config.ts` 与 `src/app/globals.css` 中声明的 CSS 变量体系，全面实行语义化绑定：
 
-### 2.2 状态反馈组件
+#### A. 核心空间背景与文本色阶（深色模式为主）
 
-| 组件名 | 用途 | 关键属性/状态 | 测试点（QA） |
-|--------|------|---------------|--------------|
-| `Toast` | 轻量提示 | type: success/info/danger；message；duration；action（如“撤销”） | 出现/自动消失、操作按钮触发、危险类型颜色 |
-| `ConfirmDialog` | 危险操作确认 | title；content；confirmText；cancelText；onConfirm；onCancel | 弹出/关闭、确认/取消回调、Esc 关闭 |
-| `EmptyState` | 空状态 | icon；title；description；action（可选按钮） | 图标显示、文案、操作按钮跳转 |
-| `Alert` | 错误/警告条 | type: error/warning/info；message；dismissible | 显示错误文案、可关闭、颜色对应类型 |
+| Token 语义名 | CSS 变量名 | 深色模式色值 (Dark) | 浅色模式色值 (Light) | 用途说明 |
+|:---|:---|:---|:---|:---|
+| `bg-page` | `--c-page` | `rgb(11 15 25)` (`#0B0F19`) | `rgb(244 245 248)` (`#F4F5F8`) | 全局页面基底背景（曜石深空黑） |
+| `bg-surface` | `--c-surface` | `rgb(19 27 42)` (`#131B2A`) | `rgb(255 255 255)` (`#FFFFFF`) | 毛玻璃面板容器基底色 |
+| `bg-surface-raised` | `--c-surface-raised`| `rgb(26 36 56)` (`#1A2438`) | `rgb(255 255 255)` (`#FFFFFF`) | 提升浮层（侧栏、抽屉、弹窗） |
+| `bg-card` | `--c-card` | `rgb(15 21 35)` (`#0F1523`) | `rgb(255 255 255)` (`#FFFFFF`) | 视频卡片底层基底 |
+| `bg-chip` | `--c-chip` | `rgb(24 33 50)` (`#182132`) | `rgb(235 238 244)` (`#EBEEF4`) | 胶囊按钮、标签、未激活项底色 |
+| `bg-hover` | `--c-hover` | `rgb(34 46 68)` (`#222E44`) | `rgb(226 230 239)` (`#E2E6EF`) | 悬停互动激活高亮底色 |
+| `border-line` | `--c-line` | `rgb(45 58 82)` (`#2D3A52`) | `rgb(218 223 233)` (`#DADFE9`) | 1px 细微玻璃边框与分隔线 |
+| `text-content` | `--c-content` | `rgb(248 250 252)` (`#F8FAFC`)| `rgb(15 23 42)` (`#0F172A`) | 主标题、首要阅读文本（冰晶白） |
+| `text-muted` | `--c-muted` | `rgb(148 163 184)` (`#94A3B8`)| `rgb(71 85 105)` (`#475569`) | 次要描述、元数据、集数信息 |
+| `text-faint` | `--c-faint` | `rgb(100 116 139)` (`#64748B`)| `rgb(100 116 139)` (`#64748B`)| 三级辅助文本、微弱占位说明 |
 
-### 2.3 图片与媒体组件
+#### B. 品牌流光金与语义状态色阶
 
-| 组件名 | 用途 | 关键属性/状态 | 测试点（QA） |
-|--------|------|---------------|--------------|
-| `SmartImage` | 封面图加载（候选链降级） | src；mode (direct/proxy/custom)；loading (eager/lazy)；aspect-ratio；onExhausted；aria-label | 骨架屏占位、加载成功淡入、所有链失败后兜底占位+抖动、lazy 懒加载 |
-| `CatalogSkeleton` | 片库列表骨架屏 | count；cardSize | 与真实卡片 1:1 几何对齐、脉冲动画 |
-| `VideoPlayer` | 播放器壳（ArtPlayer + hls.js） | src；poster；autoplay；controls；onError；onEnded | 播放/暂停、倍速、全屏、错误态、进度条 |
-| `QRCode` | 跨屏接力二维码 | value；size | 二维码生成、可扫码、包含当前时间点 |
-
-### 2.4 页面级组件
-
-| 组件名 | 用途 | 关键属性/状态 | 测试点（QA） |
-|--------|------|---------------|--------------|
-| `Header` | 顶部导航 | logo；search；settings；userState (login/logout) | Logo 跳转首页、搜索入口、设置跳转、用户状态切换 |
-| `SiteFooter` | 底部页脚 | 固定内容 | 显示、链接可点击 |
-| `HeroCarousel` | Hero 轮播 | items[]（6 条）；autoplay；onItemClick；preload | 自动轮播、手动切换、预加载下一张、无空白闪烁、键盘/触摸暂停 |
-| `MediaCard` | 官方海报卡片 | item；onClick；loading；failed | 点击跳转播放、海报加载状态、失败兜底 |
-| `AggregatedCard` | 聚合卡片（底层源） | sourceKey/name/vodId/pic/year；onClick；health | 源名显示、QoS 色点、点击跳转 |
-| `ChannelSwitcher` | 频道切换 | channels[]；activeChannel；onChange | 频道切换后标题/图标/筛选维度随之变化 |
-| `FilterPanel` | 多维筛选 | regions/genres/years/sorts；activeFilters；onChange；mobileSheet | 筛选条件持久化到 URL、标签可单独移除、移动端底部弹窗 |
-| `EpisodeList` | 剧集选集 | episodes[]；currentIndex；onEpisodeClick；collapse | 百集分段折叠、当前集高亮、点击切换集数 |
-| `SourceBar` | 播放线路栏 | sources[]；activeSource；onSwitch；QoS | 水平滚动、源名+延迟+QoS、点击切换源保留进度 |
-| `WatchFallbackState` | 播放源失效兜底 | message；actionButton；onAction | 显示错误、切换备用线路按钮 |
-| `SwitchSourceModal` | 测速换源弹层 | sources[]；onSwitch；onClose | 弹出/关闭、源列表+延迟+QoS、切换源 |
-| `QrHandoffModal` | 跨屏接力弹层 | title；episode；total；position；qrValue；onClose | 二维码生成、显示标题/集数/续播秒数 |
-| `SpeedSuggestionDialog` | 测速建议换源对话框 | suggestion；onAccept；onDismiss | 建议展示、接受/驳回 |
-| `LoginForm` | 登录表单 | mode (login/register)；onSubmit；onModeChange；error | 登录/注册切换、校验提示、邀请码填充、被顶号条 |
-| `SourceListPanel` | 点播源管理 | sources[]；onAdd；onEdit；onDelete；onToggle | 添加/编辑/删除、勾选参与搜索、删除撤销 toast |
-| `SubscriptionPanel` | 数据源订阅 | subscriptions[]；onAdd；onSync；onToggle；onDelete | 同步状态显示、导入数量、启停 |
-| `PreferencePanel` | 偏好设置 | autoplayNext；yellowFilter；adFilter；imageProxyMode；recommendSource | 开关切换、成人过滤联动取消成人源勾选、图片模式三选一 |
-| `ConfigIoPanel` | 配置导入导出 | onExport；onImport；file | 导出 JSON、导入 JSON 合并/覆盖 |
-| `HistoryList` | 观看历史列表 | entries[]；onSearch；onDelete；onUndo；onClear；onItemClick | 按时间倒序、搜索过滤、删除/撤销、清空确认、点击续播 |
+| Token 语义名 | CSS 变量名 | 深色模式标准值 | 浅色模式标准值 | 核心使用场景 |
+|:---|:---|:---|:---|:---|
+| `accent` | `--c-accent` | `rgb(245 158 11)` (`#F59E0B`)| `rgb(14 165 233)` (`#0EA5E9`) | 品牌主色、流光金进度条、选集高亮 |
+| `accent-hover` | `--c-accent-hover` | `rgb(251 191 36)` (`#FBBF24`)| `rgb(2 132 199)` (`#0284C7`) | 按钮悬停激活鎏金色 |
+| `on-accent` | `--c-on-accent` | `rgb(11 15 25)` (`#0B0F19`) | `rgb(255 255 255)` (`#FFFFFF`)| 流光金实体底色上的反白/反黑文字 |
+| `danger` | `--c-danger` | `rgb(248 113 113)` (`#F87171`)| `rgb(220 38 38)` (`#DC2626`) | 追剧更新红点、移除、错误 Toast |
+| `success` | `--c-success` | `rgb(52 211 153)` (`#34D399`)| `rgb(22 163 74)` (`#16A34A`) | QoS S级极速徽章、更新至最新集 |
+| `warning` | `--c-warning` | `rgb(251 191 36)` (`#FBBF24`)| `rgb(217 119 6)` (`#D97706`) | 弱网自动降级提示、QoS B级徽章 |
+| `info` | `--c-info` | `rgb(56 189 248)` (`#38BDF8`)| `rgb(14 165 233)` (`#0EA5E9`) | QoS A级良好徽章、常规换源提示 |
 
 ---
 
-## 3. 关键页面视觉说明（文字/Markdown 描述）
+### 1.2 空间立体毛玻璃与光影阴影 Tokens
 
-### 3.1 首页 `/`
+```css
+/* 1. 空间液态毛玻璃面板 */
+.glass-panel {
+  background: rgba(19, 27, 42, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.5);
+}
 
-**整体布局**：顶部固定 Header → Hero 巨幕轮播 → 左图右榜双栏楼层 → 底部页脚。
+/* 2. iOS 空间微型悬浮胶囊 */
+.ios-pill {
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.14);
+}
 
-**Header**：
-- 左侧 `cl.tv` Logo（文本 + 图标标志）
-- 中间：可折叠搜索入口（输入框 + 搜索按钮）
-- 右侧：设置入口（齿轮图标）、用户状态/登录入口（头像或“登录”文字）
-
-**Hero 巨幕轮播**：
-- 容器圆角 `rounded-2xl`，固定 `aspect-ratio`（16:9），加载前显示 `bg-slate-800/20` 骨架屏
-- 6 张 TMDB 官方趋势大片横向轮播，每张带：标题（截断）、评分、年份、“▶ 播放”按钮
-- 轨道下方小圆点指示器，当前页高亮
-- 左右箭头（悬停显示），支持自动轮播与 `prefers-reduced-motion` 暂停
-
-**左图右榜双栏**：
-- 左侧：推荐内容卡片网格，5–6 列，每张卡片 `MediaCard`（海报 + 标题 + 年份 + 评分）
-- 右侧：热播榜单，文字列表，每项带排名数字、片名、评分、年份，可点击跳转
-
-**底层采集源深度扫描**：
-- 默认折叠，点击“展开”后显示 NDJSON 流式结果区
-- 各源结果逐条出现，格式：[源名][延迟 ms][QoS 色点][标题]
-- 坏源以琥珀色标记，不阻塞好源继续流式返回
-
-**空态**：未搜到匹配影视时，显示 `EmptyState`（图标 🔍 + 标题“未找到匹配影视” + 描述 + “尝试通过底层采集源深度直搜”按钮）
-
----
-
-### 3.2 片库页 `/catalog`
-
-**页头**：频道图标 + 频道标题（如“电影片库大厅”）+ 副标题（如“海外影视资料目录”）
-
-**搜索表单**：输入框 + “深搜”按钮 + “清空”按钮，横向排列
-
-**搜索结果横幅**（仅有搜索词时显示）：
-- 文案：“正在【电影】全库深度搜索“X”（找到约 N 部影片）”
-- 操作：“✕ 清空返回片单” | “🌐 切换为全网聚合直搜”
-
-**热门搜索词**（仅无搜索词时显示）：
-- “🔥 大家都在搜：” + 药丸按钮组（词1/词2/词3），点击填入搜索框并自动触发搜索
-
-**多维筛选面板**：
-- 地区筛选 | 类型筛选 | 年份筛选 | 排序筛选（下拉或按钮组）
-- 激活筛选数提示 + “重置所有筛选”按钮
-- 激活筛选以标签（tag）形式展示，可单独移除
-- 移动端：底部弹窗（`mobile-filter-sheet.tsx`）
-
-**统计与加载状态行**：
-- 左侧：结果总数 / 分页信息（“共 N 部结果”）
-- 右侧：加载时显示“实时更新中”动画
-
-**内容网格**：
-- 官方片库卡片（`MediaCard`，5–6 列，海报 + 标题 + 年份）或 聚合卡片（`AggregatedCard`）
-- 加载时显示 `CatalogSkeleton`（与真实卡片 1:1 几何对齐）
-
-**分页导航**（仅无搜索词时显示）：
-- “第 X / Y 页”，页码按钮，支持跳页输入
-
-**浮动回到顶部按钮**：右下角，平滑滚动
-
-**空态**：频道下无影片或搜索无结果时，显示 🍿 图标 + “该频道下暂无影片” + “尝试清空筛选条件” / “尝试全网聚合直搜”按钮
+/* 3. 影院光环发光阴影 */
+.shadow-glow-gold {
+  box-shadow: 0 0 20px -3px rgba(245, 158, 11, 0.45);
+}
+.shadow-glow-emerald {
+  box-shadow: 0 0 15px -2px rgba(16, 185, 129, 0.4);
+}
+.shadow-cinema {
+  box-shadow: 0 20px 50px -12px rgba(0, 0, 0, 0.85);
+}
+```
 
 ---
 
-### 3.3 播放页 `/watch`
+### 1.3 圆角与层级 (Radius & z-index Ladder)
 
-**顶部自适应导航栏（sticky）**：
-- 左侧：返回按钮 | 首页按钮
-- 中间：视频标题（截断）+ 源名 + 第 X/Y 集
-- 右侧操作组：主题切换 | 追剧单星标 | 跨屏接力二维码 | 下载本集 | 测速换源
-
-**左主视区（1fr）**：
-- 动态环境光影：海报模糊背景
-- 播放器区域（ArtPlayer + hls.js，aspect-video）：
-  - 控制：暂停/播放、快退/快进 ±5s、音量、倍速 0.5x~3.0x、全屏、影院模式切换
-  - 无播放地址时：显示错误 + “立即切换至备用线路”按钮
-  - 加载时：Spinner lg
-- 视频信息与快捷控制栏：标题 | 源名标签 | 第 X 集（共 Y 集）+ 备注 | 上一集/下一集 | 影院宽屏切换 | 自动连播复选框
-- 播放线路栏（水平滚动）：每条线路显示源名 + 延迟 ms + QoS 等级（绿/琥珀/红点）+ 当前/受阻标记 | “测速换源”按钮
-
-**右侧栏（360–380px，桌面端固定；移动端折叠为底部选集栏）**：
-- 剧集选集：百集分段折叠，当前集高亮，点击集数切换
-- 本集看点：标题、简介、播出日期、时长
-- 影片档案：导演、演员、类型、地区、备注、剧情简介（可展开折叠）
-- 演职员探索图谱：头像小图 + 姓名
-- 海报墙：点击海报切换主海报
-
-**全宽“猜你喜欢”智能推荐专区**：卡片网格，基于当前分类推荐
-
-**弹层**：
-- `SwitchSourceModal`：完整测速与换源面板（源列表、延迟、QoS、集数）
-- `QrHandoffModal`：跨屏接力二维码 + 当前播放时间 + 视频标题 + 集数
-- `SpeedSuggestionDialog`：测速建议换源对话框
-- `WatchFallbackState`：源失效时的兜底状态
-
-**影院宽屏模式**：右侧栏收起，视区扩大至 84vh
+- **圆角规范**：
+  - `rounded-lg` (8px)：选集数字网格按钮、字幕微调按钮、小标签；
+  - `rounded-xl` (12px)：海报微卡片、抽屉内功能卡片、输入框、控制栏二级菜单；
+  - `rounded-2xl` (16px)：全局面板、Hero 轮播浮层、弹窗主体；
+  - `rounded-full` (9999px)：追剧/历史切换胶囊外框、红点、浮动快捷操作拉手。
+- **全局 z-index 层级梯队**：
+  - `z-0`：页面常规内容排版；
+  - `z-10`：卡片内浮层标签（集数备注、相对时间、NEW 红点）；
+  - `z-20`：首页 `ContinueWatchingRow` 横滑轨道（与 Hero 下边际叠加）、外挂字幕渲染层 `SubtitleLayer`；
+  - `z-30`：播放器错误提示遮罩、播放控件主操作区；
+  - `z-40`：Sticky 固定顶部玻璃导航栏 (`Header`)；
+  - `z-50`：ArtPlayer 自带设置下拉菜单、工具提示 (Tooltip)；
+  - `z-[70]`：QoS 线路雷达抽屉 (`QoSRadarDrawer`)、跨屏接力弹窗 (`QrHandoffModal`)、最优线路胶囊 (`SpeedSuggestionDialog`)；
+  - `z-[80]`：全局消息通知系统 (`Toast`)。
 
 ---
 
-### 3.4 历史页 `/history`
+## 2. 6 大核心功能组件状态矩阵 (Component State Matrix)
 
-**页头**：返回箭头 | 标题“观看历史” | 总数（N） | （总数>0 时显示“清空历史”按钮）
+为确保全栈开发在 Gate 3 实现时界面交互严密无遗漏，下表详尽列出 6 项功能所有组件在各交互状态下的视觉表现：
 
-**搜索栏**（总数>0 时显示）：搜索图标 | 输入框“搜索观看历史...” | 清空按钮
+### 2.1 画质切换控制项 (REQ-P0-01)
 
-**列表区**：
-- 空态：`EmptyState` “暂无观看记录”
-- 提示：共 N 条记录，仅显示最近 50 条
-- 历史记录列表，每条：
-  - 缩略图（海报，加载失败显示占位图标）
-  - 标题（截断）
-  - 副标题：第 X/Y 集 · 播放时间 · 相对时间（如“3 小时前”）
-  - 进度条（10%~95% 时显示百分比）
-  - 删除按钮（悬停显示，点击后出现“撤销” toast）
+| 组件/状态 | Default (默认态) | Hover (悬停态) | Active / Selected (选中态) | Disabled (禁用态) | Loading (切换中) | Focus (键盘聚焦) |
+|:---|:---|:---|:---|:---|:---|:---|
+| **控制栏画质按钮** | `text-xs text-white/80 bg-white/10 px-2.5 py-1 rounded-lg` | `text-white bg-white/20` | `text-accent bg-accent/20 font-semibold` | 单码率时自动隐藏或不显示下拉三角 | `text-accent animate-pulse` 显示 `切画质...` | `ring-2 ring-accent/60 outline-none` |
+| **画质下拉列表项** | `text-xs text-white/90 px-3 py-2 rounded-md flex items-center justify-between` | `bg-white/10 text-white` | `bg-accent/20 text-accent font-bold` 左侧带 `✓` 图标 | 不支持的码率项不渲染 | — | `bg-white/15 text-white` |
+| **弱网保护 Toast** | — | — | `bg-surface-raised border border-warning/40 text-warning px-3 py-1.5 rounded-xl shadow-lg` | — | — | — |
 
-**ConfirmDialog**（清空历史确认）：
-- “清空全部观看历史？将删除 N 条记录，此操作不可撤销。” | [取消] [清空]
+### 2.2 多语言音频轨道子菜单项 (REQ-P0-02)
 
----
+| 组件/状态 | Default (默认态) | Hover (悬停态) | Active / Selected (选中态) | Disabled (单音轨场景) | Loading (切换缓冲) | Focus (键盘聚焦) |
+|:---|:---|:---|:---|:---|:---|:---|
+| **设置面板音轨项** | `text-xs text-content px-3 py-2.5 rounded-lg flex items-center justify-between` | `bg-hover text-content` | `text-accent font-semibold` 呈现 `✓` 标与流光金色 | 单音轨时设置菜单内自适应隐藏该子项 | `text-muted` 显示 `正在无缝切音轨...` (≤800ms) | `ring-2 ring-accent/50 outline-none` |
+| **音轨切换指示胶囊** | — | — | `px-2 py-0.5 rounded bg-black/70 text-accent text-[11px]` | — | — | — |
 
-### 3.5 登录页 `/login`
+### 2.3 1000 集长剧虚拟网格选集组件 (REQ-P0-03)
 
-**全屏背景**：流光装饰
+| 组件/状态 | Default (默认态) | Hover (悬停态) | Active / Playing (当前播放集) | Disabled (不可播放) | Loading (初始挂载) | Focus (键盘焦点) |
+|:---|:---|:---|:---|:---|:---|:---|
+| **百集区间锚点胶囊** | `text-[11px] font-medium px-2.5 py-1 rounded-md bg-chip/50 text-muted` | `bg-hover text-content` | `bg-accent/15 text-accent border border-accent/40 font-semibold` | — | `opacity-60` 骨架淡入 | `ring-2 ring-accent/50` |
+| **单集网格按钮 (虚拟)** | `h-9 text-xs font-medium rounded-lg bg-chip/60 text-content border border-line/50` | `bg-hover border-accent/40 text-accent` | `bg-accent text-on-accent font-bold border-accent shadow-glow-gold` | `opacity-30 cursor-not-allowed` | `animate-pulse bg-chip/40` | `ring-2 ring-accent ring-offset-1 ring-offset-page` |
+| **正序/倒序切换按钮** | `text-xs text-muted px-2 py-1 rounded-md bg-surface border border-line/60` | `text-content bg-hover` | 图标旋转 180° 并即时逆转数据索引序列 | 仅 1 集时长效置灰禁用 | — | `ring-2 ring-accent/50` |
 
-**品牌区**：
-- Logo (cl.tv)
-- 标题：“登录您的账号” / “创建新账号”
-- 副标题：“影院级超清影视探索平台 · 跨端云同步”
+### 2.4 首页“我的追剧·最近更新”组件 (REQ-P0-04)
 
-**卡片容器**（bg-surface-raised，rounded-2xl，阴影 shadow-xl）：
-- 被顶号/下线提示（kickNotice，危险色条，如有）
-- Tab 切换：“账号登录” | “邀请码注册”（切换时清空错误）
-- 错误提示条（如有 errorMsg，danger 类型）
-- 登录表单：账号名称输入框 | 登录密码输入框 | “立即登录”按钮（加载时显示 Spinner）
-- 注册表单：注册邀请码输入框（placeholder: LTV-XXXX-XXXX）| 账号名称输入框（≥3 字符）| 设置密码输入框（≥6 字符）| 确认密码输入框 | “注册并登录”按钮
-- 底部：“返回首页”链接 | 标语“自由观影 · 极速秒播”
+| 组件/状态 | Default (默认态) | Hover (悬停态) | Active / Click (点击态) | Empty (追平或为空) | Loading (比对中) | Focus (键盘聚焦) |
+|:---|:---|:---|:---|:---|:---|:---|
+| **选项卡切换胶囊** | `text-xs font-semibold px-3 py-1 rounded-lg text-muted` | `text-content` | `bg-accent text-on-accent shadow-sm` | — | — | `ring-2 ring-accent/40` |
+| **更新红点呼吸角标** | `bg-rose-600/95 text-white text-[10px] font-bold px-2 py-0.5 rounded-md animate-pulse` | 放大 1.05 倍微交互 | 瞬间反馈 | 无更新时切换为 `★ 追剧中` 琥珀色微角标 | — | — |
+| **追剧海报卡片** | `w-[152px] rounded-xl bg-surface border border-line/60 overflow-hidden` | `border-accent/60 shadow-xl -translate-y-1` | 点击瞬间缩放 0.98x，直接直通播放页 | 两者皆为空时，专区高度优雅坍缩为 0 | 骨架屏占位不跳变 | `ring-2 ring-accent` |
+| **单条快捷移出按钮** | 默认透明隐藏 (`opacity-0`) | 卡片悬停时浮现 `opacity-100 bg-black/70 hover:bg-rose-600` | 触发淡出，弹出带 5 秒撤销的 Toast | — | — | 获得焦点时强制显示 |
 
----
+### 2.5 QoS 线路监控雷达抽屉与秒切组件 (REQ-P0-05)
 
-### 3.6 设置页 `/settings`
+| 组件/状态 | Default (默认态) | Hover (悬停态) | Active / Selected (当前源) | Disabled (缺集不可切) | Loading (测速探针中) | Focus (键盘聚焦) |
+|:---|:---|:---|:---|:---|:---|:---|
+| **一键秒切 Banner** | `p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-between` | `bg-emerald-500/15 border-emerald-500/50` | 点击后在 ≤ 1.5s 内切源完成并弹出 Toast | 无更快源时折叠或提示“当前已是最优” | 测速期间禁用按钮 | `ring-2 ring-emerald-500` |
+| **极速源秒切按钮** | `btn-primary text-xs px-3 py-1.5 flex items-center gap-1` | `bg-emerald-400 text-slate-950` | 触发无缝换源，保持当前秒数 | 集数不足当前集时 `disabled:opacity-40` 文案 `缺集` | `Spinner sm` 旋转 | `ring-2 ring-accent` |
+| **线路雷达卡片** | `p-3 rounded-xl bg-surface border border-line/60 flex items-center justify-between` | `border-accent/40 bg-hover` | `border-accent bg-accent/5` 标明 `[当前播放中]` | 熔断态：呈现警告红框与冷却倒计时 | 延迟处展示蓝色脉冲呼吸点 | `ring-2 ring-accent/50` |
+| **重新测速按钮** | `btn-ghost text-xs px-3 py-1.5 flex items-center gap-1` | `bg-hover text-content` | 图标旋转 360° 发起并发探活 | 60 秒内防刷节流置灰 | 图标持续旋转 | `ring-2 ring-accent/40` |
 
-**页头**：返回箭头 | 标题“设置”
+### 2.6 外挂字幕阶梯微调胶囊 (REQ-P1-01)
 
-**一级 Tab**：源管理 | 偏好设置 | 数据
-
-**二级 Tab**（随一级变化）：
-- 源管理：点播源 | 数据源订阅
-- 偏好设置：播放与过滤 | 封面图加载 | 首页与内容
-- 数据：配置导入导出
-
-**点播源**：表格/卡片列表（源名 | API 地址 | 是否成人标签 | 勾选框参与搜索 | 操作编辑/删除） + 添加源表单（源名 | API 根地址 | 详情页地址 | 成人开关 | 搜索优先级 | 超时时间 | “添加源”按钮） + 删除后撤销 toast（5 秒）
-
-**数据源订阅**：订阅列表（订阅名称 | 订阅 URL | 同步状态 | 上次同步时间 | 导入数量 | 操作同步/启停/删除） + 添加订阅（URL | 名称 | 按钮） + 订阅详情展开（同步统计分类）
-
-**播放与过滤**：开关列表（自动连播 | 成人内容过滤 | 广告过滤）
-
-**封面图加载**：单选按钮组（直连默认 | 代理 | 自定义代理 + 自定义代理地址输入框）
-
-**首页与内容**：下拉选择（推荐数据源：豆瓣分类 / Bangumi 新番 / 影视周榜 / 百度实时榜 / 豆瓣 Top250 / 360热播 / 猫眼大盘 / 爱奇艺热榜 / 热门短剧）
-
-**配置导入导出**：导出区（“导出配置”按钮 → 下载 JSON） + 导入区（文件选择输入 .json | “导入配置”按钮 → 覆盖或合并）
+| 组件/状态 | Default (默认态) | Hover (悬停态) | Active / Press (点击步进) | Disabled (未载入字幕) | Focus (键盘聚焦) |
+|:---|:---|:---|:---|:---|:---|
+| **阶梯微调按钮 (±0.5s~±2.5s)** | `px-2 py-0.5 rounded bg-white/10 hover:bg-white/20 text-[10px] font-mono text-white/90` | `bg-white/25 text-white` | 按压缩放 0.95x，字幕立即位移（≤50ms），中央弹出偏移提示 | 未挂载字幕时整层不渲染 | `ring-1 ring-accent` |
+| **一键归零重置按钮** | `px-2 py-0.5 rounded text-[10px] text-accent/80 hover:text-accent hover:bg-accent/15` | `text-accent font-semibold` | 偏移归零并清空 localStorage 偏移键 | — | `ring-1 ring-accent` |
 
 ---
 
-## 4. 图片加载与性能设计要点（来自 PRD-IMAGE-OPT.md）
+## 3. 响应式断点与行为适配规则 (Responsive Breakpoints)
 
-| 要点 | 规范 |
-|------|------|
-| 骨架屏 | 所有海报位必填；加载中显示 `bg-slate-800/20` 或 `animate-pulse` 脉冲动画，固定 aspect-ratio，不留空白；Hero 轮播切换时保持占位 |
-| 加载失败兜底 | 所有候选链耗尽后显示“封面加载失败”占位图，带轻微抖动提示（`FAILED_SHAKE_CLASS`），`aria-label` 说明失败原因；不影响卡片点击播放 |
-| 渐进显示 | 图片加载完成后 `opacity-0 → opacity-100` 平滑淡入（`duration-300 ease-out`） |
-| 尺寸与布局稳定性 | 所有海报卡片固定 aspect-ratio（电影 2:3、剧集 16:9），图片加载前后布局不抖动（CLS ≈ 0）；移动端与桌面端比例保持一致 |
-| 加载策略 | 首屏图片 `loading='eager'`；非首屏图片 `loading='lazy'` + `IntersectionObserver`（rootMargin 200px） |
-| 图片代理模式 | 遵循用户设置 `store.imageProxyMode`（direct/proxy/custom）与部署者默认值 `/api/status` `defaultImageMode` |
-| 预加载（P2） | Hero 当前轮播图 `<link rel=preload>`；常用图片域 `dns-prefetch` / `preconnect` |
+LibreTV 遵循 Tailwind CSS 标准断点阶梯：
 
----
+```
+Breakpoint Matrix:
+├─ Mobile:       < 640px    (基准视口，垂直单列堆叠，底部半屏抽屉)
+├─ Tablet (sm):  640px      (小平板，横滑卡片尺寸自适应微增)
+├─ Medium (md):  768px      (中型设备，顶部导航展开完整分类)
+├─ Desktop (lg): 1024px     (标准桌面，播放页左右双栏，侧栏常驻，右侧滑出抽屉)
+└─ Cinema (xl):  1280px+    (宽屏影院，1fr 主视区 + 380px 固定侧栏)
+```
 
-## 5. 交付确认清单（供 Lead、PM 与 QA 验收）
+### 3.1 核心功能在各断点下的行为定义
 
-- [ ] 设计系统 Token：配色、字体、间距、圆角、阴影与 `tailwind.config.ts` 语义化变量对齐
-- [ ] 全局组件：Button / Input / Spinner / Badge / Checkbox / Switch / Select / Tabs / Avatar 规范完整
-- [ ] 状态反馈组件：Toast / ConfirmDialog / EmptyState / Alert 规范完整
-- [ ] 图片与媒体组件：SmartImage / CatalogSkeleton / VideoPlayer / QRCode 规范完整（含骨架屏、失败兜底、渐进显示）
-- [ ] 页面级组件：Header / SiteFooter / HeroCarousel / MediaCard / AggregatedCard / ChannelSwitcher / FilterPanel / EpisodeList / SourceBar / WatchFallbackState / SwitchSourceModal / QrHandoffModal / SpeedSuggestionDialog / LoginForm / SourceListPanel / SubscriptionPanel / PreferencePanel / ConfigIoPanel / HistoryList 规范完整
-- [ ] 关键页面视觉说明：首页 / 片库页 / 播放页 / 历史页 / 登录页 / 设置页均有文字描述
-- [ ] 图片优化要点：骨架屏、失败兜底、渐进显示、aspect-ratio、加载策略、图片代理模式均已覆盖
-- [ ] 响应式与无障碍：移动端底部标签栏 / 筛选底部弹窗 / 播放器右侧栏折叠；aria-label / alt / 键盘 Tab / Esc / prefers-reduced-motion
+| 功能模块 | 移动端 (< 768px / Mobile) | 桌面端 (≥ 1024px / Desktop) |
+|:---|:---|:---|
+| **首页追剧专区** | 卡片宽度 `w-[132px]`，单行水平触控手势滑动，右侧露出 1/3 卡片引导横滑；隐藏翻页左右箭头按钮。 | 卡片宽度 `w-[164px]`，展示右上角 `[‹] [›]` 平滑滚动操作按钮与悬停遮罩高亮。 |
+| **长剧虚拟选集** | 折叠在移动端底部选集抽屉中，**6 列网格紧凑排列**，视口高度 `55vh`，触控阻尼自然。 | 常驻于播放页右侧栏 `WatchSidebar`，**4 列网格标准排列**，视口高度 `max-h-[38vh]`，支持键盘方向键与快捷键切集。 |
+| **QoS 监控雷达** | 采用**底部半屏升起抽屉 (Bottom Sheet)**，高度 `72vh`，顶部配备下拉触控手柄，支持向下快速滑动关闭。 | 采用**右侧固定滑出抽屉 (Right Drawer)**，宽度 `440px`，左侧半透明遮罩点击关闭，背景视频画面正常播放。 |
+| **画质与音轨菜单** | 点击呼出系统级 iOS Liquid Glass 底部单选操作板，避免在大拇指操作盲区弹出微型菜单。 | 点击在控制条按钮正上方弹出半透明毛玻璃浮层菜单，鼠标移出或点击空白处关闭。 |
+| **字幕微调胶囊** | 右上角紧凑微调栏，仅展示 `[-0.5s]`、`[+0.5s]` 与 `[重置]`，节省画面空间。 | 完整呈现全部 6 档阶梯按钮 (`±0.5s`, `±1.0s`, `±2.5s`) 与字幕文件名。 |
 
 ---
 
-## 6. UI 还原度走查核验清单 (UI Walkthrough Checklist - Loop-until-perfect)
+## 4. 动效与触控微交互规范 (Animations & Micro-interactions)
 
-| 检查项 | 走查标准 | 严重级别 | 验收状态 |
-|:---|:---|:---:|:---:|
-| **首页首屏海报** | Hero 首屏当前大卡必须在首屏立即发起请求（eager），骨架屏背景脉冲对齐 `aspect-ratio`，无白屏与塌陷 | P0 | 待走查 |
-| **图片规格降级** | 检查所有 TMDB 图片网络请求，不允许出现 `original` 或 `w1280` 超大图，强制降级为 `w300`/`w500` | P0 | 待走查 |
-| **渐进过渡淡入** | 图片解码完成瞬间执行 `opacity-0 -> opacity-100` 平滑过渡（300ms），严禁生硬切入 | P1 | 待走查 |
-| **QoS 动态微动效** | 测速探测中各源显示呼吸脉冲蓝点，测速完成后准确转换为绿/琥珀/红实心点并展示毫秒数 | P1 | 待走查 |
-| **断路与受阻态** | 被熔断或超时的源呈半透明置灰（`opacity-40`），不可点击，并附带「受阻/超时」Tag | P0 | 待走查 |
+为营造高品质影院质感，所有过渡动效均采用物理阻尼曲线：
 
----
+```css
+/* 1. 抽屉平滑滑入曲线 */
+animation: slide-in-right 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 
-**下一步**：UI 规范确认后，将交付物发送给 `fullstack-developer` 实施，并在开发提测后根据第 6 节清单执行严格的双向走查通信。
+/* 2. 状态弹跳提示 */
+animation: bounce-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+
+/* 3. 追剧新集红点呼吸 */
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.75; transform: scale(0.96); }
+}
+
+/* 4. 流光进度条 */
+@keyframes shimmer-gold {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+```
+
+- **无障碍降级保护**：当检测到用户的操作系统开启了减弱动效偏好（`@media (prefers-reduced-motion: reduce)`）时，所有 `animate-pulse`、`bounce-pop` 与 `shimmer` 动效立即自动降级为静态平稳呈现，杜绝引起视觉不适。

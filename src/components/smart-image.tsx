@@ -90,7 +90,7 @@ export function SmartImage({
   const src = candidates[idx];
 
   return (
-    <div ref={containerRef} className="w-full h-full relative overflow-hidden">
+    <div ref={containerRef} className={cn('relative overflow-hidden w-full h-full', className)}>
       {!shouldLoad ? (
         <div className={cn('w-full h-full bg-slate-800/20 animate-pulse', className)} aria-hidden="true" />
       ) : allFailed ? (
@@ -120,7 +120,7 @@ export function SmartImage({
             src={src}
             alt={alt}
             className={cn(
-              'transition-opacity duration-300 ease-out',
+              'w-full h-full object-cover transition-opacity duration-300 ease-out',
               loaded ? 'opacity-100' : 'opacity-0',
               className
             )}

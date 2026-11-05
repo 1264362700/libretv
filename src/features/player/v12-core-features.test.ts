@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   formatQualityLabel,
   getStoredQualityPreference,
@@ -46,14 +46,42 @@ class LocalStorageMock {
   }
 }
 
+interface GlobalScopeWithMocks {
+  localStorage?: Storage | LocalStorageMock;
+  window?: {
+    localStorage: Storage | LocalStorageMock;
+    addEventListener: (type: string, listener: () => void) => void;
+    removeEventListener: (type: string, listener: () => void) => void;
+    dispatchEvent: () => boolean;
+  };
+}
+
+const globalScope = globalThis as unknown as GlobalScopeWithMocks;
 const mockStorage = new LocalStorageMock();
-Object.defineProperty(globalThis, 'localStorage', {
-  value: mockStorage,
-  writable: true,
+const originalLocalStorage = globalScope.localStorage;
+const originalWindow = globalScope.window;
+
+beforeAll(() => {
+  globalScope.localStorage = mockStorage;
+  globalScope.window = {
+    localStorage: mockStorage,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => true,
+  };
 });
-Object.defineProperty(globalThis, 'window', {
-  value: { localStorage: mockStorage },
-  writable: true,
+
+afterAll(() => {
+  if (typeof originalLocalStorage !== 'undefined') {
+    globalScope.localStorage = originalLocalStorage;
+  } else {
+    delete globalScope.localStorage;
+  }
+  if (typeof originalWindow !== 'undefined') {
+    globalScope.window = originalWindow;
+  } else {
+    delete globalScope.window;
+  }
 });
 
 describe('LibreTV v1.2 Core Enhancements Unit Tests', () => {

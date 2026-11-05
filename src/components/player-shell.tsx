@@ -132,9 +132,6 @@ export const PlayerShell = forwardRef<PlayerShellHandle, PlayerShellProps>((prop
   const hasJumpedEndingRef = useRef(false);
   const endedRef = useRef(false);
 
-  // 外挂字幕状态机
-  const subtitle = useSubtitleTrack();
-
   const showHint = useCallback((text: string) => {
     setHint(text);
     if (hintTimerRef.current) clearTimeout(hintTimerRef.current);
@@ -142,6 +139,12 @@ export const PlayerShell = forwardRef<PlayerShellHandle, PlayerShellProps>((prop
   }, []);
   const showHintRef = useRef(showHint);
   showHintRef.current = showHint;
+
+  // 外挂字幕状态机 (REQ-P1-01: 按剧 showKey 独立记忆字幕偏移)
+  const onRestoredSubtitleOffset = useCallback((saved: number) => {
+    showHintRef.current(`已为您延续本剧外挂字幕偏移 [${saved >= 0 ? `+${saved}` : saved}s]`);
+  }, []);
+  const subtitle = useSubtitleTrack(showKey, onRestoredSubtitleOffset);
 
   // 始终持有最新 props/回调，避免重建播放器
   const propsRef = useRef<PipelineProps>({
@@ -564,13 +567,17 @@ export const PlayerShell = forwardRef<PlayerShellHandle, PlayerShellProps>((prop
     >
       <div ref={containerRef} className="w-full h-full" style={{ WebkitTouchCallout: 'none' }} />
 
-      {/* 外挂字幕渲染层 + 时间轴校准胶囊 */}
+      {/* 外挂字幕渲染层 + 时间轴校准胶囊 (REQ-P1-01) */}
       <SubtitleLayer
         activeSubText={subtitle.activeText}
         subtitleLabel={subtitle.label}
         subtitleOffset={subtitle.offset}
         error={error}
         onAdjustOffset={adjustSubOffset}
+        onResetOffset={() => {
+          subtitle.resetOffset();
+          showHint('已重置字幕时间轴并恢复原始对齐');
+        }}
         onClear={() => {
           subtitle.clearSubtitle();
           showHint('已卸载外挂字幕');

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import React, { type ReactNode } from 'react';
 
 /**
  * 统一图标集（Heroicons outline 风格，24×24 线性）。

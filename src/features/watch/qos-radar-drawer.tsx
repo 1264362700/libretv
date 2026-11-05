@@ -25,6 +25,18 @@ export interface QoSRadarDrawerProps {
 
 const THROTTLE_SECONDS = 60;
 
+/** 计算提速百分比（如 800ms -> 200ms 提速 75%） */
+export function calculateSpeedupPercent(currentLatency: number, candidateLatency: number): number {
+  if (currentLatency <= 0 || candidateLatency <= 0 || candidateLatency >= currentLatency) return 0;
+  return Math.round((1 - candidateLatency / currentLatency) * 100);
+}
+
+/** 缺集门禁判定：已知集数且小于或等于当前正在播放的集数 (0-based) */
+export function isCandidateMissingEpisode(episodeCount?: number, currentIndex: number = 0): boolean {
+  if (episodeCount === undefined || episodeCount <= 0) return false;
+  return episodeCount <= currentIndex;
+}
+
 /**
  * 播放线路 QoS 综合监控雷达抽屉 (QoS Radar Drawer - REQ-P0-05)
  *
@@ -113,10 +125,7 @@ export function QoSRadarDrawer({
       const effectiveLatency = isCircuitOpen ? 99999 : cand.ms || metrics.ewmaLatencyMs || 9999;
       const badge = getSourceQoSBadge(cand.source.key);
       // 缺集门禁判定：已知集数且小于或等于当前正在播放的集数 (0-based)
-      const isEpisodeMissing =
-        cand.episodeCount !== undefined &&
-        cand.episodeCount > 0 &&
-        cand.episodeCount <= currentIndex;
+      const isEpisodeMissing = isCandidateMissingEpisode(cand.episodeCount, currentIndex);
 
       return {
         ...cand,
@@ -147,7 +156,7 @@ export function QoSRadarDrawer({
     );
     if (candidatesCanSwitch.length === 0) return null;
     const best = candidatesCanSwitch[0];
-    const gain = Math.round((1 - best.effectiveLatency / currentLatency) * 100);
+    const gain = calculateSpeedupPercent(currentLatency, best.effectiveLatency);
     return {
       ...best,
       gainPercent: gain,

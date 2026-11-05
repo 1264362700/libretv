@@ -10,8 +10,36 @@ import type { VideoDetail } from '@/lib/types';
 import { EpisodeButton } from './watch-buttons';
 
 /** 长剧集分段阈值（超过 40 集启用百集区间锚点栏） */
-const EPISODE_ANCHOR_THRESHOLD = 40;
-const EPISODE_ANCHOR_CHUNK_SIZE = 100;
+export const EPISODE_ANCHOR_THRESHOLD = 40;
+export const EPISODE_ANCHOR_CHUNK_SIZE = 100;
+
+/** 将单维剧集列表划分为网格行用于一维虚拟滚动 */
+export function buildEpisodeRows(episodes: number[], cols: number): number[][] {
+  const r: number[][] = [];
+  for (let i = 0; i < episodes.length; i += cols) {
+    r.push(episodes.slice(i, i + cols));
+  }
+  return r;
+}
+
+/** 构建百集快速锚点胶囊标签（如 1-100, 101-200） */
+export function buildEpisodeAnchors(
+  totalEpisodes: number,
+  chunkSize: number = EPISODE_ANCHOR_CHUNK_SIZE,
+  threshold: number = EPISODE_ANCHOR_THRESHOLD
+): Array<{ start: number; end: number; label: string }> {
+  if (totalEpisodes <= threshold) return [];
+  const anchors: Array<{ start: number; end: number; label: string }> = [];
+  for (let start = 0; start < totalEpisodes; start += chunkSize) {
+    const end = Math.min(start + chunkSize - 1, totalEpisodes - 1);
+    anchors.push({
+      start,
+      end,
+      label: `${start + 1}-${end + 1}`,
+    });
+  }
+  return anchors;
+}
 
 /** 只声明侧栏真正用到的字段，避免整份 query 结果透传 */
 interface DetailQueryLike {
@@ -119,28 +147,10 @@ export function WatchSidebar({
   }, [orderedEpisodes, reversed]);
 
   // 将剧集划分为网格行用于一维虚拟滚动
-  const rows = useMemo(() => {
-    const r: number[][] = [];
-    for (let i = 0; i < fullEpisodeList.length; i += cols) {
-      r.push(fullEpisodeList.slice(i, i + cols));
-    }
-    return r;
-  }, [fullEpisodeList, cols]);
+  const rows = useMemo(() => buildEpisodeRows(fullEpisodeList, cols), [fullEpisodeList, cols]);
 
   // 百集快速跳转锚点条（> 40 集启用，如 1-100, 101-200）
-  const episodeAnchors = useMemo(() => {
-    if (totalEpisodes <= EPISODE_ANCHOR_THRESHOLD) return [];
-    const anchors: Array<{ start: number; end: number; label: string }> = [];
-    for (let start = 0; start < totalEpisodes; start += EPISODE_ANCHOR_CHUNK_SIZE) {
-      const end = Math.min(start + EPISODE_ANCHOR_CHUNK_SIZE - 1, totalEpisodes - 1);
-      anchors.push({
-        start,
-        end,
-        label: `${start + 1}-${end + 1}`,
-      });
-    }
-    return anchors;
-  }, [totalEpisodes]);
+  const episodeAnchors = useMemo(() => buildEpisodeAnchors(totalEpisodes), [totalEpisodes]);
 
   const [activeAnchorIdx, setActiveAnchorIdx] = useState(0);
 

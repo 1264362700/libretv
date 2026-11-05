@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
+import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { Icon } from '@/components/icon';
 import { SmartImage } from '@/components/smart-image';
 import { EmptyState, LoadingState } from '@/components/states';
@@ -8,9 +9,37 @@ import { cn } from '@/lib/utils';
 import type { VideoDetail } from '@/lib/types';
 import { EpisodeButton } from './watch-buttons';
 
-/** 长剧集分段阈值与每组大小（超过 40 集自动启用区间折叠，杜绝百集 DOM 膨胀卡顿） */
-const EPISODE_GROUP_THRESHOLD = 40;
-const EPISODE_CHUNK_SIZE = 50;
+/** 长剧集分段阈值（超过 40 集启用百集区间锚点栏） */
+export const EPISODE_ANCHOR_THRESHOLD = 40;
+export const EPISODE_ANCHOR_CHUNK_SIZE = 100;
+
+/** 将单维剧集列表划分为网格行用于一维虚拟滚动 */
+export function buildEpisodeRows(episodes: number[], cols: number): number[][] {
+  const r: number[][] = [];
+  for (let i = 0; i < episodes.length; i += cols) {
+    r.push(episodes.slice(i, i + cols));
+  }
+  return r;
+}
+
+/** 构建百集快速锚点胶囊标签（如 1-100, 101-200） */
+export function buildEpisodeAnchors(
+  totalEpisodes: number,
+  chunkSize: number = EPISODE_ANCHOR_CHUNK_SIZE,
+  threshold: number = EPISODE_ANCHOR_THRESHOLD
+): Array<{ start: number; end: number; label: string }> {
+  if (totalEpisodes <= threshold) return [];
+  const anchors: Array<{ start: number; end: number; label: string }> = [];
+  for (let start = 0; start < totalEpisodes; start += chunkSize) {
+    const end = Math.min(start + chunkSize - 1, totalEpisodes - 1);
+    anchors.push({
+      start,
+      end,
+      label: `${start + 1}-${end + 1}`,
+    });
+  }
+  return anchors;
+}
 
 /** 只声明侧栏真正用到的字段，避免整份 query 结果透传 */
 interface DetailQueryLike {
@@ -97,47 +126,76 @@ export function WatchSidebar({
   router,
 }: WatchSidebarProps) {
   const totalEpisodes = episodes.length;
-  const useChunkGroups = totalEpisodes > EPISODE_GROUP_THRESHOLD;
+  const parentRef = useRef<HTMLDivElement>(null);
 
-  // 计算分段区间（如 1-50, 51-100...）
-  const episodeGroups = useMemo(() => {
-    if (!useChunkGroups) return [];
-    const groups: Array<{ start: number; end: number; label: string }> = [];
-    for (let start = 0; start < totalEpisodes; start += EPISODE_CHUNK_SIZE) {
-      const end = Math.min(start + EPISODE_CHUNK_SIZE - 1, totalEpisodes - 1);
-      groups.push({
-        start,
-        end,
-        label: `${start + 1}-${end + 1}`,
-      });
-    }
-    return groups;
-  }, [totalEpisodes, useChunkGroups]);
-
-  const [activeGroupIdx, setActiveGroupIdx] = useState(0);
-
-  // 当前播放集变化时，自动切换到对应的分段区间
+  // 响应式列数：桌面端 4 列，移动端 6 列 (REQ-P0-03)
+  const [cols, setCols] = useState(4);
   useEffect(() => {
-    if (!useChunkGroups) return;
-    const idx = Math.floor(currentIndex / EPISODE_CHUNK_SIZE);
-    setActiveGroupIdx(idx);
-  }, [currentIndex, useChunkGroups]);
+    const updateCols = () => {
+      if (typeof window !== 'undefined') {
+        setCols(window.innerWidth >= 1024 ? 4 : 6);
+      }
+    };
+    updateCols();
+    window.addEventListener('resize', updateCols);
+    return () => window.removeEventListener('resize', updateCols);
+  }, []);
 
-  // 当前可见的剧集索引列表
-  const visibleEpisodes = useMemo(() => {
-    if (!useChunkGroups || episodeGroups.length === 0) return orderedEpisodes;
-    const grp = episodeGroups[activeGroupIdx] || episodeGroups[0];
-    if (!grp) return orderedEpisodes;
-    const slice: number[] = [];
-    for (let i = grp.start; i <= grp.end; i++) {
-      slice.push(i);
+  // 完整剧集排列顺序（支持正序与倒序）
+  const fullEpisodeList = useMemo(() => {
+    return reversed ? [...orderedEpisodes].reverse() : orderedEpisodes;
+  }, [orderedEpisodes, reversed]);
+
+  // 将剧集划分为网格行用于一维虚拟滚动
+  const rows = useMemo(() => buildEpisodeRows(fullEpisodeList, cols), [fullEpisodeList, cols]);
+
+  // 百集快速跳转锚点条（> 40 集启用，如 1-100, 101-200）
+  const episodeAnchors = useMemo(() => buildEpisodeAnchors(totalEpisodes), [totalEpisodes]);
+
+  const [activeAnchorIdx, setActiveAnchorIdx] = useState(0);
+
+  // 一维行虚拟滚动器：真实 DOM 节点恒定控制在 ≤ 60 个
+  const rowVirtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 40,
+    overscan: 2,
+  });
+
+  // 窗口断点变化时重新测量行高
+  useEffect(() => {
+    rowVirtualizer.measure();
+  }, [cols, rowVirtualizer]);
+
+  // 当前播放集同步居中与焦点对齐 (CHK-V-04)
+  useEffect(() => {
+    if (totalEpisodes === 0) return;
+    const epPos = fullEpisodeList.indexOf(currentIndex);
+    if (epPos >= 0) {
+      const targetRow = Math.floor(epPos / cols);
+      rowVirtualizer.scrollToIndex(targetRow, { align: 'center', behavior: 'smooth' });
     }
-    return reversed ? slice.reverse() : slice;
-  }, [useChunkGroups, episodeGroups, activeGroupIdx, orderedEpisodes, reversed]);
+    // 同步更新百集锚点激活态
+    const anchorIdx = Math.floor(currentIndex / EPISODE_ANCHOR_CHUNK_SIZE);
+    setActiveAnchorIdx(anchorIdx);
+  }, [currentIndex, fullEpisodeList, cols, totalEpisodes, rowVirtualizer]);
+
+  // 点击百集快速锚点胶囊平滑直达
+  const handleAnchorClick = (startEpisode: number, anchorIdx: number) => {
+    setActiveAnchorIdx(anchorIdx);
+    const targetEpisode = reversed
+      ? Math.min(startEpisode + EPISODE_ANCHOR_CHUNK_SIZE - 1, totalEpisodes - 1)
+      : startEpisode;
+    const pos = fullEpisodeList.indexOf(targetEpisode);
+    if (pos >= 0) {
+      const targetRow = Math.floor(pos / cols);
+      rowVirtualizer.scrollToIndex(targetRow, { align: 'start', behavior: 'smooth' });
+    }
+  };
 
   return (
     <aside className="space-y-3.5 min-w-0 w-full">
-      {/* 1. 剧集选集卡片（支持百集分段区间折叠 + 遥控器/键盘焦点环） */}
+      {/* 1. 剧集选集卡片（虚拟化网格滚动 + 百集快速锚点 + 遥控器/键盘焦点环） */}
       <div className="bg-surface-raised rounded-xl p-3 sm:p-3.5 border border-line shadow-sm">
         <div className="flex items-center justify-between gap-2 mb-2.5">
           <div className="flex items-center gap-1.5">
@@ -160,26 +218,26 @@ export function WatchSidebar({
           )}
         </div>
 
-        {/* 百集分段区间折叠胶囊栏 */}
-        {useChunkGroups && episodeGroups.length > 1 && (
+        {/* 百集快速锚点胶囊栏 (CHK-V-03) */}
+        {episodeAnchors.length > 1 && (
           <div
             className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-2 mb-2 border-b border-line/40"
             role="tablist"
-            aria-label="剧集分段区间"
+            aria-label="百集快速锚点"
           >
-            {episodeGroups.map((grp, idx) => {
-              const isActive = idx === activeGroupIdx;
+            {episodeAnchors.map((grp, idx) => {
+              const isActive = idx === activeAnchorIdx;
               return (
                 <button
                   key={grp.label}
                   type="button"
                   role="tab"
                   aria-selected={isActive}
-                  onClick={() => setActiveGroupIdx(idx)}
+                  onClick={() => handleAnchorClick(grp.start, idx)}
                   className={cn(
                     'px-2.5 py-1 rounded-md text-[11px] font-medium shrink-0 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-accent',
                     isActive
-                      ? 'bg-accent/15 text-accent border border-accent/40 font-semibold'
+                      ? 'bg-accent/15 text-accent border border-accent/40 font-semibold shadow-sm'
                       : 'bg-chip/50 text-muted hover:text-content border border-transparent'
                   )}
                 >
@@ -197,16 +255,54 @@ export function WatchSidebar({
             <EmptyState variant="plain" title={detailQuery.isError ? '获取剧集失败' : '暂无剧集信息'} />
           )
         ) : (
-          <div className="grid grid-cols-6 sm:grid-cols-8 lg:grid-cols-4 gap-1.5 max-h-[30vh] sm:max-h-[34vh] overflow-y-auto scrollbar-thin pr-1">
-            {visibleEpisodes.map((realIndex) => (
-              <EpisodeButton
-                key={realIndex}
-                index={realIndex}
-                active={realIndex === currentIndex}
-                onClick={() => goEpisode(realIndex)}
-                staggerDelay={realIndex * 30}
-              />
-            ))}
+          /* 虚拟化网格视口：真实渲染 DOM 恒定保持在 ≤ 60 个 (CHK-V-02) */
+          <div
+            ref={parentRef}
+            className="max-h-[30vh] sm:max-h-[34vh] overflow-y-auto scrollbar-thin pr-1 relative"
+          >
+            <div
+              style={{
+                height: `${rowVirtualizer.getTotalSize()}px`,
+                width: '100%',
+                position: 'relative',
+              }}
+            >
+              {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                const rowEpisodes = rows[virtualRow.index] || [];
+                return (
+                  <div
+                    key={virtualRow.key}
+                    data-index={virtualRow.index}
+                    ref={rowVirtualizer.measureElement}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      transform: `translateY(${virtualRow.start}px)`,
+                    }}
+                    className="pb-1.5"
+                  >
+                    <div
+                      className={cn(
+                        'grid gap-1.5',
+                        cols === 4 ? 'grid-cols-4' : 'grid-cols-6'
+                      )}
+                    >
+                      {rowEpisodes.map((realIndex) => (
+                        <EpisodeButton
+                          key={realIndex}
+                          index={realIndex}
+                          active={realIndex === currentIndex}
+                          onClick={() => goEpisode(realIndex)}
+                          staggerDelay={0}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
         <p className="hidden lg:block text-[10px] text-faint mt-3 leading-relaxed">

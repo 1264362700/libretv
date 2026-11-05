@@ -1,133 +1,110 @@
-# LibreTV 测试计划
+# LibreTV v1.2 核心特性迭代测试计划 (Test Plan)
 
-**产品**：LibreTV / cl.tv 视频聚合播放平台  
-**版本**：v1.0（草稿）  
-**技术栈**：Next.js 15 + TypeScript + Tailwind CSS  
-**QA 负责人**：qa-engineer  
-**统筹**：lead  
-**基准文档**：`PRD.md`、`PRD-IMAGE-OPT.md`、源码（`src/`）
-
----
-
-## 1. 测试目标
-
-- 验证产品功能是否符合 `PRD.md` 与 `PRD-IMAGE-OPT.md` 中的验收标准。
-- 验证接口是否与 API 文档一致，关键业务流程是否闭环。
-- 确认项目可运行（通过类型检查、构建、启动），无阻塞性缺陷。
-- 给出发布建议（可发布 / 需修复 / 不可发布）。
+**产品**：LibreTV 现代化跨端影视聚合平台  
+**版本**：v1.2 (Core Enhancements & Performance Leap)  
+**技术栈**：Next.js 15 (App Router) + TypeScript 5 + Tailwind CSS + Artplayer + Hls.js + @tanstack/react-virtual + Dexie.js  
+**QA 负责人**：QA / 测试工程师 (qa-engineer)  
+**协同角色**：产品经理 (PM)、UI/UX 设计师 (UI)、全栈开发工程师 (Dev)  
+**基准规范**：
+- `team-deliverables/pm/iteration-plan.md` (Gate 1 用户裁决方案 B)
+- `team-deliverables/design/ui-spec.md` & `team-deliverables/design/ui-walkthrough-checklist.md`
+- `team-deliverables/dev/tech-feasibility-assessment.md`
+- 目标特性分支：`feature/v1.2-core-enhancements`
 
 ---
 
-## 2. 测试范围
+## 1. 测试目标与战略
 
-### 2.1 在范围内（本次版本验证）
-
-| 模块 | 路由 | 优先级 | 覆盖内容 |
-|------|------|--------|----------|
-| 首页 | `/` | P0 | Hero 轮播、官方搜索、底层采集源深度扫描、登录拦截、源选择与成人过滤、图片加载优化（骨架屏/eager/lazy/兜底/代理模式） |
-| 片库页 | `/catalog` | P0 | 分频道片库、多维筛选、频道内深度搜索、热门搜索词、官方片库卡片、聚合卡片、登录拦截、分页导航 |
-| 播放页 | `/watch` | P0 | 视频播放、多源并发测速、自动故障转移、选集、追剧单、观看进度持久化、跨屏接力、离线下载、影院宽屏模式、剧集简介/演职员、登录拦截 |
-| 历史页 | `/history` | P1 | 观看历史列表、历史搜索、删除单条、清空历史、点击续播 |
-| 登录页 | `/login` | P0 | 账号登录、邀请码注册、Tab 切换、被顶号/封禁提示、已登录自动跳转 |
-| 设置页 | `/settings` | P1 | 点播源管理、数据源订阅、播放与过滤、封面图加载、首页与内容、配置导入导出、直播源管理 |
-| 接口层 | `/api/*` | P0 | `/api/auth`、`/api/status`、`/api/search`、`/api/detail`、`/api/media/*`、`/api/proxy/*`、`/api/source-list`、`/api/source/test` |
-| 安全 | 全局 | P0 | SSRF 校验、登录速率限制、内网地址拒绝、Cookie 签名与会话有效期 |
-| 性能 | 首页 | P0 | 首屏 LCP ≤ 3s、图片加载失败率 ≤ 1%、骨架屏覆盖、CLS ≈ 0 |
-
-### 2.2  Supervisor（不在本版本验证范围）
-
-| 功能 | 原因 |
-|------|------|
-| 用户个人资料编辑 | PRD 第 9 章明确 P2，暂不纳入 |
-| 云端同步 | PRD 第 9 章明确 P2，暂不纳入 |
-| 评论/弹幕/评分 | PRD 第 9 章明确 P2，暂不纳入 |
-| 订阅更新推送 | PRD 第 9 章明确 P2，暂不纳入 |
-| 付费会员与支付 | PRD 第 9 章明确 P2，暂不纳入 |
-| 管理后台页面 | 仅 API 提供，无前端页面 |
+1. **功能完备度检验**：针对 Gate 1 用户明确裁决采纳的方案 B（6 项核心功能）进行 100% 覆盖率的系统性验收。
+2. **极速与平滑体验验真**：验证虚拟化滚动渲染负载（DOM 节点严格受控 $\le 60$）、HLS 画质/音轨热切无黑屏无断流、QoS 抽屉秒级切源与 60s 节流。
+3. **极端边界防御与容错 (Loop-until-dry)**：
+   - 弱网极端场景下，画质手动锁定遭遇 3 次卡顿自动回退至 Auto；
+   - 候选源集数不足时触发缺集硬门禁拦截，阻断劣质源切换；
+   - 单码率与单音轨源自适应隐藏冗余菜单；
+   - 异常备注文本与倒退集数不触发伪红点；
+   - 外挂字幕跨集/按剧本地独立持久化与毫秒级防抖。
+4. **质量门禁准出控制**：严格执行 TypeScript 编译零报错、全量自动化测试（Vitest 38 套件 / 389 用例）100% Pass，出具正式质量放行报告。
 
 ---
 
-## 3. 测试类型与方法
+## 2. 测试范围与模块拆解
 
-| 测试类型 | 覆盖范围 | 执行方式 | 入口依据 |
-|----------|----------|----------|----------|
-| 功能测试 | 所有模块正常流程与异常流程 | 手工执行 + 自动化脚本（接口/工具函数） | PRD 验收标准 |
-| 界面测试 | 首页、播放页、登录页、设置页、历史页、片库页 | 手工 + Playwright E2E | PRD 页面流 + UI 规范 |
-| 接口测试 | `/api/*` 所有路由 | 自动化脚本（vitest/超agent） + 手工 | API 路由源码 |
-| 兼容测试 | 桌面 Chrome（1280×800）、移动端（375×812） | Playwright 多项目 | playwright.config.ts |
-| 边界异常 | 输入长度、非法 URL、超时源、空结果、并发 | 手工 + 接口脚本 | PRD 边界条件（如关键词≤100、账号≥3、密码≥6） |
-| 回归测试 | 缺陷修复后关键流程 | 手工重跑相关用例 | 缺陷列表 |
+### 2.1 本版本重点测试范围 (v1.2 Core Enhancements)
 
----
+| 功能编号 | 需求项 | 关键模块 / 路径 | 核心验证重点 | 优先级 |
+|:---|:---|:---|:---|:---:|
+| **REQ-P0-01** | HLS 视频多画质选择与锁定 | `src/features/player/use-hls-pipeline.ts`<br>`src/components/player-shell.tsx` | - 多档位分辨率人眼友好标签格式化（4K/2K/1080P/720P/480P/360P/码率）<br>- 本地存储画质偏好记忆与自动匹配<br>- 单码率源控制栏/设置项自适应隐藏<br>- 弱网卡顿（$\ge 3$ 次）自适应降级回退至 Auto | **P0** |
+| **REQ-P0-02** | 内置多语言音频轨道无缝切换 | `src/features/player/use-hls-pipeline.ts`<br>`src/components/player-shell.tsx` | - 多音轨清单解析与名称提取<br>- 无缝平滑热切（无缓冲雪崩、无音画不同步）<br>- 单音轨源自适应隐藏音轨设置菜单 | **P0** |
+| **REQ-P0-03** | 1000 集长剧虚拟网格滚动 | `src/features/watch/watch-sidebar.tsx`<br>`src/features/player/v12-core-features.test.ts` | - @tanstack/react-virtual 一维行虚拟滚动，行高 40px，overscan: 2<br>- 桌面端 4 列 / 移动端 6 列响应式布局<br>- 真实 DOM 节点数恒定 $\le 60$ 个，杜绝千集卡顿<br>- $>40$ 集自动生成百集快速锚点胶囊（1-100, 101-200）<br>- 当前播放集与百集锚点激活态同步居中 | **P0** |
+| **REQ-P0-04** | 首页“我的追剧·最近更新”动态流 | `src/app/page.tsx`<br>`src/components/continue-watching-row.tsx`<br>`src/lib/db.ts` | - 视觉专区精确锚定于 Hero 巨幕下方、推荐流上方<br>- 「继续观看」与「我的追剧」双胶囊 Tab 切换<br>- 结合主采集源 remarks 实时计算最新集数与更新差额<br>- 点亮「🔴 更新 N 集 · 至 M 集」智能红点角标<br>- 倒退集数/无效备注防误判防御 | **P0** |
+| **REQ-P0-05** | 播放线路 QoS 综合监控雷达抽屉 | `src/features/watch/qos-radar-drawer.tsx`<br>`src/features/watch/watch-sidebar.tsx` | - 半屏侧滑 Drawer（桌面 440px / 移动 72vh），背景视频正常播放<br>- 复用已测速延迟与 EWMA 指标，按延迟升序动态排序<br>- 极速源一键秒切 Banner（提速 $\ge 30\%$ 且不缺集时触发）<br>- 缺集硬门禁：已知总集数 $\le$ 当前播放 index 时强制禁用切换<br>- 60 秒测速防刷节流保护与 Esc 快捷关闭 | **P0** |
+| **REQ-P1-01** | 外挂字幕毫秒级步进与按剧持久化 | `src/features/player/use-subtitle-track.ts`<br>`src/features/player/subtitle-layer.tsx` | - 播放时间点驱动字幕渲染与高清双重阴影描边<br>- 多档阶梯微调（$\pm0.5\text{s}, \pm1.0\text{s}, \pm2.5\text{s}$）与一键归零<br>- 基于剧集唯一标识 `showKey` 本地独立持久化记忆<br>- 切集/跨页面自动延续该剧历史偏移 | **P1** |
 
-## 4. 测试环境
+### 2.2 存量功能回归范围 (Regression Scope)
 
-| 项 | 配置 |
-|-----|------|
-| 操作系统 | macOS（本地开发机） |
-| Node.js | v22（`.nvmrc` / `package.json engines` 声明，实际环境 v24.21.0，需注意版本差异） |
-| 包管理器 | npm 10.9.0，使用 `npm ci` |
-| 浏览器 | Chromium（Playwright 桌面端与移动端项目） |
-| 服务 | 本地 `next dev -p 8080`，基地址 `http://127.0.0.1:8080` |
-| 数据 | 本地 localStorage / IndexedDB / JSON 文件存储（无外部数据库依赖，除非配置 Neon） |
-| 环境变量 | `.env`（`PASSWORD=libretv123`、`TMDB_API_KEY`、`DEFAULT_SOURCES` 等） |
-| 第三方依赖 | TMDB API（需网络）、各采集站上游（网络可达性不稳定，接口测试需 Mock 或允许降级） |
+| 模块 | 回归要点 | 重点关注 |
+|:---|:---|:---|
+| 全站鉴权与 SSRF | 登录拦截、未登录播放重定向、SSRF 内网阻断 | 接口 100% 鉴权，SSRF 拒绝内网字面量 |
+| 播放核心管线 | 断路器熔断（3 连败 Open、Half-Open）、片段缓存、广告过滤 | 核心逻辑不发生回归 |
+| 图片加载优化 | 骨架屏全时覆盖、eager/priority 加载、代理模式降级 | LCP $\le 2\text{s}$，CLS $\approx 0$ |
 
 ---
 
-## 5. 测试数据
+## 3. 测试环境与设备矩阵
 
-| 数据类型 | 来源 | 说明 |
-|----------|------|------|
-| 管理员账号 | `.env` `PASSWORD=libretv123`，默认用户名 `admin` | 登录页验证 |
-| 注册邀请码 | `INITIAL_INVITE_CODES` 或 `bootstrapSeedInvites` 生成 | 注册流程验证 |
-| 搜索关键词 | 有效关键词（如“电影”）、超长关键词（>100 字符）、空关键词、特殊字符 | 接口边界 |
-| 点播源 | `.env` `DEFAULT_SOURCES` 中配置的多个 Apple CMS 源 | 搜索/详情/播放 |
-| 图片地址 | doubanio.com、image.tmdb.org、qhimg.com 等 | 图片优化验证 |
-| 直播源 | `.env` `DEFAULT_LIVE_SOURCES` 中的 M3U 地址 | 直播源管理 |
-
----
-
-## 6. 测试进度与里程碑
-
-| 阶段 | 交付物 | 负责 | 状态 |
-|------|--------|------|------|
-| 需求评估 | PRD 草稿与量化指标 | Product Manager | 已完成 |
-| 测试计划 | `test-plan.md` | QA Engineer | 已完成 |
-| 测试用例 | `test-cases.md` | QA Engineer | 已就绪 |
-| 测试执行 | 自动化回归测试（Vitest/Playwright） | QA Engineer | 执行中 |
-| 缺陷修复 | 性能与超时拦截补丁 | Fullstack Developer | 已落地 |
-| 回归验证 | 回归测试结论与双轨循环 | QA / UI | 执行中 |
-| 发布建议 | `release-report.md` | QA Engineer | 编制中 |
+| 环境维度 | 配置参数 | 用途与说明 |
+|:---|:---|:---|
+| **操作系统** | macOS Sequoia (15.x) / Linux (Ubuntu 22.04 LTS) | 开发机与 CI/CD 构建验证 |
+| **Node.js 运行时** | v24.21.0 / v22.x LTS (兼容 `.nvmrc` 声明) | 确保无任何 ESM/CJS 破坏性运行时差异 |
+| **测试框架** | Vitest v2.1.9 + Testing Library | 自动化单元测试与边界测试执行 |
+| **桌面端视口** | 1920 × 1080 (FHD), 1440 × 900 (MacBook), 1280 × 800 | 验证 4 列长剧选集、QoS 抽屉 440px 侧滑 |
+| **移动端视口** | 390 × 844 (iPhone 14/15), 375 × 667 (iPhone SE) | 验证 6 列长剧选集、QoS 抽屉 72vh 底部拉起 |
+| **网络模拟条件** | - 正常千兆局域网/宽带<br>- 4G (1.5 Mbps, RTT 150ms)<br>- 弱网/重度抖动 (300 kbps, 5% 丢包，连续 bufferStalledError) | 验证弱网画质自动降级与断路器容错 |
 
 ---
 
-## 7. 已知阻塞与风险
+## 4. 测试方法与阶段策略 (Loop-until-dry)
 
-1. **阻塞状态解除**：经法医级验真，`smart-image.tsx` 的历史冲突早已完全消除，TypeScript 类型检查与 367 项单元测试全部绿灯通过，环境完全就绪。
-2. **外部依赖风险**：TMDB API 与各采集站上游依赖公网可达性，已通过单源 3000ms 硬超时截断与断路器熔断机制提供工程兜底，保证慢源/死源不阻塞整体体验。
-3. **Node 版本**：开发环境与 Node.js 运行时完全适配，无破坏性兼容隐患。
+```
+[阶段一: 静态类型与规范检测]
+  ├── npx tsc --noEmit (类型严格推导，零 any 泄漏)
+  └── npm run lint (ESLint 零错误零警告)
+        ↓
+[阶段二: 核心算法与边界单元测试]
+  ├── Vitest 全量套件 (38 files / 389 tests)
+  └── v1.2 专项用例 (formatQualityLabel, buildEpisodeRows, speedupPercent, isMissingEpisode)
+        ↓
+[阶段三: 交互与边界防御验真]
+  ├── 弱网画质自适应回切 (3 次卡顿降级 Auto)
+  ├── 缺集线路硬门禁拦截 (禁用不可用线路)
+  └── 虚拟滚动 DOM 节点深度审计 (<= 60 节点)
+        ↓
+[阶段四: UI 双轨走查对齐]
+  └── 对齐 UI/UX Checklist (色彩规范、间距、微胶囊、无缝续播红点)
+        ↓
+[阶段五: 质量放行审批]
+  └── 出具正式 release-report.md (准予发布)
+```
 
 ---
 
-## 8. 入口与退出标准
+## 5. 准入与准出标准 (Gate Criteria)
 
-### 8.1 入口标准
-- PRD 与验收标准已确认（`PRD.md`、`PRD-IMAGE-OPT.md`）。
-- 源码已交付（`src/` 完整）。
-- 测试环境已就绪（Node、npm、Playwright 浏览器）。
+### 5.1 提测准入标准 (Entry Gate)
+1. 产品经理 Gate 1 用户裁决授权确认（方案 B 范围锁定）；
+2. UI/UX 设计师 Gate 2 视觉走查 Checklist 与测试稿已交付；
+3. 开发人员在从 master 切出的 `feature/v1.2-core-enhancements` 分支完成编码；
+4. 提交记录完全符合 Conventional Commits 规范。
 
-### 8.2 退出标准
-- 所有 P0 用例执行完成，无未解决的 P0 缺陷。
-- P1 缺陷不影响核心流程，或已有绕过方案。
-- `npm run typecheck`、`npm run lint`、`npm run test`、`npm run build` 全部通过。
-- 输出 `test-report.md` 并给出发布建议。
-
----
-
-## 9. 沟通与缺陷流程
-
-- 发现问题 → 先向 `lead` 报告 → 再同步给 `fullstack-developer` 修复。
-- 修复完成后，QA 进行回归测试。
-- 所有沟通通过 `send_message({ target: "lead", ... })` 完成。
-- 缺陷记录在 `test-report.md` 的缺陷列表中，包含缺陷 ID、标题、严重程度、复现步骤、状态。
+### 5.2 版本准出标准 (Exit Gate)
+1. **静态代码质量**：`npx tsc --noEmit` 0 错误；`npm run lint` 0 错误；
+2. **自动化测试**：全量自动化测试（38 套件，389 个用例）全部通过（100% Pass）；
+3. **6 项核心功能边界达标**：
+   - 弱网画质 3 次卡顿自动回切 Auto 验证无误；
+   - 单码率/单音轨源冗余控件自适应隐藏；
+   - 1000 集长剧选集虚拟化 DOM 节点严格 $\le 60$；
+   - 缺集源秒切硬拦截门禁生效；
+   - 外挂字幕按剧独立本地持久化记忆生效；
+   - 首页追剧动态流红点集数差额计算准确，无负差额与误触；
+4. **缺陷清零**：P0 / P1 缺陷全部清零（0 Open Defects）；
+5. **交付物完备**：测试计划、测试用例、放行报告与交接报告全部归档。

@@ -5,6 +5,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import {
   checkHasNewEpisodes,
   db,
+  extractEpisodeNumber,
   markFavoriteSeenEpisodes,
   removeFavorite,
   removeHistory,
@@ -362,6 +363,10 @@ function FavoriteWatchCard({
   );
 
   const handleOpen = () => {
+    // 直达下一未看集 (REQ-P0-04)
+    const baseline = fav.lastKnownEpisodes || extractEpisodeNumber(fav.remarks) || 0;
+    const targetEpisodeIndex = updateInfo.hasUpdate && baseline > 0 ? baseline : undefined;
+
     if (updateInfo.latestTotal > 0) {
       void markFavoriteSeenEpisodes(fav.title, updateInfo.latestTotal, latestRemarks || fav.remarks);
     }
@@ -371,6 +376,7 @@ function FavoriteWatchCard({
       sourceKey: fav.sourceKey,
       vodId: fav.vodId,
       sourceUrl: fav.sourceUrl,
+      index: targetEpisodeIndex,
     });
     onNavigate(watchUrl);
   };
@@ -378,7 +384,14 @@ function FavoriteWatchCard({
   const handleRemove = (e: React.MouseEvent) => {
     e.stopPropagation();
     void removeFavorite(fav.id).then(() => {
-      toast(`已将「${fav.title}」移出追剧单`, 'info');
+      toast(`已将「${fav.title}」移出追剧单`, 'info', {
+        action: {
+          label: '撤销',
+          onClick: () => {
+            void db.favorites.put(fav);
+          },
+        },
+      });
     });
   };
 
@@ -414,11 +427,11 @@ function FavoriteWatchCard({
 
         <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/85 via-black/35 to-transparent pointer-events-none" />
 
-        {/* 左上角：新集更新红点呼吸胶囊 或 追剧中标记 */}
+        {/* 左上角：新集更新红点呼吸发光角标 或 追剧中标记 (CHK-F-02, CHK-F-06) */}
         {updateInfo.hasUpdate ? (
           <span className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-md bg-rose-600/95 text-white font-bold text-[10px] shadow-md flex items-center gap-1 z-10 animate-pulse">
             <span className="w-1.5 h-1.5 rounded-full bg-white" />
-            <span>更新 {updateInfo.newCount} 集</span>
+            <span>🔴 更新 {updateInfo.newCount} 集</span>
           </span>
         ) : (
           <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded-md bg-black/75 backdrop-blur-sm text-amber-400 font-semibold text-[10px] border border-white/10 z-10">
@@ -452,9 +465,15 @@ function FavoriteWatchCard({
         </h3>
         <p className="text-[11px] text-muted truncate">
           {updateInfo.hasUpdate ? (
-            <span className="text-rose-400 font-semibold">立即看最新集 ›</span>
+            <span className="text-rose-400 font-medium truncate block">
+              已看至 {fav.lastKnownEpisodes || 1} 集 · 更新至 {updateInfo.latestTotal} 集
+            </span>
           ) : (
-            <span>点击进入播放 ›</span>
+            <span className="text-muted truncate block">
+              {fav.lastKnownEpisodes && fav.lastKnownEpisodes > 0
+                ? `已追平 · 共 ${fav.lastKnownEpisodes} 集`
+                : '点击进入播放 ›'}
+            </span>
           )}
         </p>
       </div>

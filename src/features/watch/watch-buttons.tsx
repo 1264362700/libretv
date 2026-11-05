@@ -31,7 +31,7 @@ export function EpisodeButton({
       type="button"
       className={cn(
         'btn btn-sm !px-1 h-9 font-medium text-xs rounded-lg transition-all focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none animate-stagger-up',
-        active ? 'episode-active font-bold shadow-sm' : 'btn-ghost bg-surface hover:bg-hover'
+        active ? 'episode-active font-bold shadow-glow-gold' : 'btn-ghost bg-surface hover:bg-hover'
       )}
       style={{ animationDelay: `${staggerDelay}ms` }}
       onClick={onClick}

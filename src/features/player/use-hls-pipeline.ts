@@ -10,6 +10,66 @@ import { buildObfuscatedProxyUrl } from '@/lib/url-obfuscator';
 import { formatTime } from '@/lib/utils';
 import type { PreciseSkipConfig } from '@/lib/precise-skip';
 
+/** HLS 画质档位定义 */
+export interface HlsQualityLevel {
+  index: number;
+  height: number;
+  width: number;
+  bitrate: number;
+  name: string;
+  label: string;
+}
+
+/** HLS 内置音频轨道定义 */
+export interface HlsAudioTrackItem {
+  id: number;
+  name: string;
+  lang?: string;
+  groupId?: string;
+  default?: boolean;
+}
+
+export function formatQualityLabel(
+  level: { height?: number; width?: number; bitrate?: number; name?: string },
+  index: number
+): string {
+  if (level.name && level.name.trim() && !/^\d+$/.test(level.name.trim())) {
+    return level.name.trim();
+  }
+  const h = level.height || 0;
+  if (h >= 2160) return '4K 2160P';
+  if (h >= 1440) return '2K 1440P';
+  if (h >= 1080) return '1080P 高清';
+  if (h >= 720) return '720P 高清';
+  if (h >= 480) return '480P 标清';
+  if (h >= 360) return '360P 流畅';
+  if (h > 0) return `${h}P`;
+  if (level.bitrate && level.bitrate > 0) {
+    return `${Math.round(level.bitrate / 1000)} kbps`;
+  }
+  return `档位 ${index + 1}`;
+}
+
+export const QUALITY_STORAGE_KEY = 'libretv:quality_preference';
+
+export function getStoredQualityPreference(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return localStorage.getItem(QUALITY_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function saveQualityPreference(pref: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(QUALITY_STORAGE_KEY, pref);
+  } catch {
+    // ignore
+  }
+}
+
 /** ArtPlayer 实例上管线需要的最小结构（只读/写 currentTime/duration/video） */
 export interface ArtPlayerLike {
   video: HTMLVideoElement;
@@ -52,6 +112,8 @@ interface UseHlsPipelineOptions {
   setShowSkipOpening: (v: boolean) => void;
   setShowSkipEnding: (v: boolean) => void;
   setUndoIntro: (v: boolean) => void;
+  onLevelsUpdated?: (levels: HlsQualityLevel[], currentLevel: number) => void;
+  onAudioTracksUpdated?: (tracks: HlsAudioTrackItem[], currentTrack: number) => void;
 }
 
 /**
@@ -76,12 +138,18 @@ export function useHlsPipeline({
   setShowSkipOpening,
   setShowSkipEnding,
   setUndoIntro,
+  onLevelsUpdated,
+  onAudioTracksUpdated,
 }: UseHlsPipelineOptions) {
   // showHint 以 ref 持有，保证事件处理器（挂载时注册一次）始终读到最新闭包
   const showHintRef = useRef(showHint);
   showHintRef.current = showHint;
   const refreshSubtitleRef = useRef(refreshSubtitle);
   refreshSubtitleRef.current = refreshSubtitle;
+  const onLevelsUpdatedRef = useRef(onLevelsUpdated);
+  onLevelsUpdatedRef.current = onLevelsUpdated;
+  const onAudioTracksUpdatedRef = useRef(onAudioTracksUpdated);
+  onAudioTracksUpdatedRef.current = onAudioTracksUpdated;
 
   const hlsRef = useRef<Hls | null>(null);
   const currentMediaUrlRef = useRef('');
@@ -93,6 +161,44 @@ export function useHlsPipeline({
   const lastPrefetchEnsureRef = useRef(0);
   const endedRef = useRef(false);
   const lastSaveRef = useRef(0);
+
+  // 画质与音轨状态维护 (REQ-P0-01, REQ-P0-02)
+  const levelsRef = useRef<HlsQualityLevel[]>([]);
+  const currentLevelRef = useRef<number>(-1);
+  const audioTracksRef = useRef<HlsAudioTrackItem[]>([]);
+  const currentAudioTrackRef = useRef<number>(0);
+  const manualStallsCountRef = useRef<number>(0);
+
+  /** 切换画质档位（-1 为 Auto 自动，>= 0 为特定清晰度） */
+  const switchLevel = useCallback((index: number) => {
+    const hls = hlsRef.current;
+    if (!hls) return;
+    currentLevelRef.current = index;
+    manualStallsCountRef.current = 0;
+    hls.currentLevel = index;
+    if (index === -1) {
+      saveQualityPreference('auto');
+      showHintRef.current('已切回自适应画质 (Auto)');
+    } else {
+      const lvl = levelsRef.current[index];
+      if (lvl) {
+        saveQualityPreference(String(lvl.height || lvl.label));
+        showHintRef.current(`正在切换画质至 ${lvl.label}...`);
+      }
+    }
+    onLevelsUpdatedRef.current?.(levelsRef.current, index);
+  }, []);
+
+  /** 切换内置音频轨道（无缝平滑热切） */
+  const setAudioTrack = useCallback((trackId: number) => {
+    const hls = hlsRef.current;
+    if (!hls) return;
+    currentAudioTrackRef.current = trackId;
+    hls.audioTrack = trackId;
+    const track = audioTracksRef.current[trackId];
+    showHintRef.current(track ? `正在无缝切换音轨至 ${track.name}...` : '正在无缝切换音轨...');
+    onAudioTracksUpdatedRef.current?.(audioTracksRef.current, trackId);
+  }, []);
 
   // —— HLS 配置与预取 ——
 
@@ -164,6 +270,47 @@ export function useHlsPipeline({
 
       hls.on(Hls.Events.MANIFEST_PARSED, async () => {
         recoveryRef.current?.markHealthy();
+
+        // 提取画质档位 (REQ-P0-01)
+        const rawLevels = hls.levels || [];
+        const parsedLevels: HlsQualityLevel[] = rawLevels.map((lvl, idx) => ({
+          index: idx,
+          height: lvl.height || 0,
+          width: lvl.width || 0,
+          bitrate: lvl.bitrate || 0,
+          name: lvl.name || '',
+          label: formatQualityLabel(lvl, idx),
+        }));
+        levelsRef.current = parsedLevels;
+
+        // 恢复偏好画质（若存在且有多个清晰度档位）
+        let targetLevel = -1;
+        const savedPref = getStoredQualityPreference();
+        if (savedPref && savedPref !== 'auto' && parsedLevels.length > 1) {
+          const match = parsedLevels.find(
+            (l) => String(l.height) === savedPref || l.label.includes(savedPref)
+          );
+          if (match) {
+            targetLevel = match.index;
+          }
+        }
+        currentLevelRef.current = targetLevel;
+        hls.currentLevel = targetLevel;
+        onLevelsUpdatedRef.current?.(parsedLevels, targetLevel);
+
+        // 提取音频轨道 (REQ-P0-02)
+        const rawTracks = hls.audioTracks || [];
+        const parsedTracks: HlsAudioTrackItem[] = rawTracks.map((t, idx) => ({
+          id: idx,
+          name: t.name || t.lang || `音轨 ${idx + 1}`,
+          lang: t.lang,
+          groupId: t.groupId,
+          default: t.default,
+        }));
+        audioTracksRef.current = parsedTracks;
+        currentAudioTrackRef.current = hls.audioTrack ?? 0;
+        onAudioTracksUpdatedRef.current?.(parsedTracks, currentAudioTrackRef.current);
+
         // 预取锚点：恢复进度时直接取恢复目标。赋值后 video.currentTime 未必立刻反映
         // （Safari 系），而 ensure 是以「锚点未变」为前提复用 parsing 中的运行的——
         // 这里读到旧值会把窗口建在片头，且白等一次纠错重建。
@@ -186,6 +333,36 @@ export function useHlsPipeline({
         ensurePrefetch(mediaUrl, prefetchAnchor);
         video.play().catch(() => {});
       });
+
+      // 画质与音轨事件监听
+      hls.on(Hls.Events.LEVEL_SWITCHED, (_evt, data) => {
+        const activeLevel = data.level;
+        if (currentLevelRef.current !== -1 && activeLevel === currentLevelRef.current) {
+          const lvl = levelsRef.current[activeLevel];
+          if (lvl) {
+            showHintRef.current(`已切换至 ${lvl.label}`);
+          }
+        }
+      });
+
+      hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, (_evt, data) => {
+        const tracks = (data.audioTracks || hls.audioTracks || []).map((t, idx) => ({
+          id: idx,
+          name: t.name || t.lang || `音轨 ${idx + 1}`,
+          lang: t.lang,
+          groupId: t.groupId,
+          default: t.default,
+        }));
+        audioTracksRef.current = tracks;
+        currentAudioTrackRef.current = hls.audioTrack ?? 0;
+        onAudioTracksUpdatedRef.current?.(tracks, currentAudioTrackRef.current);
+      });
+
+      hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, (_evt, data) => {
+        currentAudioTrackRef.current = data.id;
+        onAudioTracksUpdatedRef.current?.(audioTracksRef.current, data.id);
+      });
+
       // 播放链路恢复（FRAG_LOADED / MANIFEST_PARSED）：静默窗外清零连续失败计数
       hls.on(Hls.Events.FRAG_LOADED, () => recoveryRef.current?.markHealthy());
       // 分片真正进入 MSE buffer 才算媒体恢复：此时视频轨可渲染，错误态可解除
@@ -194,6 +371,20 @@ export function useHlsPipeline({
       });
 
       hls.on(Hls.Events.ERROR, (_evt, data) => {
+        // 弱网自适应降级保护 (CHK-Q-05)：手动锁定画质下遭遇严重卡顿重试 >= 3 次，自动降级回退至 Auto
+        if (data.details === 'bufferStalledError' || data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+          if (currentLevelRef.current !== -1) {
+            manualStallsCountRef.current += 1;
+            if (manualStallsCountRef.current >= 3) {
+              manualStallsCountRef.current = 0;
+              currentLevelRef.current = -1;
+              hls.currentLevel = -1;
+              showHintRef.current('当前网络环境不稳定，已为您临时切回自适应画质');
+              onLevelsUpdatedRef.current?.(levelsRef.current, -1);
+            }
+          }
+        }
+
         if (!data.fatal) return;
         const recovery = recoveryRef.current;
         if (!recovery) return;
@@ -259,6 +450,14 @@ export function useHlsPipeline({
       setUndoIntro(false);
       setError('');
       setShowPoster(true);
+
+      // 换集重置画质与音轨列表，防止上一集残留 (CHK-A-05)
+      levelsRef.current = [];
+      audioTracksRef.current = [];
+      manualStallsCountRef.current = 0;
+      onLevelsUpdatedRef.current?.([], -1);
+      onAudioTracksUpdatedRef.current?.([], 0);
+
       const art = artRef.current;
       if (!art) return;
       setupHls(art.video, targetUrl, true);
@@ -343,6 +542,7 @@ export function useHlsPipeline({
 
   const handlePlaying = useCallback(() => {
     playbackStartedRef.current = true;
+    manualStallsCountRef.current = 0;
     setShowPoster(false);
     // 仅在媒体真正恢复（有分片进入 buffer）后清错误遮罩：
     // 否则「视频轨挂了、音频轨先播出来」时会清掉遮罩，留下黑屏假死态
@@ -412,5 +612,11 @@ export function useHlsPipeline({
     destroy,
     flushProgress,
     getCurrentMediaUrl,
+    switchLevel,
+    setAudioTrack,
+    getLevels: () => levelsRef.current,
+    getAudioTracks: () => audioTracksRef.current,
+    getCurrentLevel: () => currentLevelRef.current,
+    getCurrentAudioTrack: () => currentAudioTrackRef.current,
   };
 }

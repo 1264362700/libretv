@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Header } from '@/components/header';
 import { HeroBillboardBanner } from '@/components/hero-billboard-banner';
+import { ContinueWatchingRow } from '@/components/continue-watching-row';
 import { RecommendSection } from '@/components/douban-section';
 import { MediaCard } from '@/components/media-card';
 import { AggregatedCard, aggregateResults } from '@/components/video-card';
@@ -318,6 +319,20 @@ function HomeContent() {
             onPlay={handlePlayMedia}
             onDetail={handlePlayMedia}
           />
+
+          {/* 1.5 首页“我的追剧·最近更新”动态流专区 (REQ-P0-04) */}
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-6 sm:-mt-8 relative z-20 mb-6">
+            <ContinueWatchingRow
+              cmsRemarksMap={remarksQuery.data?.remarksMap}
+              onNavigate={(watchUrl) => {
+                if (!verified) {
+                  router.push(`/login?redirect=${encodeURIComponent(watchUrl)}`);
+                  return;
+                }
+                router.push(watchUrl);
+              }}
+            />
+          </div>
 
           {/* 2. 左图右榜双栏楼层（无 LibreTV 冗余搜索框/轮播轨） */}
           <div className="-mt-8 sm:-mt-12 relative z-20 space-y-2">

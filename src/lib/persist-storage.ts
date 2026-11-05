@@ -30,9 +30,9 @@ function flush(): void {
   }
 }
 
-if (typeof window !== 'undefined') {
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
   window.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') flush();
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') flush();
   });
   window.addEventListener('beforeunload', flush);
 }
